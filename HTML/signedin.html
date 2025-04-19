@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <?nodejs echo(loadFile('./HTML/assets/modules/head.html')); ?>
+    <title>Document</title>
+</head>
+<body class="fullscreen-page">
+    <?nodejs echo(loadFile('./HTML/assets/modules/nav.html')); ?>
+    <div class="navholder"></div>
+    <div class="container semi-fullscreen">
+        <div class="center center-content-dom popup dark" id="accountContainer">
+            <h1 id="pagetitle" style="margin: 10px;">Loading...</h1>
+            <p id="accountinfo" style="margin: 10px;">Wait a minute while we load your account data...</p>
+        </div>
+    </div>
+    <?nodejs echo(loadFile('./HTML/assets/modules/footer.html')); ?>
+    <script>
+        document.querySelector('nav').classList.remove('not-home-page');
+        var vars = {};
+        var parts = decodeURI(window.location.href).replace(/[?&]+([^=&]+)=([^&]*)/gi, function(m,key,value) {
+            vars[key] = value.replaceAll('%22', '"').replaceAll('%2C', ',').replaceAll('%3A', ':').replaceAll('%7B', '{').replaceAll('%5B', '[').replaceAll('%5D', ']').replaceAll('%7D', '}').replaceAll('%2F', '/').replaceAll('%3D', '=').replaceAll('%3B', ';').replaceAll('%26', '&').replaceAll('%3F', '?').replaceAll('+', ' ');
+        });
+        var token = vars['token'];
+        fetch('/api/data/read', {method: 'POST', body: JSON.stringify({token: token, redirect: location.href})}).then(r=>r.text()).then(r=>{
+            var title = document.querySelector('#pagetitle');
+            var info = document.querySelector('#accountinfo');
+            if (r.indexOf('ERROR: ') != 0) {
+                title.innerHTML = "Signed in!";
+                title.style.margin = "0";
+                info.innerHTML = "You are signed in. This is the data received from the API: <p style='text-align:left;'>"+ r.replaceAll('\n', '<br>') + "</p>";
+                var logoutbutton = document.createElement('button');
+                logoutbutton.setAttribute('onclick', 'localStorage.removeItem("Auth System-accessToken");location.href = "/"');
+                logoutbutton.innerHTML = "Log out";
+                logoutbutton.style.padding = "0px 15px 0px 15px";
+                logoutbutton.style.height = "40px";
+                document.querySelector('#accountContainer').appendChild(logoutbutton);
+                localStorage['Auth System-accessToken'] = token;
+            } else {
+                title.innerHTML = "Error!";
+                info.innerHTML = "An error occurred: <br>\n" + r;
+                var signinbutton = document.createElement('button');
+                signinbutton.setAttribute('onclick', 'localStorage.removeItem("Auth System-accessToken");location.href = "/"');
+                signinbutton.innerHTML = "Sign in again";
+                document.querySelector('#accountContainer').appendChild(signinbutton);
+            }
+        });
+    </script>
+    <?nodejs echo(loadFile('./HTML/assets/modules/common.html', 'utf8')+""); ?>
+</body>
+</html>

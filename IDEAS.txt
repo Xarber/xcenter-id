@@ -1,0 +1,40 @@
+1.  To ensure logging in from the an authorized source, randomize a day-code (every day), and then use OTPAuth to create an OTP code to send to the page.
+    This will make sure that all requests are from the same site or an authorized one and that the "secret" is not findable as it's changed every day.
+    ! Also use this to verify valid apps in '/private/apps/' folder -> Register new apps and use this on every request to verify validity of the app (only if the app developer has a handler server to verify valid tokens)
+3.  Insert verified apps in the ./private/apps/ folder, then use a verification method (in point 1) to check that the app is actually a verified one. (Dev server)
+    Execute everything server-side so it can not be spoofed. Once the app is registered, always prefer it over unverified sources.
+4.  Give 1 GB of storage to every app to allow indexing data etc.; Every user should be allowed to have 2 apps at max (unless limit removed / changed manually).
+    -> This means that the app token should be considered as a user, meaning it can access the other account's data with the share feature (point 4) or similar.
+
+    TO DO!!!
+!!! UPDATE DEVELOPERS PAGE WITH NEW APIs !!!
++5. Optimize app function in the web server to increase speed
++6. Create a fix for multiple requests at same time with custom encryption key (see dashboard)
+
+2.  Make admin tokens renewable and let user choose for how much time it's going to be active.
+16. Work on advanced options
+25. Enable account backup/restore/download with encrypted archives: Zip the whole account encrypted with its own key -> Zip again with the server's key -> Make the user download it with .eacc extension
+26. Create admin dashboard for both NJS WS (key based auth) and Auth System (account role based auth);
+27. Fetch available options for developer page in advanced settings.
+28. Fix the stuff in @kyocallscats's pinned messages
+29. Add support to websocket connections to NJS WS and to the support system (Auth System)
+
+    DONE
+24. OK? - Enable listing/moving/deleting files in the public folder
+0.  OK - Support multi-directory environment to allow users in different drives.
+7.  OK - Replace all functions to support multi-directory environments (Moving account location to other directory; NOT KEYS TO ENSURE SAFETY!!)
+8.  OK - Add more margin to the device icons in the dashboard
+9.  OK - Fix icon margin on small screens (.applist)
+10. OK - Highlight variable information in dashboard
+11. OK - Insert biography text in edit profile page
++12 OK - Add most used app feature
+13. OK - App permissions must have more bottom height
+14. OK - Add verification methods editing
+15. OK - Remove blank space from devices page (and your data page)
+17. OK - Make account data editable (profile, unlink apps, remove permissions, remove devices, Verification Methods)
+18. OK - Add an indicator for admin sessions under .devicelist groups
+19. OK - New share page to share an app's data with another account (same as connect but for other users), with read-only or read-write permission (user choice).
+20. OK - Add share page to dashboard -> advanced / dashboard -> your data
+21. OK - Create a public folder to access all files without permission
+22. OK - Profile setup autocomplete
+23. OK - Find a way of fixing mobile autoredirecting on form submission (Like replacing the FORM element with a DIV and managing the submit part via JS)

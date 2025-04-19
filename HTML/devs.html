@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <?nodejs echo(loadFile('./HTML/assets/modules/head.html', 'utf8')+""); ?>
+    <title>Auth System - Devs</title>
+</head>
+<body>
+    <?nodejs echo(loadFile('./HTML/assets/modules/nav.html', 'utf8')+""); ?>
+    <div class="header">
+        <div class="background" style="background-image: url('assets/media/pxfuel-wolfcave.jpg');"></div>
+        <div class="center intro-text">
+            <h1>Developers</h1>
+            <p>Learn how to integrate Auth System with your best projects. <br> We're happy to grow with you!</p>
+            <div class="notice warn">
+                <p>The API is still under construction and slight changes may still be made. You can start working with it now or move to it later in the future.</p>
+            </div>
+            <button onclick="window.scrollTo({top: document.querySelector('#about-page').offsetTop, behavior: 'smooth'})">Learn to use</button>
+        </div>
+    </div>
+    <div class="container">
+        <h1>Is the API open-source?</h1>
+        <p>To guarantee users's safety, an open source API is currently not planned. You can still head over to the <a href="/about">About</a> page to check out how it works and try to build one yourself tho! Good luck ;)</p>
+    </div>
+    <div class="container">
+        <h1>How to use the API</h1>
+        <div class="notice info">
+            <h3>Encryption</h3>
+            <p>Accounts are encrypted. If a user downloaded his key and removed it from the server, you should provide a way to let him insert the key. Using the API, just add "enckey" to the body to include a custom encryption key.</p>
+        </div>
+        <hr>
+        <h3>Sign In/Sign Up</h3>
+        <p>The sign in and sign up processes are managed by the API, and they both return a generic token that gives basic access to the account. <br>This token is required for all the actions on the account, but alone it can just retrieve basic info such as name, surname and some other little details.</p>
+        <p>What do you need to provide in the sign-in/sign-up pages? Simple, only a GET <span class="textbox">redirect</span> parameter, leading to the page that requested the access.</p>
+        <hr>
+        <h3>Validating a token</h3>
+        <p>Validating tokens is really easy, you just need to execute a <span class="textbox">POST</span> fetch request:</p>
+        <p class="textbox">
+            fetch('/api/restoresession', {method: 'POST', body: JSON.stringify({ <br>
+                <span class="indent">
+                    response: 1, //* Gives response instead of redirecting <br>
+                </span>
+                <span class="indent">
+                    token: "Token to validate" <br>
+                </span>
+            })}).then(r=>r.text()).then(async r=>{ <br>
+                <span class="indent">
+                    //* Do whatever with response ("NOT" if invalid, TOKEN otherwise) <br>
+                </span>
+            });
+        </p>
+        <hr>
+        <h3>Connecting an App</h3>
+        <p>This is a more delicate step, but the most important of all: Linking/Connecting an app to your account. <br>As the sign in/up operation, this also returns a simple token ( <span class="textbox">apptoken</span> ), but this time it's a specific token for the connected app (it's reccomended to save it somewhere for further usage). This token allows you to actually manage the data of your and other apps you requested access to.</p>
+        <p>What parameters do you need to provide when linking an app? This time, a bunch more of them:</p>
+        <p class="textbox">
+            "redirect" (the target page) <br>
+            "link-token" (the account token) <br>
+            "apptoken" (the app's ID) <br>
+            "appscope" (the app's name) <br>
+            "appauthor" (the app's author) <br>
+            OPTIONALS --- <br>
+            "appicon" (In base64 format) <br>
+            "app-permissions" (JSON, list of permissions and accessible folders) <br>
+            "link-permissions" (JSON, permissions over other apps)
+        </p>
+        <p>You can redirect from an app like this:</p>
+        <p class="textbox">
+            location.href = '/auth/link?' + new URLSearchParams({ <br>
+                <span class="indent">
+                    "redirect": location.pathname, //* Returns a GET variable "apptoken" <br>
+                </span>
+                <span class="indent">
+                    "link-token": "Generic Account Token", <br>
+                </span>
+                <span class="indent">
+                    "apptoken": "This app's token / ID", <br>
+                </span>
+                <span class="indent">
+                    "appscope": "This app's name", <br>
+                </span>
+                <span class="indent">
+                    "appauthor": "This app's author", <br>
+                </span>
+                <span class="indent">
+                    //* OPTIONAL ELEMENTS HERE <br>
+                </span>
+                <span class="indent">
+                    "appicon": "This app's base64 icon", <br>
+                </span>
+                <span class="indent">
+                    "app-permissions": JSON.stringify({"Permission Name": ["/folder/", "/fileOrFolder", "/file.txt"]}), //* Available app permissions. Every app with specific permission will have access to all files/folders that begin with given path. <br>
+                </span>
+                <span class="indent">
+                    "link-permissions": JSON.stringify({"Another app's token / ID": ["Permission Name"]}) //* Permissions over other apps. <br>
+                </span>
+            });
+        </p>
+        <p>How do permissions work? That's simple, in <span class="textbox">app-permissions</span>, you define a permission name and the accessible files/folders with it ( <span class="textbox">{"root": [""], "friends": ["/friends"], "settings": ["/settings/public/", "/settings/general/"]}</span> ). <br>CAREFUL! "/friends" means the app will have access to "/friends*", for example "/friends/...", "/friends.txt", and so on
+        <br>Instead, in <span class="textbox">link-permissions</span> you can insert permissions over other apps ( <span class="textbox">{"App 2's ID": ["friends", "settings"]}</span> ). This will give the app read, write and move permissions on the allowed folders; Deleting data is NOT possible.</p>
+        <p>PS: To update an app's info or permissions, just link it again!</p>
+    </div>
+    <div class="container">
+        <h1>Managing data</h1>
+        <hr>
+        <p>All data managements are done using fetch <span class="textbox">POST</span> requests. You are required to provide both the account token and the specific app token, togheter with other app info such as the name, author, and ID.</p>
+        <p>To write data to another app, you just insert a parameter in front of the file name: <span class="textbox">%EXECTOAPP:&lt;The other App's ID&gt;%/someFile.txt</span><br>REMEMBER: You can NOT use this parameter if you don't have the required permissions, or when deleting files (to prevent unexpected data losses).</p>
+        <hr>
+        <h3>Managing data</h3>
+        <p>Writing, reading, moving and deleting data is all done with the same pattern. You can format the file name with any path you'd like (../ will be automatically removed from all requests!); Here's the format:</p>
+        <p class="textbox">
+            fetch('/api/data/<span class="highlight">&lt;action&gt;</span>', {method: 'POST', body: JSON.stringify({ <br>
+                <span class="indent">
+                    token: "Generic Account Token", <br>
+                </span>
+                <span class="indent">
+                    app: { <br>
+                        <span class="indent">
+                            <span class="indent">name: "This app's name", <br></span>
+                        </span>
+                        <span class="indent">
+                            <span class="indent">author: "This app's author", <br></span>
+                        </span>
+                        <span class="indent">
+                            <span class="indent">id: "This app's token / ID", <br></span>
+                        </span>
+                        <span class="indent">
+                            <span class="indent">token: "App Account Token (from linking app)" <br></span>
+                        </span>
+                </span>
+                <span class="indent">
+                    }, <br>
+                </span>
+                <span class="indent">
+                    data: { <br>
+                        <span class="indent">
+                            <span class="indent">name: "File Name (source file when moving)",  <br></span>
+                        </span>
+                        <span class="indent">
+                            <span class="indent">content: "File Content (target file when moving)" //* (Omit when deleting or reading) <br></span>
+                        </span>
+                </span>
+                <span class="indent">
+                    } <br>
+                </span>
+            })}).then(r=>r.text()).then(r=>{ <br>
+                <span class="indent">
+                    //* Do whatever with response: "ERROR: &lt;error&gt;" OR "OK" <br>
+                </span>
+            });
+        </p>
+        <p>Valid actions are <span class="textbox">write</span>, <span class="textbox">read</span>, <span class="textbox">move</span>, <span class="textbox">remove</span> and <span class="textbox">list</span>. You can use the MOVE action to rename a file; LIST returns a stringified array with directory contents.</p>
+    </div>
+    <div class="container">
+        <h1>Miscellaneous</h1>
+        <p>There are a bunch of other actions you can do with the API</p>
+        <hr>
+        <h3>Check if app is linked</h3>
+        <p>If you want to check if another app is linked to an account, maybe before trying to integrate it with yours, you can do it like this:</p>
+        <p class="textbox">
+            fetch('/api/misc/isLinked', {method: 'POST', body: JSON.stringify({ <br>
+                <span class="indent">
+                    token: "Generic Account Token", <br>
+                </span>
+                <span class="indent">
+                    app: "App Token / ID", <br>
+                </span>
+                <span class="indent">
+                    hasPerms: {...}, //* Optional, permissions of the app over other apps <br>
+                </span>
+                <span class="indent">
+                    availablePerms: {...} //* Optional, permissions available in the app <br>
+                </span>
+            })}).then(r=>r.text()).then(r=>{ <br>
+                <span class="indent">
+                    //* Do whatever with response ("TRUE", "FALSE" OR eventual error) <br>
+                </span>
+                <span class="indent">
+                    //! If hasPerms or availablePerms is defined, and the permissions are different, "DIFFERS" will be returned. <br>
+                </span>
+            });
+        </p>
+        <p>This way, you can always check if a user has got all the required permissions</p>
+        <hr>
+        <h3>Getting account/app icon</h3>
+        <p>If you need to get an user or an app's icon (if it's present), you can do so like this:</p>
+        <p class="textbox">
+            fetch('/api/misc/geticon', {method: 'POST', body: JSON.stringify({ <br>
+                <span class="indent">
+                    token: "Generic Account Token", <br>
+                </span>
+                <span class="indent">
+                    app: "App Token / ID", //* Optional, used to get an app's icon instead <br>
+                </span>
+            })}).then(r=>r.text()).then(r=>{ <br>
+                <span class="indent">
+                    //* Do whatever with response (app/account icon in base64, OR eventual error) <br>
+                </span>
+            });
+        </p>
+        <hr>
+        <h3>Updating the app's icon</h3>
+        <p>REMEMBER: It IS required for you to insert an image in base64 format. Other file types are not supported yet.</p>
+        <p class="textbox">
+            fetch('/api/data/addicon', {method: 'POST', body: JSON.stringify({ <br>
+                <span class="indent">
+                    token: "Generic Account Token", <br>
+                </span>
+                <span class="indent">
+                    app: { //* Only if adding app icon instead of profile picture <br>
+                    <span class="indent">
+                        <span class="indent">name: "This app's name", <br></span>
+                    </span>
+                    <span class="indent">
+                        <span class="indent">author: "This app's author", <br></span>
+                    </span>
+                    <span class="indent">
+                        <span class="indent">id: "This app's token / ID", <br></span>
+                    </span>
+                    <span class="indent">
+                        <span class="indent">token: "App Account Token (from linking app)" <br></span>
+                    </span>
+                </span>
+                <span class="indent">
+                    }, <br>
+                </span>
+                <span class="indent">
+                    data: { <br>
+                </span>
+                <span class="indent">
+                    <span class="indent">content: "Base64 Profile Picture / icon" <br></span>
+                </span>
+                <span class="indent">
+                    } <br>
+                </span>
+            })}).then(r=>r.text()).then(r=>{ <br>
+                <span class="indent">
+                    //* Do whatever with response: "ERROR: <error>" OR "OK" <br>
+                </span>
+            });
+        </p>
+        <hr>
+        <h3>Get app name from token</h3>
+        <p>If you need for any reason to get an app's name, you can do it like this:</p>
+        <p class="textbox">
+            fetch('/api/misc/appname', {method: 'POST', body: JSON.stringify({ <br>
+                <span class="indent">
+                    token: "Generic Account Token", <br>
+                </span>
+                <span class="indent">
+                    app: "App Token / ID" <br>
+                </span>
+            })}).then(r=>r.text()).then(r=>{ <br>
+                <span class="indent">
+                    //* Do whatever with response (app name OR eventual error) <br>
+                </span>
+            });
+        </p>
+        <hr>
+        <h3>Validate an encryption key</h3>
+        <p>When trying to read or write data, the API needs to have a valid encryption key existing, either on the account, or on the request as `enckey`. To check if the said key is valid, you can use this API:</p>
+        <p class="textbox">
+            fetch('/api/misc/validenckey', {method: 'POST', body: JSON.stringify({ <br>
+                <span class="indent">
+                    token: "Generic Account Token", <br>
+                </span>
+                <span class="indent">
+                    key: "Encryption Key" //* To verify a custom key instead of the default one. <br>
+                </span>
+            })}).then(r=>r.text()).then(r=>{ <br>
+                <span class="indent">
+                    //* Do whatever with response (OK / Eventual Error) <br>
+                </span>
+            });
+        </p>
+    </div>
+    <?nodejs echo(loadFile('./HTML/assets/modules/footer.html', 'utf8')+""); ?>
+    <?nodejs echo(loadFile('./HTML/assets/modules/common.html', 'utf8')+""); ?>
+</body>
+</html>

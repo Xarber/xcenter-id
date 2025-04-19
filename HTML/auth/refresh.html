@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auth System - Share Data</title>
+    <link rel="stylesheet" href="../assets/css/default.css">
+</head>
+<body>
+    <div class="fullscreen">
+        <div class="background" style="background-image: url('../assets/media/pxfuel-auth.jpg');"></div>
+        <form class="center blur dark popup auth refresh" method="post" onkeydown="if (event.keyCode === 13) return false;" action="/api/refresh">
+            <button type="button" class="backButton" onclick="window.history.back();"><img src="/assets/media/backarrow-hd-dark.png" alt=""></button>
+            <h1>Refresh Session</h1>
+            <p>Refresh this session's token to keep it logged in for longer.</p>
+            <div class="notice warn"><p>This will change your token! Remember to update it.</p></div>
+            <div class="input info-element">
+                <h4>Valid for:</h4>
+                <p id="validfor">Your account</p>
+            </div>
+            <div class="input info-element">
+                <h4>Expires in:</h4>
+                <p id="expiredate">Less than 30 days (---)</p>
+            </div>
+            <div class="input info-element">
+                <h4>Will be valid until:</h4>
+                <p id="newexpiredate">Set an expiration date</p>
+            </div>
+            <select onchange="this.parentNode.querySelector('input#newexpiredate-i').classList.add('hided');if (this.value === 'custom') this.parentNode.querySelector('input#newexpiredate-i').classList.remove('hided');" class="input fullWidth noPadding" name="method" id="newexpiremethod">
+                <option value="custom">Custom Date</option>
+                <option value="1m">1 Minute</option>
+                <option value="5m">5 Mins</option>
+                <option value="15m">15 Mins</option>
+                <option value="30m">30 Mins</option>
+                <option value="1h" selected>1 Hour</option>
+                <option value="3h">3 Hours</option>
+                <option value="1d">1 Day</option>
+                <option value="7d">1 Week</option>
+                <option value="1M">1 Month</option>
+            </select>
+            <input class="input fullWidth hided" type="date" name="newexpiredate" id="newexpiredate-i">
+            <div class="hided">
+                <input type="text" name="token" id="acc-token" value="">
+                <input type="text" name="redirect" id="redirect-link">
+            </div>
+            <button type="submit" id="submit" class="hided" style="display: none;"></button>
+            <button type="button" class="submit" onclick="sendShareRequest(this.parentNode);" disabled>Confirm</button>
+        </form>
+    </div>
+    <script>
+        var vars = {};
+        var parts = decodeURI(window.location.href).replace(/[?&]+([^=&]+)=([^&]*)/gi, function(m,key,value) {
+            vars[key] = value.replaceAll('%22', '"').replaceAll('%2C', ',').replaceAll('%3A', ':').replaceAll('%7B', '{').replaceAll('%5B', '[').replaceAll('%5D', ']').replaceAll('%7D', '}').replaceAll('%2F', '/').replaceAll('%3D', '=').replaceAll('%3B', ';').replaceAll('%26', '&').replaceAll('%3F', '?').replaceAll('+', ' ');
+        });
+        if (!vars.token && 1 != 1) {
+            alert("You must sign in AS ADMIN to refresh a token!");
+            window.close();
+            window.history.back();
+        }
+        if (vars["ra"] == "true") {
+            if (!window.opener) {
+                alert("For admin access, this window has to be opened as a popup!");
+                document.close();
+                document.write("");
+            }
+            document.querySelector('form.auth.popup').classList.add('relevant');
+            document.querySelector('form.auth').querySelector('h1').innerHTML = "[!] Refresh Session";
+            document.querySelector('form.auth').querySelector('p').innerHTML = "Refresh admin token's validity to keep having admin access for longer.";
+        }
+        document.querySelector('input#acc-token').setAttribute('value', token);
+        window.history.replaceState({}, "", location.pathname);
+        document.querySelectorAll('p.center-text a').forEach(e=>{e.href = e.href + window.location.search});
+        if (vars["redirect"]) {
+            document.querySelector('#redirect-link').setAttribute('value', vars["redirect"])
+        } else if (!!window.opener) {
+            document.querySelector('.backButton').classList.add('hided');
+        }
+        document.querySelector('#redirect-link').setAttribute('value', '/api/confirm');
+        async function busyWait(test) {
+            const delayMs = 500;
+            while(!test()) await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+    </script>
+    <?nodejs echo(loadFile('./HTML/assets/modules/common.html', 'utf8')+""); ?>
+</body>
+</html>

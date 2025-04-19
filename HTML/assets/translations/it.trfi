@@ -1,0 +1,20 @@
+[TranslationOptions:STATUS] = off
+[TranslationOptions:LOGS] = off
+[TranslationOptions:POP] = on
+[TranslationOptions:CSENS] = on
+[TranslationOptions:LOOP] = on
+[TranslationOptions:LOOPTIME] = 0.1
+
+Auth System -> Sistema AUTH
+Integrate all of your favourite apps togheter, still keeping your data safe! -> Integra tutte le tue app preferite, lasciando i tuoi dati al sicuro!
+Let's dive in -> Esploralo
+How does it work? -> Come funziona?
+How was it made? -> Com'è fatto?
+Want to test it out? -> Vuoi provarlo?
+Sistema AUTH divides all of your app's data in different inaccessible folders, then whenever an app wants to access some of your data, you will have to allow sharing the folder to it. -> Sistema AUTH divide tutti i dati delle tue app in cartelle separate inaccessibili, quindi, quando un altra app chiede l'accesso, avrà bisogno del tuo permesso.
+Sistema AUTH was coded with Node JS. To guarantee the highest level of safety, the online project is not open source. Sistema AUTH, however, does have a generic public version, that you can edit to your needs. -> Sistema AUTH è stato sviluppato con Node JS. Per garantire il livello più alto di sicurezza, il progetto non è open source. Sarà presente una versione pubblica più generica che puoi modificare a tuo piacimento.
+If you wish to test the account system, you can try the available features now! Head over to the login page to begin. -> Se vuoi testare il sistema, puoi provare le funzioni disponibili ora! Dirigiti alla pagina di login per iniziare.
+About Sistema AUTH -> Info su Sistema AUTH
+About -> Info 
+Developer Insights -> Per i developer
+Try it out! -> Provalo ora!

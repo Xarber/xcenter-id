@@ -1,0 +1,8 @@
+<script src="https://api.xcenter.it/TRFI.js" onload="var userLangs = (()=>{var ar = [];navigator.languages.forEach(l=>{ar.push(l.slice(0, 2))});ar = [...new Set(ar)];return ar;})();(async ()=>{for (var lang of userLangs) {if (lang === 'en') continue;var r = await fetch(`/assets/translations/${lang}.trfi`);if (!r.ok || lang === 'en') {continue;};r = await r.text();window['TRFI_Translation_' + lang] = new TRFI(r);break;}})();"></script>
+<script>
+    if (!!document.querySelector('form.auth')) {
+        var canvas=document.createElement("canvas"),ctx=canvas.getContext("2d");for(ctx.fillStyle="rgb(255,0,255)",ctx.beginPath(),ctx.rect(20,20,150,100),ctx.fill(),ctx.stroke(),ctx.closePath(),ctx.beginPath(),ctx.fillStyle="rgb(0,255,255)",ctx.arc(50,50,50,0,2*Math.PI,!0),ctx.fill(),ctx.stroke(),ctx.closePath(),ctx.textBaseline="top",ctx.font='17px "Arial 17"',ctx.textBaseline="alphabetic",ctx.fillStyle="rgb(255,5,5)",ctx.rotate(.03),ctx.fillText("abz190#$%^@£éú",4,17),ctx.fillStyle="rgb(155,255,5)",ctx.shadowBlur=8,ctx.shadowColor="red",ctx.fillRect(20,12,100,5),src=canvas.toDataURL(),i=hash=0;i<src.length;i++)Math.floor(1e3*Math.random()),char=src.charCodeAt(i),hash=(hash<<5)-hash+char,hash&=hash;hash=hash.toString();
+        document.querySelector('form.auth').innerHTML += `<input style='display:none' name='userfgpt' value='${hash}'>`;
+    }
+</script>
+<script src="/assets/js/default.js"></script>

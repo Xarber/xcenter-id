@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <?nodejs echo(loadFile('./HTML/assets/modules/head.html', 'utf8')+""); ?>
+    <title>Auth System - Dashboard</title>
+</head>
+<body class="fullscreen-page">
+    <?nodejs echo(loadFile('./HTML/assets/modules/navdash.html', 'utf8')+""); ?>
+    <div class="container nav-fullscreen round feedback">
+        <h2 style="text-align: center;">Leave a feedback</h2>
+        <form action="/api/mgmt/feedback" method="post">
+            <div class="rating center-horizontal" name="genericRating">
+                <span class="star"></span>
+                <span class="star"></span>
+                <span class="star"></span>
+                <span class="star"></span>
+                <span class="star"></span>
+            </div>
+            <br><hr>
+            <h3>What's your general opinion?</h3>
+            <textarea name="genericOpinion" id=""></textarea>
+            <h3>Anything you would like to be added?</h3>
+            <textarea name="requests" id=""></textarea>
+            <h3>What did you like the most?</h3>
+            <textarea name="likedMost" id=""></textarea>
+            <h3>What did you like the least?</h3>
+            <textarea name="likedLeast" id=""></textarea>
+            <button type="submit">Send</button>
+        </form>
+    </div>
+    <script>
+        var vars = {};
+        var parts = decodeURI(window.location.href).replace(/[?&]+([^=&]+)=([^&]*)/gi, function(m,key,value) {
+            vars[key] = value.replaceAll('%22', '"').replaceAll('%2C', ',').replaceAll('%3A', ':').replaceAll('%7B', '{').replaceAll('%5B', '[').replaceAll('%5D', ']').replaceAll('%7D', '}').replaceAll('%2F', '/').replaceAll('%3D', '=').replaceAll('%3B', ';').replaceAll('%26', '&').replaceAll('%3F', '?').replaceAll('+', ' ');
+        });
+        if (!vars.token) {
+            alert("You must sign in to give a feedback!");
+            window.close();
+            window.history.back();
+        }
+        document.querySelectorAll('form').forEach(e=>{
+            if (e.action.indexOf(location.protocol + '//' + location.host + '/api/') === 0) {                
+                window.history.replaceState({}, "", location.pathname);
+                e.innerHTML += `<input name="token" value="${vars.token}" style='display:none'>`;
+            }
+        })
+    </script>
+    <?nodejs /*echo(loadFile('./HTML/assets/modules/footer.html', 'utf8')+"");*/ ?>
+    <?nodejs echo(loadFile('./HTML/assets/modules/common.html', 'utf8')+""); ?>
+</body>
+</html>

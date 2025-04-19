@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <?nodejs echo(loadFile('./HTML/assets/modules/head.html', 'utf8')+""); ?>
+    <title>Auth System</title>
+</head>
+<body class="fullscreen-page">
+    <?nodejs echo(loadFile('./HTML/assets/modules/nav.html', 'utf8')+""); ?>
+    <div class="navholder"></div>
+    <div class="container semi-fullscreen">
+
+    </div>
+    <?nodejs echo(loadFile('./HTML/assets/modules/footer.html', 'utf8')+""); ?>
+    <script>
+        var vars = {};
+        var parts = decodeURI(window.location.href).replace(/[?&]+([^=&]+)=([^&]*)/gi, function(m,key,value) {
+            vars[key] = value.replaceAll('%22', '"').replaceAll('%2C', ',').replaceAll('%3A', ':').replaceAll('%7B', '{').replaceAll('%5B', '[').replaceAll('%5D', ']').replaceAll('%7D', '}').replaceAll('%2F', '/').replaceAll('%3D', '=').replaceAll('%3B', ';').replaceAll('%26', '&').replaceAll('%3F', '?').replaceAll('+', ' ');
+        });
+        fetch('/api/restoresession', {method: 'POST', body: JSON.stringify({response: 1, token: localStorage['Auth System-accessToken']})}).then(r=>r.text()).then(async r=>{
+            if (r!="NOT") {
+                if (vars['error'] == "ERROR: App is already linked!" || vars['apptoken']) {
+                    var apptoken = vars['apptoken'] ?? localStorage['testAppToken'];
+                    localStorage['testAppToken'] = apptoken;
+                    var wresp = await fetch('/api/data/write', {method: 'POST', body: JSON.stringify({
+                        token: r,
+                        app: {
+                            name: "Test App",
+                            author: "Xarber",
+                            id: "ASOIDNC12930u4FASNJK",
+                            token: apptoken
+                        },
+                        data: {
+                            name: "/someTestFile.txt",
+                            content: "Hey! I wrote something!"
+                        }
+                    })}).then(r=>r.text()).then(console.log);
+                    var rresp = await fetch('/api/data/read', {method: 'POST', body: JSON.stringify({
+                        token: r,
+                        app: {
+                            name: "Test App",
+                            author: "Xarber",
+                            id: "ASOIDNC12930u4FASNJK",
+                            token: apptoken
+                        },
+                        data: {
+                            name: "/someTestFile.txt"
+                        }
+                    })}).then(r=>r.text()).then(console.log);
+                    var rresp = await fetch('/api/data/remove', {method: 'POST', body: JSON.stringify({
+                        token: r,
+                        app: {
+                            name: "Test App",
+                            author: "Xarber",
+                            id: "ASOIDNC12930u4FASNJK",
+                            token: apptoken
+                        },
+                        data: {
+                            name: "/someTestFile.txt"
+                        }
+                    })}).then(r=>r.text()).then(console.log);
+                    var rresp = await fetch('/api/data/read', {method: 'POST', body: JSON.stringify({
+                        token: r,
+                        app: {
+                            name: "Test App",
+                            author: "Xarber",
+                            id: "ASOIDNC12930u4FASNJK",
+                            token: apptoken
+                        },
+                        data: {
+                            name: "/someTestFile.txt"
+                        }
+                    })}).then(r=>r.text()).then(console.log);
+                    var wresp = await fetch('/api/data/write', {method: 'POST', body: JSON.stringify({
+                        token: r,
+                        app: {
+                            name: "Test App",
+                            author: "Xarber",
+                            id: "ASOIDNC12930u4FASNJK",
+                            token: apptoken
+                        },
+                        data: {
+                            name: "/someTestFile.txt",
+                            content: "Hey! I wrote something!"
+                        }
+                    })}).then(r=>r.text()).then(console.log);
+                    var wresp = await fetch('/api/data/move', {method: 'POST', body: JSON.stringify({
+                        token: r,
+                        app: {
+                            name: "Test App",
+                            author: "Xarber",
+                            id: "ASOIDNC12930u4FASNJK",
+                            token: apptoken
+                        },
+                        data: {
+                            name: "/someTestFile.txt",
+                            content: "/otherFile.txt"
+                        }
+                    })}).then(r=>r.text()).then(console.log);
+                    var rresp = await fetch('/api/data/read', {method: 'POST', body: JSON.stringify({
+                        token: r,
+                        app: {
+                            name: "Test App",
+                            author: "Xarber",
+                            id: "ASOIDNC12930u4FASNJK",
+                            token: apptoken
+                        },
+                        data: {
+                            name: "/someTestFile.txt"
+                        }
+                    })}).then(r=>r.text()).then(console.log);
+                    var rresp = await fetch('/api/data/read', {method: 'POST', body: JSON.stringify({
+                        token: r,
+                        app: {
+                            name: "Test App",
+                            author: "Xarber",
+                            id: "ASOIDNC12930u4FASNJK",
+                            token: apptoken
+                        },
+                        data: {
+                            name: "/otherFile.txt"
+                        }
+                    })}).then(r=>r.text()).then(console.log);
+                } else {
+                    location.href = '/auth/link?' + new URLSearchParams({
+                        "redirect": location.pathname,
+                        "appicon": "data:image/png;base64,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",
+                        "link-token": r,
+                        "apptoken": "ASOIDNC12930u4FASNJK",
+                        "appscope": "Test App",
+                        "appauthor": "Xarber",
+                        "app-permissions": JSON.stringify({root: [""]})
+                    });
+                }
+            } else {
+                location.href = '/auth/signin?redirect=' + location.pathname;
+            }
+        })
+    </script>
+    <?nodejs echo(loadFile('./HTML/assets/modules/common.html', 'utf8')+""); ?>
+</body>
+</html>

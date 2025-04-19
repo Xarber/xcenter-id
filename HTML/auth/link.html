@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auth System - Link app</title>
+    <link rel="stylesheet" href="../assets/css/default.css">
+</head>
+<body>
+    <div class="fullscreen">
+        <div class="background" style="background-image: url('../assets/media/pxfuel-auth.jpg');"></div>
+        <form class="center blur dark popup auth link" method="post" onkeydown="if (event.keyCode === 13) return false;" action="/api/link">
+            <button type="button" class="backButton" onclick="window.history.back();"><img src="/assets/media/backarrow-hd-dark.png" alt=""></button>
+            <h1>Connect</h1>
+            <p id="link-app-text">Link this app to your account</p>
+            <div class="inline-elements" class="linkicons">
+                <div class="dummy"><img class="authusericon" src="../assets/media/SampleUserIcon.png" alt=""></div>
+                <svg class="authlinkdots" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor"><path d="M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400Z"/></svg>
+                <div class="dummy"><img class="authappicon" src="../assets/media/SampleAppIcon.png" alt=""></div>
+            </div>
+            <div class="applinkperms">
+                <h4>Permissions</h4>
+                <ul id="link-has-permissions"></ul>
+            </div>
+            <div class="hided">
+                <input type="text" name="permissions" id="link-permissions" value="">
+                <input type="text" name="token" id="link-token" value="">
+                <input type="text" name="app" id="link-apptoken" value="">
+                <input type="text" name="appscope" id="link-appscope" value="">
+                <input type="text" name="appauthor" id="link-appauthor" value="">
+                <input type="text" name="apppermissions" id="link-app-perms">
+                <input type="text" name="appicon" id="link-app-icon">
+                <input type="text" name="redirect" id="redirect-link">
+            </div>
+            <button type="submit" id="link-submit">Allow</button>
+        </form>
+    </div>
+    <script>
+        var vars = {};
+        var parts = decodeURI(window.location.href).replace(/[?&]+([^=&]+)=([^&]*)/gi, function(m,key,value) {
+            vars[key] = value.replaceAll('%22', '"').replaceAll('%2C', ',').replaceAll('%3A', ':').replaceAll('%7B', '{').replaceAll('%5B', '[').replaceAll('%5D', ']').replaceAll('%7D', '}').replaceAll('%2F', '/').replaceAll('%3D', '=').replaceAll('%3B', ';').replaceAll('%26', '&').replaceAll('%3F', '?').replaceAll('+', ' ');
+        });
+        window.history.replaceState({}, "", location.pathname);
+        document.querySelectorAll('p.center-text a').forEach(e=>{e.href = e.href + window.location.search});
+        if ((vars["redirect"] || !!window.opener) && vars["link-token"] && vars["apptoken"] && vars["appscope"] && vars["appauthor"]) {
+            document.querySelector('#redirect-link').setAttribute('value', vars["redirect"] ?? "#saveToTokenVariable:WinOpen")
+            document.querySelector('#link-token').setAttribute('value', vars["link-token"]);
+            document.querySelector('#link-apptoken').setAttribute('value', vars["apptoken"]);
+            document.querySelector('#link-appscope').setAttribute('value', vars["appscope"]);
+            document.querySelector('#link-app-text').innerText = `Link "${vars["appscope"]}" to your account`;
+            document.querySelector('#link-appauthor').setAttribute('value', vars["appauthor"]);
+        } else {
+            window.history.back();
+        }
+        if (!!window.opener) document.querySelector('.backButton').classList.add('hided');
+        fetch('/api/misc/isLinked', {method: 'POST', body: JSON.stringify({
+            token: vars["link-token"],
+            app: vars["apptoken"],
+            hasPerms: !!vars['link-permissions'] ? JSON.parse(vars['link-permissions']) : undefined,
+            availablePerms: !!vars['app-permissions'] ? JSON.parse(vars['app-permissions']) : undefined
+        })}).then(r=>r.text()).then(r=>{
+            if (r === "TRUE") {
+                document.querySelector('button#link-submit').click();
+            } else if (r === "DIFFERS") {
+                document.querySelector('#link-app-text').innerText = "Update app permissions";
+                document.querySelector('button#link-submit').innerText = "Update";
+            }
+        });
+        fetch('/api/misc/geticon', {method: 'POST', body: JSON.stringify({
+            token: vars["link-token"]
+        })}).then(r=>r.text()).then(r=>{
+            if (r.indexOf('ERROR:') != 0) {
+                var img = document.querySelector('img.authusericon');
+                img.setAttribute('onerror', 'this.src = "'+img.src+'"');
+                img.src = r;
+            }
+        });
+        if (vars["link-permissions"]) {
+            document.querySelector('#link-permissions').setAttribute('value', vars["link-permissions"]);
+            try {
+                var perms = JSON.parse(vars["link-permissions"]);
+                for (var permapp in perms) {
+                    fetch('/api/misc/appname', {method: 'POST', body: JSON.stringify({
+                        token: vars["link-token"],
+                        app: permapp
+                    })}).then(r=>r.text()).then(r=>{
+                        r = (r.indexOf("ERROR:") === 0) ? `app "${permapp}"` : `"${r}"`
+                        var li = document.createElement('li');
+                        li.innerText = `• "${perms[permapp]}" on ${r}`;
+                        document.querySelector('#link-has-permissions').appendChild(li);
+                    })
+                }
+                if (Object.keys(perms).length < 1) {
+                    var li = document.createElement('li');
+                    li.innerText = `This app can't access other apps!`;
+                    document.querySelector('#link-has-permissions').appendChild(li);
+                }
+            } catch (e) {
+                alert("Warning! Could not parse app permissions!");
+            }
+        } else {
+            var li = document.createElement('li');
+            li.innerText = `This app can't access other apps!`;
+            document.querySelector('#link-has-permissions').appendChild(li);
+        }
+        if (vars["app-permissions"]) {
+            document.querySelector('#link-app-perms').setAttribute('value', vars["app-permissions"]);
+        }
+        if (vars["appicon"]) {
+            var img = document.querySelector('img.authappicon');
+            //img.setAttribute('onerror', 'this.src = "'+img.src+'"');
+            img.src = vars["appicon"];
+            document.querySelector('#link-app-icon').setAttribute('value', vars["appicon"]);
+        }
+        if (!!localStorage['Auth System-accessToken']) fetch('/api/restoresession', {method: 'POST', body: JSON.stringify({
+            token: localStorage['Auth System-accessToken'],
+            enckey: vars["enckey"] ?? "",
+            response: 1
+        })}).then(r=>r.text()).then(r=>{
+            if (r!="NOT") {document.querySelector('#link-token').setAttribute('value', localStorage['Auth System-accessToken']);}
+            else {alert("Not signed in!");window.history.back();}
+        })
+    </script>
+    <?nodejs echo(loadFile('./HTML/assets/modules/common.html', 'utf8')+""); ?>
+</body>
+</html>
