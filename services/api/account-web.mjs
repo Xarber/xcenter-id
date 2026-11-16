@@ -1,11 +1,14 @@
+import { hkdfSync } from 'node:crypto';
 import { Resolver } from 'node:dns/promises';
 import { createServer } from 'node:http';
 import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { createAccountFiles } from './account-files.mjs';
 import { createOutboundMail } from './outbound-mail.mjs';
 import { createVerificationMailer } from './email-verification.mjs';
 import { createAccounts } from './accounts.mjs';
 import { openMailStore } from './mail-store.mjs';
+import { createSamplePermissions } from './sample-permissions.mjs';
 import { createSamples } from './samples.mjs';
 import { createApiHandler } from './server.mjs';
 import { openRegistry } from './registry.mjs';
@@ -25,6 +28,10 @@ const accounts = createAccounts({
 });
 const origin = process.env.AUTHNJS_ACCOUNT_ORIGIN;
 const state = process.env.AUTHNJS_DATA_DIR;
+const accountFiles = configuration ? createAccountFiles({
+  database:join(state,'user-files.sqlite'),accounts,origin,
+  key:Buffer.from(hkdfSync('sha256',Buffer.from(configuration.profileKey,'hex'),'','authnjs.files.v1',32)),
+}) : null;
 const registry = openRegistry(join(state, 'apps.sqlite'));
 const mail = mailConfig?.inboundDomains?.length ? openMailStore({ configuration:mailConfig,
   accountsPath:join(state,'accounts.sqlite'), mailPath:join(state,'mail.sqlite') }) : null;
@@ -33,6 +40,7 @@ const provider = configuration ? createIdentityProvider({
 }) : null;
 const store = configuration ? openStore(join(state, 'sample-data.sqlite'), Buffer.from(configuration.sampleKey, 'hex')) : null;
 const samples = provider && store ? createSamples({ issuer: origin, configuration, provider, accounts, store }) : null;
+const samplePermissions = store ? createSamplePermissions({store,accounts,origin}) : null;
 const developerClient = 'account-developer-session';
 const developer = createApiHandler({
   registry, developerClient, apps: registry,
@@ -66,6 +74,7 @@ async function activateApplication(req,res,id) {
   if (verificationAttempts.has(id) || verificationAttempts.size >= 100) return json(429,{error:'retry_later'});
   verificationAttempts.set(id,time+30_000);
   const host = new URL(app.callback).hostname;
+  if (host.replace(/\.$/,'') === new URL(origin).hostname) return json(422,{error:'use_separate_app_domain'});
   if (!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(host) ||
       /\.(?:localhost|local|internal|test|example)$/i.test(host)) return json(422,{error:'public_domain_required'});
   const check = await resolver.resolveTxt('_xcenter-id.'+host).catch(() => []);
@@ -89,7 +98,7 @@ const oidcRoutes = /^\/(?:\.well-known\/openid-configuration|auth(?:\/[^/]+)?|to
 const types = new Map(Object.entries({
   html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8',
   webmanifest: 'application/manifest+json', json: 'application/json', png: 'image/png',
-  svg: 'image/svg+xml', ttf: 'font/ttf', txt: 'text/plain',
+  svg: 'image/svg+xml', css:'text/css; charset=utf-8', ttf: 'font/ttf', txt: 'text/plain',
 }));
 
 createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
@@ -104,6 +113,17 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   }
   if (dataApi && /^\/v1\/records\/saved-place(?:\/[0-9a-f-]{36})?$/.test(path)) {
     void dataApi(req,res);
+    return;
+  }
+  if (accountFiles && (path === '/account/files' || /^\/account\/files\/[0-9a-f-]{36}$/.test(path))) {
+    void accountFiles(req,res,path).catch(()=>{
+      if(!res.headersSent) res.writeHead(500,{'Cache-Control':'no-store'});
+      res.end();
+    });
+    return;
+  }
+  if (samplePermissions && path === '/account/sample-grants') {
+    void samplePermissions(req,res);
     return;
   }
   if (consentApi && path === '/account/data-grants') {
@@ -180,7 +200,8 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void accounts.handle(req, res, path);
     return;
   }
-  const relative = path === '/' ? 'index.html' : path.slice(1);
+  const webPages = new Set(['/','/signin','/signup','/dashboard','/profile','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/mail','/admin']);
+  const relative = webPages.has(path) ? 'index.html' : path.slice(1);
   const valid = /^(?:index\.html|revision\.txt|manifest\.webmanifest|service-worker\.js|authnjs-[\w-]+\.(?:svg|png)|(?:_expo|assets)\/[\w@./-]+)$/.test(relative);
   if (!valid || relative.split('/').some((part) => part === '.' || part === '..') ||
       (req.method !== 'GET' && req.method !== 'HEAD')) {

@@ -2,9 +2,7 @@ import * as oidc from 'openid-client';
 import { randomBytes } from 'node:crypto';
 
 const sampleIds = ['places-demo', 'trips-demo'];
-const noteDataset = 'sample-notes.v1';
-const sharedDataset = 'sample-shared.v1';
-const shared = 'account-shared';
+import { sampleNotes as noteDataset, sampleFolder as sharedDataset, sampleShared as shared } from './sample-permissions.mjs';
 const escape = (value) => String(value).replace(/[&<>"']/g,(c) => ({
   '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;',
 })[c]);
@@ -52,7 +50,7 @@ function notes(page) {
     : '<p>No notes yet.</p>';
 }
 
-export function createSamples({ issuer, configuration, provider, accounts, store }) {
+export function createSamples({ issuer, configuration, provider, store }) {
   const clients = configuration.clients.filter(({client_id}) => sampleIds.includes(client_id));
   const sessions = new Map();
   const flows = new Map();
@@ -84,32 +82,8 @@ export function createSamples({ issuer, configuration, provider, accounts, store
         clients.map((client) => `<li><a href="/samples/${client.client_id}">${escape(client.client_name)}</a></li>`).join('') + '</ul>');
     }
     if (url.pathname === '/samples/permissions') {
-      const active = accounts.current(req);
-      if (!active) return respond(res,'Sample permissions','<p>Sign in to authorize sample access.</p><a href="/">Open X-Center ID</a>',401);
-      if (req.method === 'POST') {
-        if (req.headers.origin !== issuer) return respond(res,'Invalid origin','',403);
-        const input = await form(req);
-        const source = input.get('source');
-        const destination = input.get('destination');
-        if (!sampleIds.includes(destination) || (source !== shared && !sampleIds.includes(source)) || source === destination) {
-          return respond(res,'Invalid permission','',422);
-        }
-        const dataset = source === shared ? sharedDataset : noteDataset;
-        if (input.get('action') === 'allow') store.grant(active.owner,source,destination,dataset,Date.now()+3600_000);
-        else if (input.get('action') === 'revoke') store.revoke(active.owner,source,destination,dataset);
-        else return respond(res,'Invalid permission','',422);
-        return redirect(res,'/samples/permissions');
-      }
-      if (req.method !== 'GET') return respond(res,'Method unavailable','',405);
-      const grants = store.listGrants(active.owner);
-      const permissions = sampleIds.flatMap((destination) => [shared,...sampleIds.filter((id) => id !== destination)].map((source) => {
-        const allowed = grants.some((grant) => grant.source === source && grant.destination === destination &&
-          grant.dataset === (source === shared ? sharedDataset : noteDataset));
-        return `<form method="post"><input type="hidden" name="source" value="${source}">
-          <input type="hidden" name="destination" value="${destination}"><p>${destination} can ${source === shared ? 'read and write the sample shared folder' : 'read notes from ' + source}.</p>
-          <button name="action" value="${allowed ? 'revoke' : 'allow'}">${allowed ? 'Revoke permission' : 'Allow for one hour'}</button></form>`;
-      })).join('');
-      return respond(res,'Sample permissions',permissions+'<p><a href="/samples">Back to sample apps</a></p>');
+      if (req.method !== 'GET') return respond(res,'Permission management moved','<a href="/permissions">Open X-Center ID permissions</a>',405);
+      return redirect(res,'/permissions');
     }
 
     const [,id,action] = url.pathname.match(/^\/samples\/(places-demo|trips-demo)(?:\/(start|callback))?$/) ?? [];
@@ -176,6 +150,6 @@ export function createSamples({ issuer, configuration, provider, accounts, store
       <h2>Your notes</h2>${notes(store.read(owner,id,id,noteDataset))}${noteForm('own')}
       <h2>Other app’s notes</h2>${otherPage ? notes(otherPage) : '<p>Access has not been granted.</p>'}
       <h2>Shared folder</h2>${sharedPage ? notes(sharedPage)+noteForm('shared') : '<p>Access has not been granted.</p>'}
-      <p><a href="/samples/permissions">Review sample permissions</a> · <a href="/samples">Other sample apps</a></p>`);
+      <p><a href="/permissions">Manage permissions on X-Center ID</a> · <a href="/samples">Other sample apps</a></p>`);
   };
 }

@@ -1,0 +1,253 @@
+import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
+import {
+  ArrowDownRight, ArrowLeft, ArrowRight, ChevronRight, CircleHelp, Code2, Fingerprint, FolderOpen,
+  Grid2X2, HardDrive, IdCard, KeyRound, Laptop, LockKeyhole, LogOut, Mail, MapPin, Settings, ShieldCheck, UserRound, X,
+} from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import DeveloperPortal from './DeveloperPortal';
+import { AdminPage, ConnectedApps, DevicesPage, FilesPage, MailPage } from './AccountSections.web';
+import PermissionsPage from './PermissionsPage.web';
+import ProfilePage from './ProfilePage.web';
+import { api, type Account } from './web-account';
+import { sample } from './sample';
+import './account-web.css';
+
+const sections = [
+  ['dashboard','Overview',Grid2X2],['profile','Profile',UserRound],['devices','Devices',Laptop],
+  ['security','Sign-in & security',KeyRound],['apps','Apps',LayersIcon],['permissions','Permissions',ShieldCheck],
+  ['storage','Data usage',HardDrive],['files','Files',FolderOpen],['mail','Mail',Mail],['settings','Settings',Settings],
+] as const;
+function LayersIcon(props:{size?:number}){return <Grid2X2 {...props}/>;}
+const titles:Record<string,[string,string]> = {
+  profile:['Your profile','Manage the personal details associated with your X-Center ID.'],
+  devices:['Your devices','Review where you are signed in.'],
+  security:['Sign-in & security','Manage the passkeys that protect your account.'],
+  apps:['Apps','Find the apps and integrations available with X-Center ID.'],
+  permissions:['Permissions','Choose what your apps can access.'],
+  storage:['Data usage','Review storage used by your account files.'],
+  files:['File browser','Upload, download and manage files stored in your account.'],
+  mail:['Mail','Manage your X-Center mailbox.'],
+  settings:['Settings','Manage your X-Center ID experience.'],
+  developer:['Developer apps','Register and verify apps that use X-Center ID.'],
+  admin:['Administration','Manage X-Center ID account entitlements.'],
+};
+const introKey='authnjs.dashboard.onboarding.v1';
+
+function Logo({href='/dashboard'}:{href?:string}){
+  return <a href={href} className="xc-brand"><img src="/authnjs-icon.svg" alt=""/><span>X-Center <b>ID</b></span></a>;
+}
+
+function Intro({close}:{close:()=>void}){
+  const dialog=useRef<HTMLDialogElement>(null);
+  useEffect(()=>{dialog.current?.showModal();},[]);
+  return <dialog className="xc-intro" ref={dialog} onCancel={event=>{event.preventDefault();close();}}>
+    <button type="button" className="xc-close" aria-label="Close introduction" onClick={close}><X size={20}/></button>
+    <img src="/authnjs-icon.svg" alt="" width={57} height={57}/>
+    <h2>Your X-Center ID</h2><p>Use one account to manage your profile, passkeys, files and app permissions.</p>
+    <div className="xc-stack">
+      <div className="xc-row-head"><span className="xc-symbol xc-sky"><UserRound size={20}/></span><div><strong>Make it yours</strong><p>Set your profile and verified email addresses.</p></div></div>
+      <div className="xc-row-head"><span className="xc-symbol xc-mint"><ShieldCheck size={20}/></span><div><strong>Stay in control</strong><p>See which apps can access your data.</p></div></div>
+    </div>
+    <button type="button" className="xc-button xc-primary" onClick={close}>Open dashboard <ArrowRight size={16}/></button>
+  </dialog>;
+}
+
+function SignIn({signup,busy,notice,authenticate,create,continuation}:{
+  signup:boolean;busy:boolean;notice:string;authenticate:(username?:string)=>void;create:()=>void;continuation:string|null;
+}){
+  const [username,setUsername]=useState('');
+  const suffix=continuation?'?continue='+encodeURIComponent(continuation):'';
+  return <div className="xc-auth">
+    <header><Logo href="/"/><a href="/samples" className="xc-text-link">Explore apps <ArrowDownRight size={15}/></a></header>
+    <div className="xc-auth-grid">
+      <div className="xc-auth-visual">
+        <div className="xc-constellation" aria-hidden="true">
+          <div className="xc-orbit xc-orbit-inner"/><div className="xc-orbit xc-orbit-outer"/>
+          <div className="xc-auth-mark"><img src="/authnjs-icon.svg" alt=""/></div>
+          <div className="xc-service xc-service-mail"><Mail/></div>
+          <div className="xc-service xc-service-files"><FolderOpen/></div>
+          <div className="xc-service xc-service-places"><MapPin/></div>
+          <div className="xc-service xc-service-apps"><Grid2X2/></div>
+          <div className="xc-service xc-service-device"><Laptop/></div>
+          <div className="xc-service xc-service-lock"><LockKeyhole/></div>
+        </div>
+        <div className="xc-auth-caption"><p>One account for X-Center</p><span>Profile, devices, and apps in one place.</span></div>
+      </div>
+      <div className="xc-card xc-auth-card">
+        <span className="xc-symbol xc-lavender">{signup?<IdCard size={24}/>:<Fingerprint size={24}/>}</span>
+        <h1>{signup?'Create your X-Center ID':'Sign in to X-Center ID'}</h1>
+        <p>{signup?'Save a passkey first. Then set up your username and profile.':'Use your username or sign in directly with a passkey.'}</p>
+        {signup ? <button type="button" className="xc-button xc-primary xc-full" onClick={create} disabled={busy}>
+          <Fingerprint size={19}/>{busy?'Waiting for your passkey…':'Create passkey'}<ArrowRight size={17}/>
+        </button> : <>
+          <form onSubmit={event=>{event.preventDefault();authenticate(username);}}>
+            <label>X-Center username<input autoComplete="username webauthn" name="username" spellCheck={false}
+              value={username} onChange={event=>setUsername(event.target.value)} placeholder="Your username" required/></label>
+            <button className="xc-button xc-primary xc-full" disabled={busy || !username.trim()}>Continue <ArrowRight size={17}/></button>
+          </form>
+          <div className="xc-divider"><span>or</span></div>
+          <button type="button" className="xc-button xc-secondary xc-full" disabled={busy} onClick={()=>authenticate()}>
+            <Fingerprint size={19}/>{busy?'Waiting for your passkey…':'Sign in with a passkey'}
+          </button>
+        </>}
+        {notice && <p className="xc-notice" role="alert">{notice}</p>}
+        <div className="xc-auth-footer">{signup?'Already have an account?':'New to X-Center?'}{' '}
+          <a href={(signup?'/signin':'/signup')+suffix}>{signup?'Sign in':'Create an account'}</a></div>
+      </div>
+    </div>
+  </div>;
+}
+
+function Security({account,update,passkey}:{account:Account;update:()=>Promise<void>;passkey:(name:string)=>Promise<void>}){
+  const [name,setName]=useState('');
+  const [status,setStatus]=useState('');
+  const [confirm,setConfirm]=useState('');
+  async function act(task:()=>Promise<void>){setStatus('');try{await task();}catch(error){setStatus(error instanceof Error?error.message:'Action failed.');}}
+  return <section className="xc-card xc-pad">
+    <div className="xc-row-head"><span className="xc-symbol xc-mint"><Fingerprint size={22}/></span><div>
+      <h2>Passkeys</h2><p>Use a device passkey or physical security key to sign in.</p></div></div>
+    {account.passkeys.map(key=><div className="xc-list-row" key={key.id}><div className="xc-row-head"><KeyRound size={19}/><strong>{key.label}</strong></div>
+      {account.passkeys.length>1&&<button type="button" className="xc-button xc-secondary" onClick={()=>{
+        if(confirm!==key.id){setConfirm(key.id);return;}
+        void act(async()=>{await api('passkey/remove',{id:key.id});await update();setConfirm('');setStatus('Passkey removed.');});
+      }}>{confirm===key.id?'Confirm removal':'Remove'}</button>}</div>)}
+    <form className="xc-inline-form" onSubmit={event=>{event.preventDefault();void act(async()=>{await passkey(name);setName('');setStatus('Passkey added.');});}}>
+      <label>New passkey name<input required value={name} onChange={event=>setName(event.target.value)} maxLength={64}/></label>
+      <button className="xc-button xc-primary"><KeyRound size={16}/> Add passkey</button>
+    </form>
+    {status&&<p role="status">{status}</p>}
+  </section>;
+}
+
+export default function WebApp(){
+  const [account,setAccount]=useState<Account|null|undefined>(undefined);
+  const [notice,setNotice]=useState('');
+  const [busy,setBusy]=useState(false);
+  const [intro,setIntro]=useState(false);
+  const [sampleMode,setSampleMode]=useState(false);
+  const [dev,setDev]=useState(false);
+  const taps=useRef(0);
+  const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const didShow=useRef(false);
+  const path=window.location.pathname.replace(/^\//,'')||'dashboard';
+  const next=new URLSearchParams(window.location.search).get('continue')??'';
+  const continuation=/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)?next:null;
+  const emailToken=new URLSearchParams(window.location.hash.slice(1)).get('verify-email');
+  async function load(){setAccount((await api('me')).account);}
+  useEffect(()=>{
+    void load().catch(()=>{setNotice('The account service is temporarily unavailable.');setAccount(null);});
+    return ()=>{if(timer.current)clearTimeout(timer.current);};
+  },[]);
+  useEffect(()=>{
+    if(!account?.profile||path!=='dashboard'||didShow.current||continuation)return;
+    didShow.current=true;
+    try{
+      if(!localStorage.getItem(introKey)){localStorage.setItem(introKey,'complete');setIntro(true);}
+    }catch{ /* Without storage, the introduction remains available in Settings. */ }
+  },[account?.profile,path,continuation]);
+
+  async function passkey(mode:'signup'|'login'|'add',value?:string){
+    const optionsJSON=await api(mode+'/options',mode==='login'?{username:value}:mode==='add'?{name:value}:{});
+    const response=mode==='login'?await startAuthentication({optionsJSON}):await startRegistration({optionsJSON});
+    await api(mode+'/finish',{response});await load();
+  }
+  function login(mode:'signup'|'login',value?:string){
+    setNotice('');setBusy(true);
+    void passkey(mode,value).then(()=>{
+      const target=mode==='signup'?'/profile':(emailToken?'/profile':'/dashboard');
+      window.location.assign(target+(continuation?'?continue='+encodeURIComponent(continuation):'')+window.location.hash);
+    }).catch(error=>setNotice(error?.name==='NotAllowedError'?'The passkey request was canceled. Try again when ready.':error?.message??'Sign-in could not be completed.'))
+      .finally(()=>setBusy(false));
+  }
+  if(account===undefined)return <div className="xc-loading"><Logo href="/"/><p role="status">Opening your account…</p></div>;
+  if(!account)return <SignIn signup={path==='signup'} continuation={continuation} busy={busy} notice={notice} authenticate={username=>login('login',username)} create={()=>login('signup')}/>;
+
+  const profile=account.profile;
+  if(!profile) return <div className="xc-setup"><Logo href="/"/><div className="xc-page-title">
+    <span className="xc-pill"><Fingerprint size={15}/> Passkey saved</span><h1>Set up your profile</h1>
+    <p>Choose your username and add your personal details.</p></div>
+    <ProfilePage account={account} update={load} complete={()=>{
+      window.location.assign(continuation??'/dashboard');
+    }}/></div>;
+
+  const name=profile.givenName+' '+profile.surname;
+  const picture=profile.hasPicture?'/account/avatar':null;
+  const page=path==='signin'||path==='signup'?'dashboard':path;
+  const [title,summary]=titles[page]??['Account overview','Manage the details, devices, and apps connected to your X-Center ID.'];
+  const shortcuts=[
+    ['/profile','Your profile','Edit your photo and personal information',UserRound,'xc-sky'],
+    ['/security','Sign-in & security','Manage the passkeys on your account',Fingerprint,'xc-mint'],
+    ['/permissions','Permissions','Control what each app can access',ShieldCheck,'xc-lavender'],
+    ['/devices','Devices','Review active sign-ins',Laptop,'xc-sky'],
+  ] as const;
+
+  let content:ReactNode;
+  if(page==='profile')content=<>
+    {emailToken&&<section className="xc-card xc-pad"><h2>Verify your email</h2>
+      <button type="button" className="xc-button xc-primary" onClick={()=>void api('email/confirm',{token:emailToken}).then(()=>{
+        window.history.replaceState(null,'','/profile');setNotice('Email verified.');return load();
+      }).catch(error=>setNotice(error.message))}>Confirm this email address</button></section>}
+    <ProfilePage account={account} update={load}/>
+  </>;
+  else if(page==='permissions')content=<PermissionsPage/>;
+  else if(page==='devices')content=<DevicesPage/>;
+  else if(page==='files'||page==='storage')content=<FilesPage key={page} summary={page==='storage'}/>;
+  else if(page==='mail')content=<MailPage account={account}/>;
+  else if(page==='security')content=<Security account={account} update={load} passkey={value=>passkey('add',value)}/>;
+  else if(page==='admin')content=account.admin?<AdminPage/>:<section className="xc-card xc-pad">Administrator access is required.</section>;
+  else if(page==='developer')content=<section className="xc-card xc-pad"><DeveloperPortal back={()=>window.location.assign('/apps')}/></section>;
+  else if(page==='apps')content=<><section className="xc-card"><ConnectedApps/></section><section className="xc-card xc-pad">
+    <div className="xc-row-head"><span className="xc-symbol xc-lavender"><Grid2X2 size={22}/></span><div><h2>Apps using X-Center ID</h2><p>Try the sample apps or register your own integration.</p></div></div>
+    <div className="xc-list-row"><div><strong>Places Notebook and Trip Planner</strong><p>Two sample clients for testing sign-in and sharing.</p></div><a className="xc-button xc-secondary" href="/samples">Open sample apps <ArrowRight size={15}/></a></div>
+    <div className="xc-list-row"><div><strong>Developer portal</strong><p>Register or review your applications.</p></div><a className="xc-button xc-secondary" href="/developer"><Code2 size={16}/> Developer apps</a></div>
+  </section></>;
+  else if(page==='settings')content=<section className="xc-card xc-pad">
+    <div className="xc-list-row"><div className="xc-row-head"><CircleHelp size={22}/><div><strong>Introduction</strong><p>See how your X-Center ID works.</p></div></div><button className="xc-button xc-secondary" onClick={()=>setIntro(true)}>View introduction</button></div>
+    <div className="xc-list-row"><div><strong>App version</strong><p>X-Center ID for web</p></div><button className="xc-button xc-secondary" onClick={()=>{
+      taps.current+=1;
+      if(timer.current) clearTimeout(timer.current);
+      if(taps.current>=3){taps.current=0;setDev(true);}
+      timer.current=setTimeout(()=>{setDev(false);setSampleMode(false);taps.current=0;},30000);
+    }}>0.1.0</button></div>
+    {dev&&<div className="xc-stack"><h2>Developer Options</h2>
+      <button className="xc-button xc-secondary" onClick={()=>setSampleMode(!sampleMode)}>{sampleMode?'Exit sample dashboard':'Open sample dashboard'}</button>
+      {sampleMode&&<div className="xc-sample"><span className="xc-pill">Sample data</span><h2>Sample dashboard</h2>
+        {Object.entries(sample).map(([section,items])=><div key={section}><h3>{section}</h3>{items.map(item=><p key={item.id}>{item.title} · {item.detail}</p>)}</div>)}</div>}
+    </div>}
+  </section>;
+  else content=<>
+    <section className="xc-hero">
+      <div><p className="xc-kicker">Personal account</p><h2>Hello, {profile.givenName}</h2><p>@{profile.username}</p>
+        <a className="xc-button xc-hero-button" href="/profile">View profile <ArrowRight size={16}/></a></div>
+      <div className="xc-avatar xc-hero-avatar">{picture?<img src={picture} alt=""/>:<UserRound size={43}/>}</div>
+    </section>
+    <section className="xc-shortcuts" aria-label="Account shortcuts">
+      {shortcuts.map(([link,label,desc,Icon,tint])=><a className="xc-card xc-shortcut" key={link} href={link}>
+        <span className={'xc-symbol '+tint}><Icon size={22}/></span><div><h2>{label}</h2><p>{desc}</p></div><ChevronRight className="xc-arrow" size={19}/>
+      </a>)}
+    </section>
+    <section className="xc-card xc-pad xc-account-status"><div className="xc-row-head"><span className="xc-symbol xc-mint"><ShieldCheck size={22}/></span>
+      <div><h2>Account status</h2><p>{account.passkeys.length} {account.passkeys.length===1?'passkey':'passkeys'} enrolled · {account.emails.length} verified {account.emails.length===1?'email':'emails'}</p></div></div>
+    </section>
+  </>;
+
+  return <div className="xc-shell">
+    <header className="xc-topbar"><Logo/><div className="xc-top-actions">
+      <a href="/settings" className="xc-icon-link" aria-label="Open settings"><Settings size={20}/></a>
+      <a href="/profile" className="xc-avatar" aria-label="Open profile">{picture?<img src={picture} alt=""/>:<UserRound size={19}/>}</a>
+    </div></header>
+    <aside className="xc-side">
+      <nav aria-label="Account sections">{sections.map(([id,label,Icon])=><a key={id} href={'/'+id} aria-current={page===id?'page':undefined}><Icon size={19}/><span>{label}</span></a>)}
+        {account.admin&&<a href="/admin" aria-current={page==='admin'?'page':undefined}><ShieldCheck size={19}/><span>Administration</span></a>}
+      </nav>
+      <button type="button" className="xc-signout" onClick={()=>void api('logout',{}).then(()=>window.location.assign('/signin')).catch(error=>setNotice(error.message))}><LogOut size={18}/> Sign out</button>
+    </aside>
+    <main className="xc-main">
+      <div className="xc-page-title"><h1>{title}</h1><p>{summary}</p></div>
+      {continuation&&<a className="xc-button xc-primary" href={continuation}>Continue to the app <ArrowRight size={17}/></a>}
+      {notice&&<p className="xc-notice" role="status">{notice}</p>}
+      {content}
+    </main>
+    {intro&&<Intro close={()=>setIntro(false)}/>}
+  </div>;
+}

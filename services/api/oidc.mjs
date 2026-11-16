@@ -70,7 +70,8 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const person = accounts.identity(owner);
       if (!person) return undefined;
       const selection = source?.grantId ? await selections.find(source.grantId) : undefined;
-      const email = selection?.alias ? mail?.alias(owner, selection.client) :
+      const email = selection?.premium ? mail?.premiumAlias(owner,selection.client) :
+        selection?.alias ? mail?.alias(owner, selection.client) :
         selection?.email && person.emails.find(({ address }) => address === selection.email)?.address;
       return {
         accountId: owner,
@@ -118,17 +119,22 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       }
       const requested = new Set(prompt.details.missingOIDCScope ?? []);
       const selected = requested.has('email') ? input.get('email') : null;
+      const eligible = accounts.premiumEligible(active.owner);
+      const premium = selected === 'premium' && eligible ? mail?.premiumAlias(active.owner,client.client_id) : null;
+      if(selected === 'premium' && !premium) return html(res,'<h1>Premium Hide My Email is unavailable</h1>',409);
       const alias = selected === 'masked' ? mail?.alias(active.owner,client.client_id) : null;
       if (selected === 'masked' && !alias) return html(res,'<h1>Hide My Email is unavailable</h1>',409);
-      const email = alias || selected;
-      if (email && !alias && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
+      const email = premium || alias || selected;
+      if (email && !alias && !premium && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
       const allowed = ['openid', ...['profile','age_range','app_data'].filter((scope) => requested.has(scope)),
         ...(email ? ['email'] : [])];
       const grant = new provider.Grant({ accountId:active.owner, clientId:client.client_id });
       grant.addOIDCScope(allowed.join(' '));
       if (requested.has('email') && !email) grant.rejectOIDCScope('email');
       const grantId = await grant.save();
-      if (email) await selections.upsert(grantId,alias ? { alias:true, client:client.client_id } : { email },3600);
+      if (email) await selections.upsert(grantId,premium ? { premium:true, client:client.client_id }
+        : alias ? { alias:true, client:client.client_id } : { email },3600);
+      accounts.rememberApp(active.owner,client.client_id,client.client_name ?? client.client_id);
       await provider.interactionFinished(req,res,{ consent:{ grantId } });
       return;
     }
@@ -141,6 +147,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       ${missing.has('app_data') ? '<p>This app can access its own records. Cross-app grants are managed separately.</p>' : ''}
       <form method="post">${missing.has('email') ? `<fieldset><legend>Email address to share</legend>
       <label><input type="radio" name="email" value="" checked>Share only my user ID and the other agreed details</label>
+      ${mail?.premiumAvailable && accounts.premiumEligible(active.owner) ? '<label><input type="radio" name="email" value="premium">Use a premium private address</label>' : ''}
       ${mail?.maskedAvailable ? '<label><input type="radio" name="email" value="masked">Hide my email</label>' : ''}
       ${person.emails.map(({address}) => `<label><input type="radio" name="email" value="${escape(address)}">${escape(address)}</label>`).join('')}
       </fieldset>` : ''}

@@ -7,12 +7,12 @@ const accountUrl = process.env.EXPO_PUBLIC_XCENTER_ID_URL ?? 'https://id.xcenter
 export default function LiveAccount() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
-  async function open() {
+  async function open(mode: 'signin' | 'signup') {
     setPending(true);
     setError('');
-    try { await openBrowserAsync(accountUrl); }
+    try { await openBrowserAsync(new URL(mode,accountUrl).href); }
     catch { setError('Could not open the X-Center ID account site.'); }
     finally { setPending(false); }
   }
-  return <AccountEntry onSignIn={() => { void open(); }} onCreateAccount={() => { void open(); }} pending={pending} error={error} />;
+  return <AccountEntry onSignIn={() => { void open('signin'); }} onCreateAccount={() => { void open('signup'); }} pending={pending} error={error} />;
 }

@@ -1,241 +1,113 @@
-import LiveAccount from './LiveAccount';
-import DeveloperPortal from './DeveloperPortal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState, type ComponentProps } from 'react';
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme, useWindowDimensions } from 'react-native';
-import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
+import { openBrowserAsync } from 'expo-web-browser';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import Landing from './Landing';
-import { sample, type AccountItem } from './sample';
+import { AccountEntry } from '@authnjs/expo';
+import { sample } from './sample';
 
-const sections = [
-  { id: 'credentials', name: 'Security', icon: 'key-outline', description: 'Passkeys and physical security keys' },
-  { id: 'apps', name: 'Connected apps', icon: 'apps-outline', description: 'Apps linked to your account' },
-  { id: 'grants', name: 'Data access', icon: 'swap-horizontal-outline', description: 'What each app can access' },
-  { id: 'sessions', name: 'Sessions', icon: 'phone-portrait-outline', description: 'Devices signed in to your account' },
-] as const;
-
-type Section = (typeof sections)[number];
 type Icon = ComponentProps<typeof Ionicons>['name'];
+const pages = [
+  ['dashboard','Account status','person-circle-outline'],['profile','Profile','id-card-outline'],
+  ['devices','Devices','phone-portrait-outline'],['security','Sign-in & security','key-outline'],
+  ['apps','Apps','apps-outline'],['permissions','Permissions','shield-checkmark-outline'],
+  ['storage','Data usage','server-outline'],['files','Files','folder-open-outline'],['mail','Mail','mail-outline'],
+  ['settings','Settings','settings-outline'],
+] as const satisfies ReadonlyArray<readonly [string,string,Icon]>;
+const copy:Record<string,string> = {
+  dashboard:'Review your passkeys, profile, and connected apps.', profile:'Edit your photo, name, birthday, and email.',
+  devices:'Review active sessions and sign out other devices.', security:'Manage enrolled passkeys and security keys.',
+  apps:'Review connected apps and open the developer portal.', permissions:'Choose what each app can access.',
+  storage:'Review file storage used by your account.', files:'Upload, download, and manage private files.',
+  mail:'Open your X-Center mailbox.', settings:'Manage your X-Center ID experience.',
+};
+const pref = 'authnjs.dashboard.onboarding.v1';
+const host = 'https://id.xcenter.it';
 
-const light = { background: '#f3f5f8', panel: '#ffffff', ink: '#142438', muted: '#4b5a6c', border: '#d6dee9', accent: '#174eaa', soft: '#e4edff' };
-const dark = { background: '#101722', panel: '#192433', ink: '#f4f7ff', muted: '#b1c0d2', border: '#344359', accent: '#a8c7ff', soft: '#203a61' };
-const isWeb = Platform.OS === 'web';
-const continuation = isWeb && typeof window !== 'undefined' &&
-  /^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(new URLSearchParams(window.location.search).get('continue') ?? '');
-const webPreference = 'authnjs.dashboard.web-entry.v1';
-const tabs = [
-  { id: 'account', name: 'Account', icon: 'person-circle-outline' },
-  ...sections.filter(({ id }) => id !== 'sessions'),
-] as const;
-const preference = 'authnjs.dashboard.onboarding.v1';
-const entrance = FadeIn.duration(180).reduceMotion(ReduceMotion.System);
+function NativeAccount() {
+  const dark=useColorScheme()==='dark';
+  const colors=dark?{background:'#101522',panel:'#192132',ink:'#f3f6ff',muted:'#b1c1dc',accent:'#9ebcff',soft:'#23355d'}
+    :{background:'#f6f8fc',panel:'#fff',ink:'#141b2e',muted:'#526078',accent:'#214fbe',soft:'#e9f0ff'};
+  const [tab,setTab]=useState<(typeof pages)[number]>(pages[0]);
+  const [pending,setPending]=useState(false);
+  const [intro,setIntro]=useState(false);
+  const [developer,setDeveloper]=useState(false);
+  const [sampleMode,setSampleMode]=useState(false);
+  const [error,setError]=useState('');
+  const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const taps=useRef(0);
 
-function Dashboard() {
-  const colors = useColorScheme() === 'dark' ? dark : light;
-  const wide = useWindowDimensions().width >= 740;
-  const [nativeTab, setNativeTab] = useState<string>('account');
-  const [developer, setDeveloper] = useState(false);
-  const [landing, setLanding] = useState<boolean | null>(isWeb ? null : false);
-  const [intro, setIntro] = useState<boolean | null>(null);
-  const [demo, setDemo] = useState(false);
-  const [section, setSection] = useState<Section | null>(null);
-  const [removed, setRemoved] = useState<string[]>([]);
-  const [pending, setPending] = useState<AccountItem | null>(null);
-  const [notice, setNotice] = useState('');
-
-  useEffect(() => {
-    let active = true;
-    if (isWeb) {
-      AsyncStorage.getItem(webPreference).then(
-        (value) => { if (active) setLanding(!continuation && value !== 'entered'); },
-        () => { if (active) setLanding(!continuation); },
-      );
-    }
-    AsyncStorage.getItem(preference).then(
-      (value) => { if (active) setIntro(!continuation && value !== 'complete'); },
-      () => { if (active) setIntro(!continuation); },
-    );
-    return () => { active = false; };
-  }, []);
-
-  function openWebApp() {
-    setLanding(false);
-    void AsyncStorage.setItem(webPreference, 'entered').catch(() => {});
+  useEffect(()=>{
+    let live=true;
+    void AsyncStorage.getItem(pref).then(seen=>{
+      if(live&&!seen){setIntro(true);return AsyncStorage.setItem(pref,'complete');}
+    }).catch(()=>{});
+    return ()=>{live=false;if(timer.current)clearTimeout(timer.current);};
+  },[]);
+  async function open(path:string) {
+    setPending(true);setError('');
+    try {await openBrowserAsync(host+'/'+path);}
+    catch {setError('Could not open X-Center ID.');}
+    finally {setPending(false);}
   }
-
-  function exitIntro() {
-    setIntro(false);
-    void AsyncStorage.setItem(preference, 'complete').catch(() => {
-      setNotice('This device could not save your introduction preference.');
-    });
+  function action(label:string,icon:Icon,press:()=>void){
+    return <Pressable accessibilityRole="button" onPress={press} disabled={pending} style={({pressed})=>[
+      styles.button,{backgroundColor:colors.soft,opacity:pressed || pending ? 0.65 : 1},
+    ]}><Ionicons name={icon} size={18} color={colors.accent}/>
+      <Text style={{color:colors.accent,fontWeight:'700'}}>{label}</Text></Pressable>;
   }
-
-  function endDemo() {
-    setDemo(false);
-    setSection(null);
-    setRemoved([]);
-    setPending(null);
-    setNotice('');
-  }
-
-  function button(label: string, icon: Icon, onPress: () => void) {
-    return (
-      <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [
-        styles.button, { backgroundColor: colors.soft, opacity: pressed ? 0.72 : 1 },
-      ]}>
-        <Ionicons name={icon} color={colors.accent} size={19} />
-        <Text style={[styles.action, { color: colors.accent }]}>{label}</Text>
-      </Pressable>
-    );
-  }
-
-  function row(title: string, detail: string, icon: Icon, onPress?: () => void) {
-    const content = <>
-      <View style={[styles.icon, { backgroundColor: colors.soft }]}>
-        <Ionicons name={icon} size={21} color={colors.accent} />
-      </View>
-      <View style={styles.copy}>
-        <Text style={[styles.title, { color: colors.ink }]}>{title}</Text>
-        <Text style={[styles.secondary, { color: colors.muted }]}>{detail}</Text>
-      </View>
-      {onPress && <Ionicons name="chevron-forward" size={18} color={colors.muted} />}
-    </>;
-    const surface = [styles.row, { backgroundColor: colors.panel, borderColor: colors.border }];
-    return onPress
-      ? <Pressable key={title} accessibilityRole="button" onPress={onPress}
-          style={({ pressed }) => [...surface, { opacity: pressed ? 0.72 : 1 }]}>{content}</Pressable>
-      : <View style={surface}>{content}</View>;
-  }
-
-  const items: AccountItem[] = section ? sample[section.id].filter((item) => !removed.includes(item.id)) : [];
-  const heading = intro ? 'One account across your apps' : section?.name ?? 'Your account';
-
-  return (
-    <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.content}>
-          <View style={styles.header}>
-            {isWeb ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="X-Center ID home" onPress={() => { setDeveloper(false); setLanding(true); }} style={styles.header}>
-                <Ionicons name="id-card-outline" color={colors.accent} size={30} />
-                <Text style={[styles.brand, { color: colors.ink }]}>X-Center ID</Text>
-              </Pressable>
-            ) : <>
-              <Ionicons name="id-card-outline" color={colors.accent} size={30} />
-              <Text style={[styles.brand, { color: colors.ink }]}>X-Center ID</Text>
-            </>}
-            {demo && landing === false && <Text style={[styles.badge, { color: colors.accent, backgroundColor: colors.soft }]}>Sample data</Text>}
-          </View>
-          {developer && <DeveloperPortal back={() => setDeveloper(false)} />}
-          {!developer && landing === true && <>
-            <Landing open={openWebApp} />
-            {button('Developer apps', 'code-slash-outline', () => setDeveloper(true))}
-            {button('Sample apps', 'apps-outline', () => { void Linking.openURL(window.location.origin + '/samples'); })}
-          </>}
-          {!isWeb && !intro && !demo && nativeTab !== 'account' && <>
-            <Text accessibilityRole="header" style={[styles.heading, { color: colors.ink }]}>{tabs.find(({ id }) => id === nativeTab)?.name}</Text>
-            <LiveAccount />
-          </>}
-          {!developer && (isWeb || intro || demo || nativeTab === 'account') && landing === false && intro !== null && <Animated.View key={intro ? 'intro' : section?.id ?? 'overview'} entering={entrance} style={styles.stack}>
-            {section && button('Account overview', 'arrow-back', () => { setPending(null); setSection(null); })}
-            <Text accessibilityRole="header" style={[styles.heading, { color: colors.ink }]}>{heading}</Text>
-            {intro ? <>
-              <Text style={[styles.secondary, { color: colors.muted }]}>Manage your sign-in keys, connected apps and the data you choose to share.</Text>
-              <View style={styles.actions}>
-                {button('Get started', 'arrow-forward', exitIntro)}
-                {button('Skip introduction', 'close', exitIntro)}
-              </View>
-            </> : !demo ? <>
-              <LiveAccount />
-              <View style={styles.actions}>
-                {button('Explore sample dashboard', 'eye-outline', () => { setNotice(''); setDemo(true); })}
-                {button('View introduction', 'information-circle-outline', () => setIntro(true))}
-                {isWeb && button('Developer apps', 'code-slash-outline', () => setDeveloper(true))}
-              </View>
-            </> : section ? <>
-              <Text style={[styles.secondary, { color: colors.muted }]}>{section.description}</Text>
-              {items.length === 0 && <Text style={[styles.secondary, { color: colors.muted }]}>No entries are available.</Text>}
-              {items.map((item) => {
-                const action = section.id === 'grants' ? 'Revoke access'
-                  : section.id === 'sessions' && item.id !== 'phone' ? 'Sign out device' : undefined;
-                return <View key={item.id} style={styles.stack}>
-                  {row(item.title, item.detail, section.icon)}
-                  {action && (pending?.id === item.id
-                    ? <View style={styles.stack}>
-                        <Text style={[styles.secondary, { color: colors.muted }]}>Apply this change to the sample dashboard?</Text>
-                        <View style={styles.actions}>
-                          {button(action, 'checkmark', () => {
-                            setRemoved((ids) => [...ids, item.id]);
-                            setPending(null);
-                            setNotice(section.id === 'grants' ? 'Sample access revoked.' : 'Sample device signed out.');
-                          })}
-                          {button('Cancel', 'close', () => setPending(null))}
-                        </View>
-                      </View>
-                    : button(action, 'remove-circle-outline', () => { setNotice(''); setPending(item); }))}
-                </View>;
-              })}
-            </> : <>
-              <Text style={[styles.secondary, { color: colors.muted }]}>Manage security and sharing from one place.</Text>
-              <View style={wide ? styles.grid : styles.stack}>
-                {sections.map((item) => (
-                  <View key={item.id} style={wide && styles.column}>
-                    {row(item.name, item.description, item.icon, () => { setNotice(''); setSection(item); })}
-                  </View>
-                ))}
-              </View>
-              {button('Exit sample dashboard', 'exit-outline', endDemo)}
-            </>}
-            {!!notice && <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.secondary, { color: colors.accent }]}>{notice}</Text>}
-          </Animated.View>}
-        </View>
-      </ScrollView>
-      {!isWeb && intro === false && <View accessibilityRole="tablist" style={[styles.tabBar, { backgroundColor: colors.panel, borderColor: colors.border }]}>
-        {tabs.map((tab) => {
-          const selected = nativeTab === tab.id;
-          return (
-            <Pressable key={tab.id} accessibilityRole="tab" accessibilityState={{ selected }}
-              onPress={() => {
-                setNativeTab(tab.id);
-                setPending(null);
-                setSection(demo && tab.id !== 'account' ? sections.find(({ id }) => id === tab.id) ?? null : null);
-              }}
-              style={({ pressed }) => [styles.tab, selected && { backgroundColor: colors.soft }, pressed && { opacity: 0.75 }]}>
-              <Ionicons name={tab.icon} size={21} color={selected ? colors.accent : colors.muted} />
-              <Text style={{ color: selected ? colors.accent : colors.muted, textAlign: 'center', fontSize: 12, fontWeight: selected ? '700' : '500' }}>{tab.name}</Text>
-            </Pressable>
-          );
-        })}
-      </View>}
-    </SafeAreaView>
-  );
+  return <SafeAreaView style={[styles.screen,{backgroundColor:colors.background}]}>
+    <View style={styles.header}>
+      <Ionicons name="id-card-outline" color={colors.accent} size={28}/>
+      <Text style={[styles.brand,{color:colors.ink}]}>X-Center ID</Text>
+    </View>
+    <View><ScrollView horizontal showsHorizontalScrollIndicator accessibilityRole="tablist" contentContainerStyle={styles.tabs}>
+      {pages.map(page=><Pressable key={page[0]} accessibilityRole="tab" accessibilityState={{selected:page===tab}}
+        style={[styles.tab,page===tab&&{backgroundColor:colors.soft}]}
+        onPress={()=>{setTab(page);setDeveloper(false);setSampleMode(false);taps.current=0;if(timer.current)clearTimeout(timer.current);}}>
+        <Ionicons name={page[2]} size={20} color={page===tab?colors.accent:colors.muted}/>
+        <Text style={{color:page===tab?colors.accent:colors.muted,fontWeight:page===tab?'700':'600'}}>{page[1]}</Text>
+      </Pressable>)}
+    </ScrollView></View>
+    <ScrollView contentContainerStyle={styles.content}>
+      {intro?<View style={[styles.card,{backgroundColor:colors.panel}]}>
+        <Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>Your X-Center ID</Text>
+        <Text style={{color:colors.muted}}>Manage profile, devices, apps and permissions in one account.</Text>
+        {action('Open dashboard','arrow-forward-outline',()=>setIntro(false))}
+        {action('Skip introduction','close-outline',()=>setIntro(false))}
+      </View>:<>
+        <Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>{tab[1]}</Text>
+        <Text style={{color:colors.muted}}>{copy[tab[0]]}</Text>
+        {tab[0]==='dashboard'?<AccountEntry onSignIn={()=>void open('signin')} onCreateAccount={()=>void open('signup')} pending={pending} error={error}/>:null}
+        {tab[0]==='settings'?<View style={[styles.card,{backgroundColor:colors.panel}]}>
+          {action('View introduction','information-circle-outline',()=>setIntro(true))}
+          {action('Version 0.1.0','code-slash-outline',()=>{
+            if(++taps.current===3){setDeveloper(true);taps.current=0;}
+            if(timer.current)clearTimeout(timer.current);
+            timer.current=setTimeout(()=>{setDeveloper(false);setSampleMode(false);taps.current=0;},30_000);
+          })}
+          {developer&&action(sampleMode?'Exit sample dashboard':'Open sample dashboard','eye-outline',()=>setSampleMode(!sampleMode))}
+          {sampleMode&&<View style={styles.card}><Text style={{color:colors.ink,fontWeight:'700'}}>Sample data</Text>
+            {Object.values(sample).flat().map(item=><Text key={item.id} style={{color:colors.muted}}>{item.title}</Text>)}</View>}
+        </View>:action('Open '+tab[1]+' on X-Center ID','open-outline',()=>void open(tab[0]))}
+        {error&&tab[0]!=='dashboard'&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{error}</Text>}
+      </>}
+    </ScrollView>
+  </SafeAreaView>;
 }
 
-export default function App() {
-  return <SafeAreaProvider><Dashboard /></SafeAreaProvider>;
-}
+export default function App(){return <SafeAreaProvider><NativeAccount/></SafeAreaProvider>;}
 
-const styles = StyleSheet.create({
-  screen: { flex: 1 },
-  tabBar: { flexDirection: 'row', borderTopWidth: 1, padding: 5, gap: 4 },
-  tab: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 53, borderRadius: 14, padding: 4, gap: 3 },
-  scroll: { padding: 24, paddingBottom: 48 },
-  content: { alignSelf: 'center', width: '100%', maxWidth: 960, gap: 32 },
-  header: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
-  brand: { fontSize: 21, fontWeight: '800' },
-  badge: { fontSize: 13, fontWeight: '700', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
-  stack: { gap: 12 },
-  heading: { fontSize: 38, fontWeight: '800', letterSpacing: -1 },
-  title: { fontSize: 17, fontWeight: '700' },
-  secondary: { fontSize: 15, lineHeight: 23 },
-  row: { minHeight: 78, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 18, padding: 14, gap: 12 },
-  copy: { flex: 1, gap: 3 },
-  icon: { minWidth: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  column: { flexBasis: '47%', flexGrow: 1 },
-  actions: { gap: 10, flexDirection: 'row', flexWrap: 'wrap' },
-  button: { alignSelf: 'flex-start', maxWidth: '100%', minHeight: 48, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, gap: 8, flexDirection: 'row', alignItems: 'center' },
-  action: { flexShrink: 1, fontSize: 15, fontWeight: '700' },
+const styles=StyleSheet.create({
+  screen:{flex:1},
+  header:{flexDirection:'row',alignItems:'center',gap:10,paddingHorizontal:20,paddingVertical:15},
+  brand:{fontSize:22,fontWeight:'800',letterSpacing:-.7},
+  tabs:{gap:7,paddingHorizontal:14,paddingVertical:8},
+  tab:{paddingHorizontal:13,paddingVertical:11,borderRadius:13,minHeight:48,gap:7,flexDirection:'row',alignItems:'center'},
+  content:{width:'100%',maxWidth:720,alignSelf:'center',paddingHorizontal:18,paddingVertical:26,gap:14},
+  title:{fontSize:31,fontWeight:'800',letterSpacing:-.9},
+  card:{gap:12,padding:17,borderRadius:20},
+  button:{alignSelf:'flex-start',minHeight:48,alignItems:'center',flexDirection:'row',paddingHorizontal:14,
+    paddingVertical:10,borderRadius:12,gap:8},
 });

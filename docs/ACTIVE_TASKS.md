@@ -44,3 +44,12 @@ Five-hour window reached 9% remaining and resets 16 November at 16:05:56 CET. We
 The public identity deployment serves revision 1e940dd. The latest source at daca54d adds the guarded mailbox-composition adapter. No SMTP submission provider has been configured. The [native artifact run](https://github.com/Xarber/AuthNJS/actions/runs/43899352702) was submitted for daca54d. Android signing secrets remain unavailable. Keep the older private account database and host available for its existing passkeys.
 
 Next external prerequisite for mail is verified ingress for port 25 to the appliance or a dedicated inbound provider. Use mail.xcenter.it and hme.xcenter.it first. Inventory managed iCloud addresses and approve an apex coexistence plan before changing xcenter.it MX. Send only after configuring an authorized SMTP submission sender and verifying delivery, SPF, DKIM and DMARC.
+
+### Account manager redesign
+
+| Order and ID | Request | State | Dependencies and evidence |
+| --- | --- | --- | --- |
+| 20 AUTHN-020 | Replace the web layout, fix onboarding and split passkey signup from profile setup | Implemented | Dashboard, sign-in, profile, security and settings routes implemented. Verify actual hosted enrollment, reload, profile updates and narrow layouts. |
+| 21 AUTHN-021 | Centralize all permissions in X-Center ID | Implemented | Sample mutations moved into the account-authenticated permissions API. Verify old sample URL and grant/revoke behavior. Third-party activation rejects issuer-host callbacks. |
+| 22 AUTHN-022 | Add web and native account sections, private file browser and admin-controlled alias eligibility | Implemented | Native tabs open the canonical pages in the system browser. Verify file and device isolation. Admin role is a deployment allowlist of stable account IDs. Live mail routing is still blocked. |
+| 23 AUTHN-023 | Animate service icons on sign-in | Implemented | Six local icons enter during the auth screen transition and respect Reduced Motion. Verify browser layout. |

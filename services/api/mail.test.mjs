@@ -29,14 +29,17 @@ test('SMTP accepts registered destinations and aliases, rejects relay and isolat
   const send = (to) => transport.sendMail({from:'synthetic@example.test',to,subject:'Local test',text:'ciphertext check'});
   try {
     const alias = store.alias('alex-owner','test-client');
-    assert.match(alias,/^[a-f0-9]{14}@hme\.xcenter\.it$/);
+    assert.match(alias,/^[a-f0-9]{8}-[a-f0-9-]{27}@hme\.xcenter\.it$/);
     assert.equal(alias,store.alias('alex-owner','test-client'));
     await send('alex@mail.xcenter.it');
     await send(alias);
+    const premium=store.premiumAlias('alex-owner','test-client');
+    assert.match(premium,/^[a-z]+\.[a-z]+\.[a-f0-9]{6}@mail\.xcenter\.it$/);
+    await send(premium);
     await assert.rejects(send('nobody@mail.xcenter.it'),{responseCode:550});
     await assert.rejects(send('someone@example.test'),{responseCode:550});
     const messages = store.list('alex-owner');
-    assert.equal(messages.length,2);
+    assert.equal(messages.length,3);
     assert.ok(store.retrieve('alex-owner',messages[0].id).includes(Buffer.from('ciphertext check')));
     assert.equal(store.retrieve('different-owner',messages[0].id),null);
     assert.ok(!readFileSync(mailPath).includes(Buffer.from('ciphertext check')));

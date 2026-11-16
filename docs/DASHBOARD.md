@@ -1,33 +1,21 @@
-# Expo account dashboard
+# X-Center ID dashboard
 
-The first local implementation under `apps/dashboard` targets iOS, Android and web. `index.ts` registers the root, `src/App.tsx` presents account screens and `src/sample.ts` contains deterministic fictional records. The old Node application and its dependencies are independent of this package.
+The Expo app in `apps/dashboard` supports iOS, Android and web. The web account manager is the authoritative interface for sign-in, account changes and permission decisions. Native tabs open the corresponding canonical `https://id.xcenter.it` pages in the system browser. Those pages use the browser's account session and WebAuthn support.
 
-Run setup and checks from `apps/dashboard`.
+## Account navigation
 
-```sh
-npm ci
-npm run typecheck
-npm test
-npx expo install --check
-npm audit
-npm start
-```
+The web sidebar and native navigation include account status, profile, devices, sign-in and security, connected apps, permissions, data usage, files, mail and settings. Web accounts show Administration when the API confirms the account is in the deployment's admin allowlist. Settings can replay the introduction. Three taps on the version unlock Developer Options, including the isolated sample dashboard. The first automatic introduction is recorded in local browser storage and survives reloads.
 
-The dashboard provides a skippable, replayable introduction and an explicit sample mode. The overview opens security credentials, connected apps, data access and sessions. The user can confirm sample grant revocation and sample sign-out for another device. Changes are held in memory and reset on leaving sample mode. Only the introduction preference persists. The app never reads legacy account files or sends mutations to a service. Dark mode, flexible layout, labeled controls and reduced-motion-aware entry transitions are implemented and need runtime verification.
+Signup registers a passkey before asking for a username and profile. Sign-in can start with a username or go directly to the passkey chooser. The birthday determines the age range, and OAuth clients receive the range only when the corresponding profile access is granted. Profile photos are private to the signed-in account. Additional email addresses require verification.
 
-Account enrollment and sign-in, live account reads, app disconnect, export/deletion and production revocation depend on the new identity and consent service. The web export now includes a root landing page and a PWA shell. See the [plan](AUTHNJS_REDEVELOPMENT_PLAN.md) and [queue](ACTIVE_TASKS.md).
+The sign-in illustration uses six Lucide icons for Mail, Files, Saved Places, Apps, Devices and Security around the X-Center ID mark. CSS animates their initial appearance and leaves them static under Reduced Motion. The illustration is decorative and hidden from assistive technology.
 
-## Verification on 16 November 2026
+## Storage, mail and permissions
 
-- Node 24 with Expo SDK 58. TypeScript, the sample fixture test, Expo dependency alignment and resolved public Expo configuration passed.
-- The local Expo web export succeeded. Headless desktop Chrome at 390×844 and 1366×900 exercised onboarding persistence, navigation, grant cancellation and revocation, sample device sign-out, sample exit, dark appearance and reduced-motion preference. No page exceptions occurred. These viewport checks do not establish mobile-browser or native behavior.
-- The dependency audit reports three moderate findings through Expo, its fingerprint package and minimatch. The installed dependency tree has no reported high or critical findings. Review the remaining advisory before promoting the dashboard. The SDK 55 install initially reported two high findings and an Expo CLI internal module error. SDK 58 resolved the alignment checks and web export.
-- The manifest validator passed for the 16 initial declarations after installing jsonschema in an isolated temporary environment. The GitHub workflow has not run. Native builds, physical security keys, assistive technology testing and hosted account actions remain unverified.
+The file browser uploads and downloads account-owned files. It supports up to 2 MiB per file and 10 MiB or 100 files per account. Names are display metadata. Downloads are served as attachments. Account permissions are managed on the identity origin and account cookies are distinct from OAuth API access tokens.
 
-[Expo SDK 58 documentation](https://docs.expo.dev/versions/v58.0.0/)
+A username reserves the corresponding address at `mail.xcenter.it`. Standard Hide My Email addresses use random UUIDs at `hme.xcenter.it`. An admin may enable eligibility for human-looking aliases at `mail.xcenter.it` for a specific account. Eligibility alone does not enable mail delivery. The protected `admin@management.xcenter.it` address is reserved. The dashboard does not use mailbox ownership to grant administrative privileges. See [mail operations](MAIL.md).
 
-## Redesigned web entry
+## Develop and verify
 
-Run `npm run export:web` from the dashboard to produce `dist/`. Serve it over HTTPS at the origin root. The export includes an install manifest, editable shield icon, raster icons and a content-versioned service worker. The worker caches the exported public shell and static assets only. Keep authenticated API and account HTML outside the cached paths.
-
-Desktop Chrome smoke tests at phone and desktop widths verified the root landing page, first entry, returning via the header, browser reload, the sample dashboard, manifest loading, service-worker control and offline reload. Physical PWA installation, update prompts and native runtime remain unverified. The original site is preserved in `HTML/`.
+From `apps/dashboard`, run `npm ci`, `npm run typecheck`, `npm test` and `npx expo install --check`. Use the configured web export to serve the account UI and static PWA assets alongside `services/api/account-web.mjs`. The original site remains in `HTML/`. Production and platform-specific evidence is tracked in [the queue](ACTIVE_TASKS.md).
