@@ -13,10 +13,10 @@ Assignment opened 16 November 2026. Legacy source baseline `e617758`.
 | 7 AUTHN-007 | Finish the secure replacement API | Implemented | Typed records, optimistic revisions, quota, pagination and read-only grants implemented. Synthetic isolation, encryption and signed-token tests passed. Account lifecycle, quota, sync, rotation and operational gates remain pending. Depends on AUTHN-003 for end-to-end identity verification. |
 | 8 AUTHN-008 | Redesign the web page with Expo and preserve the old site | Implemented | New Expo root landing and PWA export. Legacy pages preserved in place. Chrome verified first entry, return, manifest and offline reload. Actual PWA installation, update UI and distribution remain pending. |
 
-| 9 AUTHN-009 | Stage AuthNJS on X-Center for testing | Implemented | Private web preview served over HTTPS. Live API and account preview need a validated issuer and gateway. See [preview runbook](XCENTER_PREVIEW.md). |
+| 9 AUTHN-009 | Stage AuthNJS on X-Center for testing | Implemented | Private web preview served over HTTPS at 6882dae. Browser verified developer navigation and account entry. Live API and account preview need a validated issuer and gateway. See [preview runbook](XCENTER_PREVIEW.md). |
 | 10 AUTHN-010 | Developer registration and app identity enforcement | Implemented | Pending registry, operator approval and API checks pass synthetic tests. Expo page requires authenticated gateway, trusted issuance policy and live verification. |
 | 11 AUTHN-011 | Reusable React Native package and integration documentation | Implemented | Dashboard consumes the package. Hosted session adapter and native build verification remain open. See [integration guide](INTEGRATION.md). |
-| 12 AUTHN-012 | Build native artifacts under §8 and §9 | Queued | No Android signing repository secrets were listed. Identity integration remains open. Prepare and validate artifacts after independent prerequisites, without promoting testing. |
+| 12 AUTHN-012 | Build native artifacts under §8 and §9 | Queued | Parallel device/simulator and APK/AAB workflow prepared. The authorized preview build can run on an isolated native-preview branch after §8 reconciliation. Android jobs require release signing secrets. Live identity remains an independent external deployment and verification dependency. |
 
 AUTHN-006 and the storage portion of AUTHN-007 moved ahead of live identity integration to address the requested security and data-integrity priority.
 

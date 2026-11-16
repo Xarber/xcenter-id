@@ -1,0 +1,159 @@
+name: Native preview builds
+on:
+  workflow_dispatch:
+  push:
+    branches: ['native-preview/**']
+permissions:
+  contents: read
+concurrency:
+  group: native-preview-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  ios:
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [device, simulator]
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: apps/dashboard
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            apps/dashboard
+            packages/expo
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/dashboard/package-lock.json
+      - run: npm ci
+      - run: npx expo prebuild --platform ios --no-install
+      - run: pod install --project-directory=ios
+      - name: Build unsigned release
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          workspace=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          scheme=$(basename "$workspace" .xcworkspace)
+          if [[ "$TARGET" == device ]]; then
+            destination='generic/platform=iOS'
+          else
+            destination='generic/platform=iOS Simulator'
+          fi
+          xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release \
+            -destination "$destination" -derivedDataPath "$RUNNER_TEMP/authnjs-ios" \
+            CODE_SIGNING_ALLOWED=NO build
+          product=$(find "$RUNNER_TEMP/authnjs-ios/Build/Products" -maxdepth 2 -name '*.app' -print -quit)
+          test -d "$product"
+          mkdir -p "$RUNNER_TEMP/output"
+          version=$(node -p 'require("./package.json").version')
+          if [[ "$TARGET" == device ]]; then
+            mkdir -p "$RUNNER_TEMP/ipa/Payload"
+            ditto "$product" "$RUNNER_TEMP/ipa/Payload/$(basename "$product")"
+            ditto -c -k "$RUNNER_TEMP/ipa" "$RUNNER_TEMP/output/AuthNJS-v$version-ios-unsigned.ipa"
+          else
+            ditto -c -k --keepParent "$product" "$RUNNER_TEMP/output/AuthNJS-v$version-ios-simulator.app.zip"
+          fi
+          cd "$RUNNER_TEMP/output"
+          shasum -a 256 AuthNJS-* > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: authnjs-ios-${{ matrix.target }}-${{ github.sha }}
+          path: ${{ runner.temp }}/output
+          if-no-files-found: error
+  android:
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [apk, aab]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/dashboard
+    steps:
+      - name: Confirm release signing configuration
+        env:
+          KEYSTORE: ${{ secrets.AUTHNJS_ANDROID_KEYSTORE_BASE64 }}
+          ALIAS: ${{ secrets.AUTHNJS_ANDROID_KEY_ALIAS }}
+          STORE_PASSWORD: ${{ secrets.AUTHNJS_ANDROID_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.AUTHNJS_ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE" && test -n "$ALIAS" && test -n "$STORE_PASSWORD" && test -n "$KEY_PASSWORD" ||
+            { echo "::error::AuthNJS Android release signing configuration is missing"; exit 1; }
+        working-directory: .
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            apps/dashboard
+            packages/expo
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/dashboard/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npm ci
+      - run: npx expo prebuild --platform android --no-install
+      - name: Build signed release
+        env:
+          TARGET: ${{ matrix.target }}
+          KEYSTORE: ${{ secrets.AUTHNJS_ANDROID_KEYSTORE_BASE64 }}
+          ALIAS: ${{ secrets.AUTHNJS_ANDROID_KEY_ALIAS }}
+          STORE_PASSWORD: ${{ secrets.AUTHNJS_ANDROID_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.AUTHNJS_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          export AUTHNJS_SIGNING_FILE="$RUNNER_TEMP/authnjs.keystore"
+          trap 'rm -f "$AUTHNJS_SIGNING_FILE"' EXIT
+          umask 077
+          printf '%s' "$KEYSTORE" | base64 --decode > "$AUTHNJS_SIGNING_FILE"
+          cat > "$RUNNER_TEMP/authnjs-signing.gradle" <<'GRADLE'
+          allprojects {
+            plugins.withId("com.android.application") {
+              androidComponents.finalizeDsl { extension ->
+                def authnjs = extension.signingConfigs.create("authnjsRelease")
+                authnjs.storeFile = file(System.getenv("AUTHNJS_SIGNING_FILE"))
+                authnjs.storePassword = System.getenv("STORE_PASSWORD")
+                authnjs.keyAlias = System.getenv("ALIAS")
+                authnjs.keyPassword = System.getenv("KEY_PASSWORD")
+                extension.buildTypes.getByName("release").signingConfig = authnjs
+              }
+            }
+          }
+          GRADLE
+          version=$(node -p 'require("./package.json").version')
+          mkdir -p "$RUNNER_TEMP/output"
+          cd android
+          if [[ "$TARGET" == apk ]]; then
+            ./gradlew -I "$RUNNER_TEMP/authnjs-signing.gradle" :app:assembleRelease \
+              -PreactNativeArchitectures=armeabi-v7a,arm64-v8a,x86,x86_64
+            artifact="$RUNNER_TEMP/output/AuthNJS-v$version-android-universal.apk"
+            cp app/build/outputs/apk/release/app-release.apk "$artifact"
+            apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+            "$apksigner" verify "$artifact"
+            for arch in armeabi-v7a arm64-v8a x86 x86_64; do
+              unzip -Z1 "$artifact" | awk -v dir="lib/$arch/" 'index($0, dir) == 1 { found=1 } END {exit !found}'
+            done
+          else
+            ./gradlew -I "$RUNNER_TEMP/authnjs-signing.gradle" :app:bundleRelease \
+              -PreactNativeArchitectures=armeabi-v7a,arm64-v8a,x86,x86_64
+            artifact="$RUNNER_TEMP/output/AuthNJS-v$version-android.aab"
+            cp app/build/outputs/bundle/release/app-release.aab "$artifact"
+            jarsigner -verify "$artifact"
+          fi
+          cd "$RUNNER_TEMP/output"
+          sha256sum AuthNJS-* > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: authnjs-android-${{ matrix.target }}-${{ github.sha }}
+          path: ${{ runner.temp }}/output
+          if-no-files-found: error
