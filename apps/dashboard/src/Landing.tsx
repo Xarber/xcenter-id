@@ -39,7 +39,7 @@ export default function Landing({ open }: { open: () => void }) {
       <View style={[styles.hero, { backgroundColor: dark ? '#142744' : '#dce9ff', borderColor: border }]}>
         <Ionicons name="shield-checkmark-outline" size={40} color={accent} />
         <Text accessibilityRole="header" style={[styles.title, { color: ink }]}>One account. You decide what apps can access.</Text>
-        <Text style={[styles.summary, { color: secondary }]}>Review your security, connected apps and sharing permissions from the AuthNJS account dashboard.</Text>
+        <Text style={[styles.summary, { color: secondary }]}>Review your security, connected apps and sharing permissions from the X-Center ID dashboard.</Text>
         <View style={styles.actions}>
           <Pressable accessibilityRole="button" onPress={open} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
             <Text style={styles.primaryText}>Open web app</Text>

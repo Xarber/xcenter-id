@@ -17,7 +17,7 @@ export function AccountEntry({ onSignIn, onCreateAccount, pending = false, error
 
   return (
     <View style={[styles.card, { backgroundColor: dark ? '#192433' : '#fff' }]}>
-      <Text accessibilityRole="header" style={[styles.title, { color: ink }]}>Your AuthNJS account</Text>
+      <Text accessibilityRole="header" style={[styles.title, { color: ink }]}>Your X-Center ID</Text>
       <Text style={{ color: ink }}>Use your passkey or physical security key.</Text>
       {!onSignIn && <Text style={{ color: ink }}>Live sign-in is unavailable in this preview.</Text>}
       {error && <Text accessibilityRole="alert" style={{ color: ink }}>{error}</Text>}

@@ -67,7 +67,7 @@ export default function DeveloperPortal({ back }: { back: () => void }) {
   }
 
   return <Animated.View entering={entering} style={styles.content}>
-    {action('Back to AuthNJS', back)}
+    {action('Back to X-Center ID', back)}
     <Text accessibilityRole="header" style={[styles.title, { color: ink }]}>Developer apps</Text>
     <Text style={{ color: ink }}>Register your application and its HTTPS callback. Review and activation are required before your app can request access to shared data.</Text>
     {apps && <>

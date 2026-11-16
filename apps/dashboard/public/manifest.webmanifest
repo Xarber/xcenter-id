@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "AuthNJS Account Dashboard",
-  "short_name": "AuthNJS",
+  "name": "X-Center ID",
+  "short_name": "X-Center ID",
   "description": "Manage sign-in security, connected apps, and data sharing.",
   "start_url": "/",
   "scope": "/",
@@ -9,8 +9,23 @@
   "background_color": "#f3f5f8",
   "theme_color": "#264eb5",
   "icons": [
-    { "src": "/authnjs-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" },
-    { "src": "/authnjs-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/authnjs-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "/authnjs-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/authnjs-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/authnjs-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }

@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <g id="background"><path fill="#264eb5" d="M0 0h512v512H0z"/></g>
-  <g id="shield"><path fill="#e1ebff" d="M256 122c38 30 90 46 117 49v76c0 75-43 122-117 153-74-31-117-78-117-153v-76c27-3 79-19 117-49z"/></g>
-  <g id="check"><path fill="none" stroke="#264eb5" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" d="m208 252 34 34 63-72"/></g>
+  <defs><linearGradient id="blue" x2="1" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#263c9b"/><stop offset="1" stop-color="#207fac"/></linearGradient></defs>
+  <g id="background"><path fill="url(#blue)" d="M0 0h512v512H0z"/></g>
+  <g id="shield"><path fill="#f1f6ff" d="M256 116c34 31 76 50 121 56v76c0 66-45 116-121 149-76-33-121-83-121-149v-76c45-6 87-25 121-56z"/></g>
+  <g id="identity"><path fill="none" stroke="#274d9d" stroke-width="21" stroke-linecap="round" d="m214 206 84 88m0-88-84 88"/><circle cx="256" cy="250" r="10" fill="#06a8a3"/></g>
 </svg>

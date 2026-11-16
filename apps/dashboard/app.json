@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "AuthNJS",
+    "name": "X-Center ID",
     "slug": "authnjs-dashboard",
     "version": "0.1.0",
     "scheme": "authnjs-dashboard",
@@ -17,6 +17,7 @@
     },
     "plugins": [
       "expo-web-browser"
-    ]
+    ],
+    "icon": "./public/authnjs-512.png"
   }
 }

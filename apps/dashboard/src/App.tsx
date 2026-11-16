@@ -1,4 +1,4 @@
-import { AccountEntry } from '@authnjs/expo';
+import LiveAccount from './LiveAccount';
 import DeveloperPortal from './DeveloperPortal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,12 +23,17 @@ const light = { background: '#f3f5f8', panel: '#ffffff', ink: '#142438', muted: 
 const dark = { background: '#101722', panel: '#192433', ink: '#f4f7ff', muted: '#b1c0d2', border: '#344359', accent: '#a8c7ff', soft: '#203a61' };
 const isWeb = Platform.OS === 'web';
 const webPreference = 'authnjs.dashboard.web-entry.v1';
+const tabs = [
+  { id: 'account', name: 'Account', icon: 'person-circle-outline' },
+  ...sections.filter(({ id }) => id !== 'sessions'),
+] as const;
 const preference = 'authnjs.dashboard.onboarding.v1';
 const entrance = FadeIn.duration(180).reduceMotion(ReduceMotion.System);
 
 function Dashboard() {
   const colors = useColorScheme() === 'dark' ? dark : light;
   const wide = useWindowDimensions().width >= 740;
+  const [nativeTab, setNativeTab] = useState<string>('account');
   const [developer, setDeveloper] = useState(false);
   const [landing, setLanding] = useState<boolean | null>(isWeb ? null : false);
   const [intro, setIntro] = useState<boolean | null>(null);
@@ -111,13 +116,13 @@ function Dashboard() {
         <View style={styles.content}>
           <View style={styles.header}>
             {isWeb ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="AuthNJS home" onPress={() => { setDeveloper(false); setLanding(true); }} style={styles.header}>
+              <Pressable accessibilityRole="button" accessibilityLabel="X-Center ID home" onPress={() => { setDeveloper(false); setLanding(true); }} style={styles.header}>
                 <Ionicons name="shield-checkmark" color={colors.accent} size={30} />
-                <Text style={[styles.brand, { color: colors.ink }]}>AuthNJS</Text>
+                <Text style={[styles.brand, { color: colors.ink }]}>X-Center ID</Text>
               </Pressable>
             ) : <>
               <Ionicons name="shield-checkmark" color={colors.accent} size={30} />
-              <Text style={[styles.brand, { color: colors.ink }]}>AuthNJS</Text>
+              <Text style={[styles.brand, { color: colors.ink }]}>X-Center ID</Text>
             </>}
             {demo && landing === false && <Text style={[styles.badge, { color: colors.accent, backgroundColor: colors.soft }]}>Sample data</Text>}
           </View>
@@ -126,7 +131,11 @@ function Dashboard() {
             <Landing open={openWebApp} />
             {button('Developer apps', 'code-slash-outline', () => setDeveloper(true))}
           </>}
-          {!developer && landing === false && intro !== null && <Animated.View key={intro ? 'intro' : section?.id ?? 'overview'} entering={entrance} style={styles.stack}>
+          {!isWeb && !intro && !demo && nativeTab !== 'account' && <>
+            <Text accessibilityRole="header" style={[styles.heading, { color: colors.ink }]}>{tabs.find(({ id }) => id === nativeTab)?.name}</Text>
+            <LiveAccount />
+          </>}
+          {!developer && (isWeb || intro || demo || nativeTab === 'account') && landing === false && intro !== null && <Animated.View key={intro ? 'intro' : section?.id ?? 'overview'} entering={entrance} style={styles.stack}>
             {section && button('Account overview', 'arrow-back', () => { setPending(null); setSection(null); })}
             <Text accessibilityRole="header" style={[styles.heading, { color: colors.ink }]}>{heading}</Text>
             {intro ? <>
@@ -136,7 +145,7 @@ function Dashboard() {
                 {button('Skip introduction', 'close', exitIntro)}
               </View>
             </> : !demo ? <>
-              <AccountEntry />
+              <LiveAccount />
               <View style={styles.actions}>
                 {button('Explore sample dashboard', 'eye-outline', () => { setNotice(''); setDemo(true); })}
                 {button('View introduction', 'information-circle-outline', () => setIntro(true))}
@@ -180,6 +189,23 @@ function Dashboard() {
           </Animated.View>}
         </View>
       </ScrollView>
+      {!isWeb && intro === false && <View accessibilityRole="tablist" style={[styles.tabBar, { backgroundColor: colors.panel, borderColor: colors.border }]}>
+        {tabs.map((tab) => {
+          const selected = nativeTab === tab.id;
+          return (
+            <Pressable key={tab.id} accessibilityRole="tab" accessibilityState={{ selected }}
+              onPress={() => {
+                setNativeTab(tab.id);
+                setPending(null);
+                setSection(demo && tab.id !== 'account' ? sections.find(({ id }) => id === tab.id) ?? null : null);
+              }}
+              style={({ pressed }) => [styles.tab, selected && { backgroundColor: colors.soft }, pressed && { opacity: 0.75 }]}>
+              <Ionicons name={tab.icon} size={21} color={selected ? colors.accent : colors.muted} />
+              <Text style={{ color: selected ? colors.accent : colors.muted, textAlign: 'center', fontSize: 12, fontWeight: selected ? '700' : '500' }}>{tab.name}</Text>
+            </Pressable>
+          );
+        })}
+      </View>}
     </SafeAreaView>
   );
 }
@@ -190,6 +216,8 @@ export default function App() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  tabBar: { flexDirection: 'row', borderTopWidth: 1, padding: 5, gap: 4 },
+  tab: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 53, borderRadius: 14, padding: 4, gap: 3 },
   scroll: { padding: 24, paddingBottom: 48 },
   content: { alignSelf: 'center', width: '100%', maxWidth: 960, gap: 32 },
   header: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },

@@ -15,6 +15,7 @@
     "@authnjs/expo": "file:../../packages/expo",
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@simplewebauthn/browser": "^14.0.0",
     "expo": "~58.0.25",
     "expo-auth-session": "~58.0.18",
     "expo-crypto": "~58.0.8",

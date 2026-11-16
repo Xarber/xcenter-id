@@ -21,3 +21,6 @@ Assignment opened 16 November 2026. Legacy source baseline `e617758`.
 AUTHN-006 and the storage portion of AUTHN-007 moved ahead of live identity integration to address the requested security and data-integrity priority.
 
 The Expo web export was the smallest build needed to verify the redesigned public shell and offline behavior under §8. Live issuer verification and native/release builds remain open. The next action is to configure and test an isolated passwordless issuer with two registered clients and a distinct account console client. No Docker executable is available on this host.
+
+| 13 AUTHN-013 | Deploy a real passkey-first identity service and account settings | In Progress | Same-origin account backend and Expo Web passkey settings implemented. Verify enrollment and sign-in with a synthetic account in isolated storage before cutover. Email enrollment is unavailable until an ownership-verification transport is configured. |
+| 14 AUTHN-014 | Brand X-Center ID and add native tabs | Implemented | Editable icon, native tab bar and shared branding added. Run web and source checks, then validate native artifacts and device behavior. |
