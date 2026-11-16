@@ -56,21 +56,25 @@ function SignIn({signup,busy,notice,authenticate,create,continuation}:{
   signup:boolean;busy:boolean;notice:string;authenticate:(username?:string)=>void;create:()=>void;continuation:string|null;
 }){
   const [username,setUsername]=useState('');
+  const [motionPaused,setMotionPaused]=useState(false);
   const suffix=continuation?'?continue='+encodeURIComponent(continuation):'';
   return <div className="xc-auth">
     <header><Logo href="/"/><a href="/samples" className="xc-text-link">Explore apps <ArrowDownRight size={15}/></a></header>
     <div className="xc-auth-grid">
       <div className="xc-auth-visual">
-        <div className="xc-constellation" aria-hidden="true">
+        <div className="xc-constellation" aria-hidden="true" data-paused={motionPaused}>
           <div className="xc-orbit xc-orbit-inner"/><div className="xc-orbit xc-orbit-outer"/>
           <div className="xc-auth-mark"><img src="/authnjs-icon.svg" alt=""/></div>
-          <div className="xc-service xc-service-mail"><Mail/></div>
-          <div className="xc-service xc-service-files"><FolderOpen/></div>
-          <div className="xc-service xc-service-places"><MapPin/></div>
-          <div className="xc-service xc-service-apps"><Grid2X2/></div>
-          <div className="xc-service xc-service-device"><Laptop/></div>
-          <div className="xc-service xc-service-lock"><LockKeyhole/></div>
+          <div className="xc-orbit-track">
+            <div className="xc-service xc-service-mail"><Mail/></div>
+            <div className="xc-service xc-service-files"><FolderOpen/></div>
+            <div className="xc-service xc-service-places"><MapPin/></div>
+            <div className="xc-service xc-service-apps"><Grid2X2/></div>
+            <div className="xc-service xc-service-device"><Laptop/></div>
+            <div className="xc-service xc-service-lock"><LockKeyhole/></div>
+          </div>
         </div>
+        <button className="xc-orbit-control" type="button" onClick={()=>setMotionPaused(value=>!value)}>{motionPaused?'Resume animation':'Pause animation'}</button>
         <div className="xc-auth-caption"><p>One account for X-Center</p><span>Profile, devices, and apps in one place.</span></div>
       </div>
       <div className="xc-card xc-auth-card">
@@ -98,23 +102,45 @@ function SignIn({signup,busy,notice,authenticate,create,continuation}:{
   </div>;
 }
 
-function Security({account,update,passkey}:{account:Account;update:()=>Promise<void>;passkey:(name:string)=>Promise<void>}){
-  const [name,setName]=useState('');
+type NamedPasskey = {id:string;label:string};
+
+function Security({account,update,addPasskey}:{account:Account;update:()=>Promise<void>;addPasskey:()=>Promise<NamedPasskey>}){
+  const [editing,setEditing]=useState<NamedPasskey|null>(null);
   const [status,setStatus]=useState('');
   const [confirm,setConfirm]=useState('');
-  async function act(task:()=>Promise<void>){setStatus('');try{await task();}catch(error){setStatus(error instanceof Error?error.message:'Action failed.');}}
+  const [busy,setBusy]=useState(false);
+  async function act(task:()=>Promise<void>){
+    setBusy(true);
+    setStatus('');
+    try { await task(); }
+    catch(error) { setStatus(error instanceof Error?error.message:'Action failed.'); }
+    finally { setBusy(false); }
+  }
   return <section className="xc-card xc-pad">
     <div className="xc-row-head"><span className="xc-symbol xc-mint"><Fingerprint size={22}/></span><div>
       <h2>Passkeys</h2><p>Use a device passkey or physical security key to sign in.</p></div></div>
-    {account.passkeys.map(key=><div className="xc-list-row" key={key.id}><div className="xc-row-head"><KeyRound size={19}/><strong>{key.label}</strong></div>
-      {account.passkeys.length>1&&<button type="button" className="xc-button xc-secondary" onClick={()=>{
-        if(confirm!==key.id){setConfirm(key.id);return;}
-        void act(async()=>{await api('passkey/remove',{id:key.id});await update();setConfirm('');setStatus('Passkey removed.');});
-      }}>{confirm===key.id?'Confirm removal':'Remove'}</button>}</div>)}
-    <form className="xc-inline-form" onSubmit={event=>{event.preventDefault();void act(async()=>{await passkey(name);setName('');setStatus('Passkey added.');});}}>
-      <label>New passkey name<input required value={name} onChange={event=>setName(event.target.value)} maxLength={64}/></label>
-      <button className="xc-button xc-primary"><KeyRound size={16}/> Add passkey</button>
-    </form>
+    {account.passkeys.map(key=><div className="xc-list-row" key={key.id}>
+      <div className="xc-row-head"><KeyRound size={19}/><strong>{key.label}</strong></div>
+      <div className="xc-actions">
+        <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{setEditing(key);setConfirm('');}}>Rename</button>
+        {account.passkeys.length>1&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
+          if(confirm!==key.id){setConfirm(key.id);return;}
+          void act(async()=>{await api('passkey/remove',{id:key.id});await update();setConfirm('');setEditing(null);setStatus('Passkey removed.');});
+        }}>{confirm===key.id?'Confirm removal':'Remove'}</button>}
+      </div>
+    </div>)}
+    {editing?<form className="xc-inline-form" onSubmit={event=>{
+      event.preventDefault();
+      void act(async()=>{await api('passkey/rename',{id:editing.id,name:editing.label});await update();setEditing(null);setStatus('Passkey name saved.');});
+    }}>
+      <label>Passkey name<input required value={editing.label} onChange={event=>setEditing({...editing,label:event.target.value})} maxLength={64}/></label>
+      <button className="xc-button xc-primary" disabled={busy}>Save name</button>
+      <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>setEditing(null)}>Done</button>
+    </form>:<button type="button" className="xc-button xc-primary" disabled={busy} onClick={()=>void act(async()=>{
+      setConfirm('');
+      setEditing(await addPasskey());
+      setStatus('Passkey added. Review its suggested name.');
+    })}><KeyRound size={16}/> Add passkey</button>}
     {status&&<p role="status">{status}</p>}
   </section>;
 }
@@ -149,7 +175,9 @@ export default function WebApp(){
   async function passkey(mode:'signup'|'login'|'add',value?:string){
     const optionsJSON=await api(mode+'/options',mode==='login'?{username:value}:mode==='add'?{name:value}:{});
     const response=mode==='login'?await startAuthentication({optionsJSON}):await startRegistration({optionsJSON});
-    await api(mode+'/finish',{response});await load();
+    const result=await api(mode+'/finish',{response});
+    await load();
+    return result.passkey as NamedPasskey;
   }
   function login(mode:'signup'|'login',value?:string){
     setNotice('');setBusy(true);
@@ -193,7 +221,7 @@ export default function WebApp(){
   else if(page==='devices')content=<DevicesPage/>;
   else if(page==='files'||page==='storage')content=<FilesPage key={page} summary={page==='storage'}/>;
   else if(page==='mail')content=<MailPage account={account}/>;
-  else if(page==='security')content=<Security account={account} update={load} passkey={value=>passkey('add',value)}/>;
+  else if(page==='security')content=<Security account={account} update={load} addPasskey={()=>passkey('add')}/>;
   else if(page==='admin')content=account.admin?<AdminPage/>:<section className="xc-card xc-pad">Administrator access is required.</section>;
   else if(page==='developer')content=<section className="xc-card xc-pad"><DeveloperPortal back={()=>window.location.assign('/apps')}/></section>;
   else if(page==='apps')content=<><section className="xc-card"><ConnectedApps/></section><section className="xc-card xc-pad">

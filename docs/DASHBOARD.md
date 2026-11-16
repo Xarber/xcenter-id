@@ -19,3 +19,9 @@ A username reserves the corresponding address at `mail.xcenter.it`. Standard Hid
 ## Develop and verify
 
 From `apps/dashboard`, run `npm ci`, `npm run typecheck`, `npm test` and `npx expo install --check`. Use the configured web export to serve the account UI and static PWA assets alongside `services/api/account-web.mjs`. The original site remains in `HTML/`. Production and platform-specific evidence is tracked in [the queue](ACTIVE_TASKS.md).
+
+## Passkeys and folders
+
+After passkey enrollment, Security opens a name editor with the suggested provider name. The server uses the AAGUID from the verified registration result and caches the community authenticator catalog. Catalog entries are display hints. Anonymous or unknown authenticators receive a generic name. A user can rename or remove a passkey after recent authentication. The last credential remains protected.
+
+The file browser supports nested folders, breadcrumb navigation and uploads into the open folder. It supports eight levels and 100 folders per account. Empty folders can be removed. Existing files remain accessible at the root, and files and folder names are encrypted.

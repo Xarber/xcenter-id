@@ -53,3 +53,10 @@ Next external prerequisite for mail is verified ingress for port 25 to the appli
 | 21 AUTHN-021 | Centralize all permissions in X-Center ID | Implemented | Sample mutations moved into the account-authenticated permissions API. Staged Chrome verified the old URL redirects. Recheck the complete sample grant and revoke flow. Third-party activation rejects issuer-host callbacks. |
 | 22 AUTHN-022 | Add web and native account sections, private file browser and admin-controlled alias eligibility | Implemented | Native tabs open the canonical pages in the system browser. File isolation covered by API tests and staged Chrome verified upload and removal. Native device runtime remains pending. Admin role is a deployment allowlist of stable account IDs. Live mail routing is still blocked. |
 | 23 AUTHN-023 | Animate service icons on sign-in | Verified | Six icons rendered in Chrome at 1366×900 and 390×844. The public sign-in is served from revision 9aa9969. |
+
+| Order and ID | Request | State | Dependencies and next action |
+| --- | --- | --- | --- |
+| 24 AUTHN-024 | Fix web scrolling, fullscreen and mobile navigation, and orbit service icons | Verified | Staged Chrome verified compact scrolling, sticky header, orbit pause and Reduced Motion. Physical mobile browsers and standalone fullscreen remain unverified. |
+| 25 AUTHN-025 | Suggest authenticator-based passkey names and allow rename/removal | Implemented | Staged Chrome verified rename, default suggestion on second enrollment, name override and removal. Provider resolution and fallbacks covered by automated test. Real hardware verification remains open. |
+| 26 AUTHN-026 | Add private file folders | Verified | Staged Chrome verified folder creation and upload. API tests covered nesting, account isolation, root listing and denying non-empty removal. |
+| 27 AUTHN-027 | Improve third-party sign-in, consent, permissions and sample apps | Implemented | Staged Chrome verified delegated signup and consent, durable app data access, structured notes, own record deletion and sample sign-out. Native library rendering remains unverified. |

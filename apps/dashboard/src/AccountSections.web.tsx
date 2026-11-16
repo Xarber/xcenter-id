@@ -1,4 +1,4 @@
-import { File, FileUp, HardDrive, Laptop, Mail, Monitor, ShieldCheck, Trash2 } from 'lucide-react';
+import { File, FileUp, Folder, FolderPlus, HardDrive, Laptop, Mail, Monitor, ShieldCheck, Trash2 } from 'lucide-react';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { api, fileAsBase64, type Account } from './web-account';
 
@@ -8,7 +8,8 @@ const size = (value:number)=>value>1024*1024 ? (value/(1024*1024)).toFixed(1)+' 
 
 type Session = { id:string;label:string;created:number;current:boolean };
 type StoredFile = { id:string;name:string;size:number;created:number };
-type Files = { files:StoredFile[]; used:number; limit:number };
+type FolderItem = {id:string;name:string};
+type Files = { files:StoredFile[]; folders:FolderItem[]; breadcrumbs:FolderItem[]; used:number; total:number; limit:number };
 
 export function DevicesPage() {
   const [devices,setDevices]=useState<Session[]>([]);
@@ -35,33 +36,60 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
   const [status,setStatus]=useState('');
   const [busy,setBusy]=useState(false);
   const [confirm,setConfirm]=useState('');
-  async function load(){setState(await api('files'));}
+  const [creating,setCreating]=useState(false);
+  const folder=summary?null:new URLSearchParams(window.location.search).get('folder');
+  const folderPath=(id:string|null)=>id?'/files?folder='+encodeURIComponent(id):'/files';
+  async function load(){setState(await api('files'+(folder?'?folder='+encodeURIComponent(folder):'')));}
+  function change(operation:()=>Promise<unknown>, message:string){
+    setBusy(true);
+    setStatus('');
+    void operation().then(load).then(()=>{setConfirm('');setCreating(false);setStatus(message);})
+      .catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
+  }
   useEffect(()=>{void load().catch(error=>setStatus(notice(error)));},[]);
   function upload(event:ChangeEvent<HTMLInputElement>){
     const file=event.target.files?.[0];
     event.target.value='';
     if(!file)return;
     if(file.size<1||file.size>2*1024*1024){setStatus('Choose a file between 1 byte and 2 MB.');return;}
-    setBusy(true);setStatus('');
-    void fileAsBase64(file).then(content=>api('files',{name:file.name,content})).then(load)
-      .then(()=>setStatus('File uploaded.')).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
+    change(async()=>api('files',{name:file.name,content:await fileAsBase64(file),folder}),'File uploaded.');
   }
   return <section className="xc-card xc-pad">
     <div className="xc-row-head"><span className="xc-symbol xc-lavender">{summary?<HardDrive size={21}/>:<File size={21}/>}</span>
       <div><h2>{summary?'Account file storage':'Your private files'}</h2><p>{summary?'Storage used by files in this account.':'Uploads are available only in your X-Center ID account.'}</p></div></div>
     {state && summary && <><div className="xc-storage"><strong>{size(state.used)}</strong><span> of {size(state.limit)} used</span></div>
-      <progress aria-label="Account file storage" value={state.used} max={state.limit}/><p>{state.files.length} {state.files.length===1?'file':'files'}</p><a href="/files">Open file browser →</a></>}
+      <progress aria-label="Account file storage" value={state.used} max={state.limit}/><p>{state.total} {state.total===1?'file':'files'}</p><a href="/files">Open file browser →</a></>}
     {!summary && <>
-      <label className="xc-button xc-primary"><FileUp size={17}/> Upload file<input className="xc-sr" type="file" disabled={busy} onChange={upload}/></label>
+      <nav className="xc-actions xc-file-path" aria-label="Current folder">
+        <a href={folderPath(null)} aria-current={folder?undefined:'page'}>Your files</a>
+        {state?.breadcrumbs.map(item=><a key={item.id} href={folderPath(item.id)} aria-current={item.id===folder?'page':undefined}>{item.name}</a>)}
+      </nav>
+      <div className="xc-actions">
+        <label className="xc-button xc-primary"><FileUp size={17}/> Upload file<input className="xc-sr" type="file" disabled={busy} onChange={upload}/></label>
+        <button className="xc-button xc-secondary" type="button" onClick={()=>setCreating(!creating)} disabled={busy}><FolderPlus size={17}/> New folder</button>
+      </div>
+      {creating&&<form className="xc-inline-form" onSubmit={event=>{
+        event.preventDefault();
+        const name=new FormData(event.currentTarget).get('name');
+        change(()=>api('files/folders',{name,folder}),'Folder created.');
+      }}><label>Folder name<input name="name" maxLength={160} required/></label>
+        <button className="xc-button xc-primary" disabled={busy}>Create folder</button>
+      </form>}
+      {state?.folders.map(item=><div className="xc-list-row" key={item.id}>
+        <a className="xc-row-head" href={folderPath(item.id)}><Folder size={18}/><strong>{item.name}</strong></a>
+        <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
+          if(confirm!==item.id){setConfirm(item.id);return;}
+          change(()=>api('files/folders/'+item.id,{},'DELETE'),'Folder removed.');
+        }}>{confirm===item.id?'Confirm folder removal':'Remove folder'}</button>
+      </div>)}
       {state?.files.map(file=><div className="xc-list-row" key={file.id}>
         <div className="xc-file-meta"><a href={'/account/files/'+file.id}><strong>{file.name}</strong></a><p>{size(file.size)} · {date(file.created)}</p></div>
         <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
           if(confirm!==file.id){setConfirm(file.id);return;}
-          setBusy(true);void api('files/'+file.id,{},'DELETE').then(load).then(()=>{setStatus('File removed.');setConfirm('');})
-            .catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
+          change(()=>api('files/'+file.id,{},'DELETE'),'File removed.');
         }}><Trash2 size={15}/>{confirm===file.id?'Confirm removal':'Remove'}</button>
       </div>)}
-      {state?.files.length===0 && <div className="xc-empty">Your account has no uploaded files.</div>}
+      {state?.files.length===0 && state.folders.length===0 && <div className="xc-empty">This folder is empty.</div>}
     </>}
     {status && <p role="status">{status}</p>}
   </section>;

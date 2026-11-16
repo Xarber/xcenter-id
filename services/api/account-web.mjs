@@ -88,7 +88,7 @@ async function activateApplication(req,res,id) {
 }
 
 const consentApi = provider && store ? createApiHandler({
-  registry, store, apps:registry, consoleClient:'account-consent-session',
+  registry, store, apps:registry, consoleClient:'account-consent-session', allowPersistentGrants:true,
   authenticate(req) {
     const session = accounts.current(req);
     return session ? {owner:session.owner,client:'account-consent-session'} : null;
@@ -115,7 +115,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void dataApi(req,res);
     return;
   }
-  if (accountFiles && (path === '/account/files' || /^\/account\/files\/[0-9a-f-]{36}$/.test(path))) {
+  if (accountFiles && (path === '/account/files' || path === '/account/files/folders' || /^\/account\/files\/(?:folders\/)?[0-9a-f-]{36}$/.test(path))) {
     void accountFiles(req,res,path).catch(()=>{
       if(!res.headersSent) res.writeHead(500,{'Cache-Control':'no-store'});
       res.end();

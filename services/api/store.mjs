@@ -1,6 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
+export const untilRevoked = Number.MAX_SAFE_INTEGER;
+
 export function openStore(path, key) {
   if (!Buffer.isBuffer(key) || key.length !== 32) throw new Error('Expected a 32-byte data key');
   const db = new DatabaseSync(path);

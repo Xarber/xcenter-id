@@ -14,7 +14,14 @@ function respond(res, title, content, status = 200) {
     'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
   });
   res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escape(title)}</title>
-    <style>:root{color-scheme:light dark;font:1rem/1.5 system-ui}main{max-width:42rem;margin:3rem auto;padding:1rem}
+    <style>:root{color-scheme:light dark;font:1rem/1.5 system-ui}*{box-sizing:border-box}body{margin:0;background:Canvas;color:CanvasText}
+    main{max-width:46rem;margin:auto;padding:clamp(1rem,5vw,3rem)}
+    h1{font-size:clamp(1.8rem,6vw,2.6rem);line-height:1.15;letter-spacing:-.05em}
+    section,article{border:1px solid ButtonBorder;border-radius:1rem;padding:1rem;margin:1rem 0}
+    label{display:block;margin:.55rem 0}label input{display:block;width:100%}
+    input,textarea,button,.button{font:inherit;border:1px solid ButtonBorder;border-radius:.55rem;padding:.55rem .7rem}
+    button,.button{display:inline-block;cursor:pointer}.primary{background:#214fbe;color:#fff;text-decoration:none}
+    .note,code{overflow-wrap:anywhere}:focus-visible{outline:3px solid #6b94ff;outline-offset:3px}
     form{margin:1rem 0}textarea{width:100%}button{font:inherit;padding:.5em}.note{white-space:pre-wrap}</style>
     <main><h1>${escape(title)}</h1>${content}</main></html>`);
 }
@@ -44,9 +51,15 @@ function prune(map) {
   if (map.size >= 300) throw new Error('Too many sample sessions');
 }
 
-function notes(page) {
+function notes(page, folder, canDelete = () => false) {
   return page?.records.length
-    ? '<ul>' + page.records.map(({value}) => `<li class="note">${escape(value.text)}</li>`).join('') + '</ul>'
+    ? page.records.map(({id,value}) => `<article>${value.title ? `<strong>${escape(value.title)}</strong>` : ''}
+      <p class="note">${escape(value.text)}</p>
+      ${value.details?.date ? `<p><time>${escape(value.details.date)}</time></p>` : ''}
+      ${value.details?.tags?.length ? `<small>${escape(value.details.tags.join(' · '))}</small>` : ''}
+      ${canDelete(value) ? `<form method="post"><input type="hidden" name="action" value="delete">
+        <input type="hidden" name="folder" value="${folder}"><button name="record" value="${escape(id)}">Delete note</button></form>` : ''}
+      </article>`).join('')
     : '<p>No notes yet.</p>';
 }
 
@@ -124,32 +137,62 @@ export function createSamples({ issuer, configuration, provider, store }) {
       return redirect(res,base);
     }
     if (action) return respond(res,'Method unavailable','',405);
-    const state = sessions.get(cookie(req,username));
+    const sessionId = cookie(req,username);
+    const state = sessions.get(sessionId);
+    if (req.method === 'POST' && url.searchParams.get('action') === 'signout') {
+      if (req.headers.origin !== issuer) return respond(res,'Invalid origin','',403);
+      if (state?.id === id) sessions.delete(sessionId);
+      res.setHeader('Set-Cookie',`${username}=; Path=${base}; Secure; HttpOnly; SameSite=Lax; Max-Age=0`);
+      return redirect(res,base);
+    }
     const active = state?.id === id && state.expires > Date.now() ? await provider.delegatedAccess(state.access,id) : null;
-    if (!active) return respond(res,client.client_name,`<p>Sign in with your X-Center ID.</p><a href="${base}/start">Sign in</a>`);
+    if (!active) return respond(res,client.client_name,`<p>Sign in with your X-Center ID.</p><a class="button primary" href="${base}/start">Sign in</a>`);
     const {owner} = active;
     const other = sampleIds.find((candidate) => candidate !== id);
-    const sharedPage = store.read(owner,shared,id,sharedDataset);
     if (req.method === 'POST') {
       if (req.headers.origin !== issuer) return respond(res,'Invalid origin','',403);
       const input = await form(req);
-      const note = input.get('note')?.trim();
       const folder = input.get('folder');
-      if (!note || note.length > 500 || !['own','shared'].includes(folder)) return respond(res,'Invalid note','',422);
+      if (!['own','shared'].includes(folder)) return respond(res,'Invalid folder','',422);
+      const source = folder === 'shared' ? shared : id;
+      const dataset = folder === 'shared' ? sharedDataset : noteDataset;
+      const sharedPage = folder === 'shared' ? store.read(owner,shared,id,sharedDataset) : null;
       if (folder === 'shared' && !sharedPage) return respond(res,'Allow shared-folder access first','',403);
-      const created = store.create(owner,folder === 'shared' ? shared : id,folder === 'shared' ? sharedDataset : noteDataset,{ text:note });
+      if (input.get('action') === 'delete') {
+        const record = input.get('record');
+        if (!record || (sharedPage && !sharedPage.records.some(item=>item.id===record && item.value.author===id))) {
+          return respond(res,'Note unavailable','',404);
+        }
+        return store.remove(owner,source,dataset,record) ? redirect(res,base) : respond(res,'Note unavailable','',404);
+      }
+      const note = input.get('note')?.trim();
+      const title = input.get('title')?.trim() ?? '';
+      const date = input.get('date') ?? '';
+      const tags = (input.get('tags') ?? '').split(',').map(tag=>tag.trim()).filter(Boolean);
+      if (!note || note.length > 500 || title.length > 100 || tags.length > 8 || tags.some(tag=>tag.length > 30)
+        || (date && !/^\d{4}-\d{2}-\d{2}$/.test(date))) return respond(res,'Invalid note','',422);
+      const created = store.create(owner,source,dataset,{ title,text:note,details:{date,tags},author:id });
       return created ? redirect(res,base) : respond(res,'Sample storage is full','',409);
     }
     if (req.method !== 'GET') return respond(res,'Method unavailable','',405);
     const otherPage = store.read(owner,other,id,noteDataset);
-    const noteForm = (folder) => `<form method="post"><input type="hidden" name="folder" value="${folder}"><label>Note<textarea name="note" maxlength="500" required></textarea></label><button>Save note</button></form>`;
-    return respond(res,client.client_name,`<p>Signed in as ${escape(state.identity.name ?? 'X-Center ID user')}.</p>
-      <p>App-specific ID <code>${escape(state.identity.sub)}</code></p>
+    const sharedPage = store.read(owner,shared,id,sharedDataset);
+    const noteForm = (folder) => `<details><summary>New note</summary><form method="post">
+      <input type="hidden" name="folder" value="${folder}">
+      <label>Title<input name="title" maxlength="100"></label>
+      <label>Note<textarea name="note" maxlength="500" required></textarea></label>
+      <label>Date<input type="date" name="date"></label>
+      <label>Tags<input name="tags" maxlength="200" placeholder="Separate tags with commas"></label>
+      <button class="primary">Save note</button></form></details>`;
+    return respond(res,client.client_name,`<section><p>Signed in as ${escape(state.identity.name ?? 'X-Center ID user')}.</p>
+      <a class="button" href="/permissions">Manage permissions</a>
+      <form method="post" action="${base}?action=signout"><button>Sign out</button></form>
+      <details><summary>Shared identity details</summary><p>App-specific ID <code>${escape(state.identity.sub)}</code></p>
       ${state.identity.age_range ? `<p>Shared age range ${escape(state.identity.age_range)}</p>` : ''}
-      ${state.identity.email ? `<p>Shared email ${escape(state.identity.email)}</p>` : ''}
-      <h2>Your notes</h2>${notes(store.read(owner,id,id,noteDataset))}${noteForm('own')}
-      <h2>Other app’s notes</h2>${otherPage ? notes(otherPage) : '<p>Access has not been granted.</p>'}
-      <h2>Shared folder</h2>${sharedPage ? notes(sharedPage)+noteForm('shared') : '<p>Access has not been granted.</p>'}
-      <p><a href="/permissions">Manage permissions on X-Center ID</a> · <a href="/samples">Other sample apps</a></p>`);
+      ${state.identity.email ? `<p>Shared email ${escape(state.identity.email)}</p>` : ''}</details></section>
+      <section><h2>Your notes</h2>${notes(store.read(owner,id,id,noteDataset),'own',()=>true)}${noteForm('own')}</section>
+      <section><h2>Other app’s notes</h2>${otherPage ? notes(otherPage) : '<p>Access has not been granted.</p>'}</section>
+      <section><h2>Shared folder</h2>${sharedPage ? notes(sharedPage,'shared',value=>value.author===id)+noteForm('shared') : '<p>Access has not been granted.</p>'}</section>
+      <p><a href="/samples">Other sample apps</a></p>`);
   };
 }

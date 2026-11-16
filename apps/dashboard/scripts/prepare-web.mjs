@@ -13,7 +13,10 @@ const original = await readFile(htmlPath, 'utf8');
 const head = '<link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/authnjs-icon.svg"><link rel="apple-touch-icon" href="/authnjs-192.png"><meta name="theme-color" content="#264eb5">';
 const registration = "<script>if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));</script>";
 if (!original.includes('</head>') || !original.includes('</body>')) throw new Error('Expo HTML template is missing');
-const html = original.replace('</head>', head + '</head>').replace('</body>', registration + '</body>');
+const html = original
+  .replace(/<style id="expo-reset">[\s\S]*?<\/style>/, '')
+  .replace('initial-scale=1, shrink-to-fit=no', 'initial-scale=1, viewport-fit=cover')
+  .replace('</head>', head + '</head>').replace('</body>', registration + '</body>');
 await writeFile(htmlPath, html);
 const digest = createHash('sha256').update(html);
 for (const path of assets) digest.update(await readFile(join(root, path.slice(1))));

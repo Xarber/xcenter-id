@@ -1,3 +1,4 @@
+import { createPasskeyLabelResolver, passkeyLabel } from './passkey-label.mjs';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import { openEmailVerification } from './email-verification.mjs';
 import sharp from 'sharp';
@@ -54,6 +55,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   const url = new URL(origin);
   if (url.origin !== origin || url.protocol !== 'https:') throw new Error('Set the exact HTTPS account origin');
   const rpID = url.hostname;
+  const suggestLabel = createPasskeyLabelResolver();
   const db = new DatabaseSync(database);
   db.exec(`
     PRAGMA foreign_keys = ON;
@@ -284,6 +286,15 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       writeProfile(active.owner,{...candidate,picture});
       return { ok:true };
     }
+    if (pathname === '/account/passkey/rename') {
+      recent(active);
+      const label = passkeyLabel(input.name);
+      requireCondition(label, 422, 'Enter a passkey name of up to 64 characters.');
+      requireCondition(typeof input.id === 'string', 400, 'Select a passkey.');
+      const updated = q('UPDATE passkeys SET label=? WHERE id=? AND owner=?').run(label, input.id, active.owner);
+      requireCondition(updated.changes === 1, 404, 'Passkey not found.');
+      return { ok: true };
+    }
     if (pathname === '/account/passkey/remove') {
       recent(active);
       const removed = q(`DELETE FROM passkeys WHERE id=? AND owner=?
@@ -306,8 +317,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         prepare(res, { action, username, expected: options.challenge });
         return options;
       }
-      const name = action === 'signup' ? 'First passkey' : typeof input.name === 'string' ? input.name.trim() : '';
-      requireCondition(name.length >= 1 && name.length <= 64 && !/[\u0000-\u001f\u007f]/.test(name), 422, 'Enter a passkey name.');
+      const name = passkeyLabel(input.name);
+      requireCondition(input.name === undefined || name, 422, 'Enter a passkey name of up to 64 characters.');
       const owner = active?.owner ?? randomUUID();
       const options = await generateRegistrationOptions({
         rpName: 'X-Center ID', rpID, userID: new TextEncoder().encode(owner),
@@ -345,13 +356,14 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       expectedRPID: rpID, requireUserVerification: true,
     }).catch(() => null);
     requireCondition(result?.verified && result.registrationInfo, 400, 'Could not register this passkey.');
-    const { credential } = result.registrationInfo;
+    const { aaguid, credential } = result.registrationInfo;
+    const label = challenge.name ?? await suggestLabel({ aaguid, transports: credential.transports });
     db.exec('BEGIN IMMEDIATE');
     try {
       if (action === 'signup') q('INSERT INTO accounts VALUES (?,?,?)').run(challenge.owner,'X-Center ID',now());
       requireCondition(keys.all(challenge.owner).length < 20, 409, 'Passkey limit reached.');
       q('INSERT INTO passkeys VALUES (?,?,?,?,?,?,?)').run(credential.id, challenge.owner,
-        action === 'signup' ? 'First passkey' : challenge.name, credential.publicKey, credential.counter,
+        label, credential.publicKey, credential.counter,
         JSON.stringify(credential.transports ?? []), now());
       db.exec('COMMIT');
     } catch (error) {
@@ -360,7 +372,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       throw error;
     }
     if (action === 'signup') login(req,res,challenge.owner);
-    return { ok: true };
+    return { ok:true, passkey:{ id:credential.id, label } };
   }
 
   async function handle(req, res, pathname) {

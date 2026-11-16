@@ -3,7 +3,7 @@ import { closeSync, mkdirSync, openSync, constants } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRemoteJWKSet, jwtVerify, errors } from 'jose';
-import { openStore } from './store.mjs';
+import { openStore, untilRevoked } from './store.mjs';
 import { openRegistry } from './registry.mjs';
 
 const dataset = 'saved-place.v1';
@@ -60,7 +60,7 @@ function savedPlace(body) {
   return { label: label.trim(), latitude, longitude };
 }
 
-export function createApiHandler({ store, authenticate, apps, consoleClient, developerClient, registry }) {
+export function createApiHandler({ store, authenticate, apps, consoleClient, developerClient, registry, allowPersistentGrants = false }) {
   return async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
@@ -93,7 +93,7 @@ export function createApiHandler({ store, authenticate, apps, consoleClient, dev
         if (client !== consoleClient) throw new HttpError(403, 'forbidden');
         if (method === 'GET') return json(res, 200, { grants: store.listGrants(owner) });
         if (method !== 'PUT' && method !== 'DELETE') throw new HttpError(405, 'method_not_allowed');
-        const { source, destination, expires } = await readJson(req);
+        const { source, destination, expires, persistent } = await readJson(req);
         if (!apps.has(source) || !apps.has(destination) || source === destination) {
           throw new HttpError(422, 'invalid_grant');
         }
@@ -102,11 +102,13 @@ export function createApiHandler({ store, authenticate, apps, consoleClient, dev
           return json(res, 200, { revoked: true });
         }
         const now = Date.now();
-        if (!Number.isSafeInteger(expires) || expires <= now || expires > now + maxGrantMs) {
+        const permanent = persistent === true && allowPersistentGrants;
+        if (!permanent && (!Number.isSafeInteger(expires) || expires <= now || expires > now + maxGrantMs)) {
           throw new HttpError(422, 'invalid_expiry');
         }
-        store.grant(owner, source, destination, dataset, expires);
-        return json(res, 200, { source, destination, dataset, expires });
+        const expiry = permanent ? untilRevoked : expires;
+        store.grant(owner, source, destination, dataset, expiry);
+        return json(res, 200, { source, destination, dataset, expires:expiry });
       }
 
       if (!apps.has(client) || (registry && principal.confidential !== true)) throw new HttpError(403, 'forbidden');

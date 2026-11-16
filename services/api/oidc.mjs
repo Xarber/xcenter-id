@@ -13,10 +13,18 @@ function html(res, content, status = 200) {
   });
   res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Continue with X-Center ID</title><style>
-    :root{color-scheme:light dark;font:1rem/1.5 system-ui}body{margin:0;padding:2rem;background:Canvas;color:CanvasText}
-    main{max-width:34rem;margin:8vh auto}h1{line-height:1.08;letter-spacing:-.04em}
-    label{display:flex;gap:.7em;padding:.6em 0}button,a{font:inherit}button{padding:.55em 1em;margin:.6em .4em .6em 0}
-    </style><main>${content}</main></html>`);
+    :root{color-scheme:light dark;font:1rem/1.5 system-ui;--bg:#f4f7fc;--card:#fff;--text:#17223a;--muted:#526078;--border:#dbe3ef;--action:#214fbe;--soft:#edf2ff}
+    *{box-sizing:border-box}body{margin:0;padding:clamp(1rem,5vw,3rem);background:var(--bg);color:var(--text)}
+    main{max-width:34rem;margin:clamp(0rem,4vh,3rem) auto;padding:clamp(1.25rem,5vw,2.25rem);background:var(--card);border:1px solid var(--border);border-radius:1.45rem}
+    h1{font-size:clamp(1.55rem,6vw,2.15rem);line-height:1.12;letter-spacing:-.04em;overflow-wrap:anywhere}p{color:var(--muted)}
+    .brand{font-weight:800;letter-spacing:-.03em;color:var(--action)}.context{padding:.8rem 1rem;border-radius:.8rem;background:var(--soft);overflow-wrap:anywhere}
+    fieldset{border:1px solid var(--border);border-radius:.85rem;padding:.6rem 1rem;margin:1.2rem 0;min-width:0}legend{font-weight:700}
+    label{display:flex;gap:.7em;align-items:baseline;padding:.5em 0;overflow-wrap:anywhere}input{accent-color:var(--action)}
+    button,.action{display:inline-block;font:inherit;font-weight:700;padding:.6em 1em;margin:.45rem .4rem 0 0;border-radius:.65rem;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer}
+    button[value=approve],.action{background:var(--action);color:#fff;text-decoration:none;border-color:transparent}
+    :focus-visible{outline:3px solid #6b94ff;outline-offset:3px}
+    @media(prefers-color-scheme:dark){:root{--bg:#101522;--card:#192132;--text:#f3f6ff;--muted:#b1c1dc;--border:#35445e;--action:#375fce;--soft:#23355d}.brand{color:#adc5ff}}
+    </style><main><span class="brand">X-Center ID</span>${content}</main></html>`);
 }
 
 async function form(req) {
@@ -100,8 +108,11 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const found = await provider.Client.find(params.client_id);
     const client = found && { client_id:found.clientId, client_name:found.clientName, host:new URL(found.redirectUris[0]).hostname };
     if (!client) return html(res, '<h1>This app is unavailable</h1>', 404);
-    if (!person) return html(res, `<h1>Sign in to X-Center ID</h1><p>Sign in with a passkey, then return to continue to ${escape(client.client_name ?? client.client_id)}.</p>
-      <a href="/?continue=${escape(path)}">Open X-Center ID</a>`);
+    if (!person) {
+      const location = '/signin?continue=' + encodeURIComponent(path);
+      res.writeHead(303,{Location:location,'Cache-Control':'no-store'}).end();
+      return;
+    }
     if (req.method === 'POST') {
       if (req.headers.origin !== issuer) return html(res,'<h1>Could not verify the request</h1>',403);
       let input;
@@ -141,7 +152,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     if (req.method !== 'GET') return html(res,'<h1>Method unavailable</h1>',405);
     const missing = new Set(prompt.details.missingOIDCScope ?? []);
     return html(res,`<h1>Continue to ${escape(client.client_name ?? client.client_id)}</h1>
-      <p>Using ${escape(person.givenName)} ${escape(person.surname)}. The app receives an ID scoped to this app.</p><p>Registered callback domain: <strong>${escape(client.host)}</strong>.</p>
+      <div class="context"><strong>${escape(person.givenName)} ${escape(person.surname)}</strong><br>App domain <strong>${escape(client.host)}</strong></div><p>The app receives an ID scoped to this app.</p>
       ${missing.has('profile') ? '<p>This app requests your given name and surname.</p>' : ''}
       ${missing.has('age_range') ? '<p>This app requests your age range.</p>' : ''}
       ${missing.has('app_data') ? '<p>This app can access its own records. Cross-app grants are managed separately.</p>' : ''}

@@ -20,3 +20,33 @@ input,select,textarea{border:1px solid var(--line);border-radius:9px;background:
 @media(max-width:840px){.xc-shell{grid-template-columns:174px minmax(0,1fr)}.xc-side{padding:22px 8px}.xc-main{padding:29px 24px 45px}.xc-shortcut{padding:13px}.xc-shortcut p{display:none}.xc-auth-grid{grid-template-columns:1fr minmax(0,345px);gap:22px}.xc-auth-visual{min-height:385px}.xc-auth-caption{padding:21px}}
 @media(max-width:630px){.xc-shell{display:block}.xc-topbar{height:62px;padding:0 16px}.xc-side{top:62px;height:auto;padding:7px 10px;position:sticky;z-index:2;border:0;border-bottom:1px solid var(--line);display:flex;flex-direction:row;overflow-x:auto;overflow-y:hidden;gap:6px}.xc-side nav{flex-direction:row;gap:4px}.xc-side nav a,.xc-signout{min-height:43px;padding:8px 10px;gap:6px;font-size:.81rem}.xc-side nav svg,.xc-signout svg{width:16px}.xc-main{padding:23px 14px 42px;gap:14px}.xc-top-actions{gap:6px}.xc-pad,.xc-profile-head,.xc-profile-form{padding:16px}.xc-hero{padding:20px;min-height:164px;border-radius:19px}.xc-hero-avatar{width:66px;height:66px}.xc-shortcuts{gap:8px}.xc-shortcut{padding:9px;gap:6px;border-radius:13px}.xc-shortcut h2{font-size:.82rem}.xc-shortcut .xc-symbol{width:32px;height:32px;border-radius:10px}.xc-shortcut svg{width:17px}.xc-arrow{display:none}.xc-profile-head{gap:14px;align-items:flex-start}.xc-avatar-large{width:60px;height:60px}.xc-form-grid{grid-template-columns:1fr;gap:11px}.xc-list-row{align-items:flex-start}.xc-list-row .xc-button{padding-inline:10px}.xc-auth header{height:64px}.xc-auth-grid{display:flex;flex-direction:column;gap:17px;align-items:stretch;padding-top:0}.xc-auth-visual{min-height:0;display:grid;grid-template-columns:1fr .9fr;align-items:center;border-radius:19px;min-height:155px}.xc-auth-caption{padding:10px 12px 10px 0}.xc-auth-caption p{font-size:1.2rem}.xc-auth-caption span{font-size:.77rem}.xc-auth-card{padding:20px}.xc-setup{padding:22px 14px}}
 @media(prefers-reduced-motion:reduce){.xc-service{animation:none}.xc-button{transition:none}.xc-button:active:not(:disabled){transform:none}}
+
+html,body,#root{height:auto;min-height:100%}
+body{overflow-y:auto}
+#root{display:block;min-height:100dvh}
+.xc-shell{grid-template-rows:auto minmax(0,1fr);--xc-header-height:calc(72px + env(safe-area-inset-top,0px))}
+.xc-topbar{height:var(--xc-header-height);padding-top:env(safe-area-inset-top,0px);padding-left:max(36px,env(safe-area-inset-left,0px));padding-right:max(36px,env(safe-area-inset-right,0px))}
+.xc-side{top:var(--xc-header-height);height:calc(100dvh - var(--xc-header-height));align-self:start}
+.xc-main{padding-bottom:max(42px,calc(20px + env(safe-area-inset-bottom,0px)))}
+.xc-auth{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.xc-auth header{flex:none}
+.xc-orbit-track{position:absolute;inset:0;pointer-events:none;animation:xc-orbit-turn 64s linear 600ms infinite}
+.xc-service svg{animation:xc-orbit-turn 64s linear 600ms infinite reverse}
+@keyframes xc-orbit-turn{to{transform:rotate(1turn)}}
+@media(max-width:630px){
+  .xc-shell{--xc-header-height:calc(62px + env(safe-area-inset-top,0px))}
+  .xc-topbar{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .xc-side{position:static;height:auto;scrollbar-width:thin}
+}
+@media(prefers-reduced-motion:reduce){
+  .xc-orbit-track,.xc-service svg{animation:none}
+}
+.xc-auth-visual{position:relative}
+.xc-orbit-control{position:absolute;right:10px;top:10px;z-index:1;padding:6px 9px;border:1px solid #d4e5ff66;border-radius:9px;color:#fff;background:#172653;font-size:.72rem}
+.xc-constellation[data-paused=true] .xc-orbit-track,.xc-constellation[data-paused=true] .xc-service svg{animation-play-state:paused}
+.xc-actions{flex-wrap:wrap}
+@media(max-width:630px){.xc-auth-caption{padding-top:32px}}
+@media(prefers-reduced-motion:reduce){.xc-orbit-control{display:none}}
+.xc-file-path{margin:18px 0;overflow-wrap:anywhere}
+.xc-file-path a+a::before{content:'›';display:inline-block;margin-right:8px;color:var(--muted)}
+.xc-file-path [aria-current=page]{color:var(--ink);font-weight:700}

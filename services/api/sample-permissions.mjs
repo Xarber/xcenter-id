@@ -1,3 +1,4 @@
+import { untilRevoked } from './store.mjs';
 const sampleApps = new Map([['places-demo','Places Notebook'],['trips-demo','Trip Planner']]);
 export const sampleShared = 'account-shared';
 export const sampleNotes = 'sample-notes.v1';
@@ -38,12 +39,12 @@ export function createSamplePermissions({ store, accounts, origin }) {
         text += chunk.toString();
         if (text.length > 1024) { req.resume(); return json(res,413,{error:'Request too large.'}); }
       }
-      const {source,destination} = JSON.parse(text);
+      const {source,destination,persistent} = JSON.parse(text);
       if (!sampleApps.has(destination) || (source !== sampleShared && !sampleApps.has(source)) || source === destination) {
         return json(res,422,{error:'Invalid app or folder.'});
       }
       const dataset = source === sampleShared ? sampleFolder : sampleNotes;
-      if (req.method === 'PUT') store.grant(user.owner,source,destination,dataset,Date.now()+3600_000);
+      if (req.method === 'PUT') store.grant(user.owner,source,destination,dataset,persistent===true?untilRevoked:Date.now()+3600_000);
       else store.revoke(user.owner,source,destination,dataset);
       return json(res,200,{ok:true});
     } catch { return json(res,400,{error:'Could not change sample permission.'}); }
