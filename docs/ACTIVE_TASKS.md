@@ -30,3 +30,13 @@ AUTHN-013 deployed at b528298; browser tests passed against isolated X-Center st
 ### Usage checkpoint
 
 Five-hour window reached 9% remaining and resets 16 November at 16:05:56 CET. Weekly window had 86% remaining and resets 23 November at 11:05:56 CET. Section 0 pauses new work. After usage permits, implement and test email ownership verification with a configured delivery provider, then connect OAuth issuance and consent to the passkey session and verify the latest native artifacts. The native build matrix is still pending for the branded code.
+
+### 16 November production expansion
+
+| Order and ID | Priority and request | State | Dependencies and next action |
+| --- | --- | --- | --- |
+| 15 AUTHN-015 | Replace shield branding with an original icon | Implemented | Layered identity-card SVG and raster exports. Verify the next integrated build. |
+| 16 AUTHN-016 | Expand identity profiles and OIDC consent | In Progress | Username reservation, profile fields and issuer integration. Verify exact callbacks, pairwise claims, age bands, and optional verified email in an isolated end-to-end flow. |
+| 17 AUTHN-017 | Ship actual sample apps, permissions, shared storage and developer onboarding | In Progress | Requires issuer callbacks, scoped grants and persisted app data. |
+| 18 AUTHN-018 | Provide inbound SMTP, outbound delivery, verified email and Hide My Email | In Progress | Root MX belongs to iCloud. Add isolated mail intake and submission, verify routing and reconcile existing recipients before changing DNS. |
+| 19 AUTHN-019 | Publish the production account platform at id.xcenter.it | Queued | Existing host serves X-Center fallback. Establish a dedicated virtual host only after functional, privacy, mail, backup and release checks. |

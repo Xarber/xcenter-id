@@ -60,8 +60,8 @@ function savedPlace(body) {
   return { label: label.trim(), latitude, longitude };
 }
 
-export function createApi({ store, authenticate, apps, consoleClient, developerClient, registry }) {
-  return createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, async (req, res) => {
+export function createApiHandler({ store, authenticate, apps, consoleClient, developerClient, registry }) {
+  return async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
       const method = req.method;
@@ -146,7 +146,11 @@ export function createApi({ store, authenticate, apps, consoleClient, developerC
       console.error(JSON.stringify({ event: 'request_failed', kind: error?.constructor?.name }));
       return json(res, 500, { error: 'internal_error' });
     }
-  });
+  };
+}
+
+export function createApi(options) {
+  return createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, createApiHandler(options));
 }
 
 function required(env, name) {

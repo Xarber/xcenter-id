@@ -3,7 +3,7 @@ import DeveloperPortal from './DeveloperPortal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState, type ComponentProps } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme, useWindowDimensions } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Landing from './Landing';
@@ -22,6 +22,8 @@ type Icon = ComponentProps<typeof Ionicons>['name'];
 const light = { background: '#f3f5f8', panel: '#ffffff', ink: '#142438', muted: '#4b5a6c', border: '#d6dee9', accent: '#174eaa', soft: '#e4edff' };
 const dark = { background: '#101722', panel: '#192433', ink: '#f4f7ff', muted: '#b1c0d2', border: '#344359', accent: '#a8c7ff', soft: '#203a61' };
 const isWeb = Platform.OS === 'web';
+const continuation = isWeb && typeof window !== 'undefined' &&
+  /^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(new URLSearchParams(window.location.search).get('continue') ?? '');
 const webPreference = 'authnjs.dashboard.web-entry.v1';
 const tabs = [
   { id: 'account', name: 'Account', icon: 'person-circle-outline' },
@@ -47,13 +49,13 @@ function Dashboard() {
     let active = true;
     if (isWeb) {
       AsyncStorage.getItem(webPreference).then(
-        (value) => { if (active) setLanding(value !== 'entered'); },
-        () => { if (active) setLanding(true); },
+        (value) => { if (active) setLanding(!continuation && value !== 'entered'); },
+        () => { if (active) setLanding(!continuation); },
       );
     }
     AsyncStorage.getItem(preference).then(
-      (value) => { if (active) setIntro(value !== 'complete'); },
-      () => { if (active) setIntro(true); },
+      (value) => { if (active) setIntro(!continuation && value !== 'complete'); },
+      () => { if (active) setIntro(!continuation); },
     );
     return () => { active = false; };
   }, []);
@@ -117,11 +119,11 @@ function Dashboard() {
           <View style={styles.header}>
             {isWeb ? (
               <Pressable accessibilityRole="button" accessibilityLabel="X-Center ID home" onPress={() => { setDeveloper(false); setLanding(true); }} style={styles.header}>
-                <Ionicons name="shield-checkmark" color={colors.accent} size={30} />
+                <Ionicons name="id-card-outline" color={colors.accent} size={30} />
                 <Text style={[styles.brand, { color: colors.ink }]}>X-Center ID</Text>
               </Pressable>
             ) : <>
-              <Ionicons name="shield-checkmark" color={colors.accent} size={30} />
+              <Ionicons name="id-card-outline" color={colors.accent} size={30} />
               <Text style={[styles.brand, { color: colors.ink }]}>X-Center ID</Text>
             </>}
             {demo && landing === false && <Text style={[styles.badge, { color: colors.accent, backgroundColor: colors.soft }]}>Sample data</Text>}
@@ -130,6 +132,7 @@ function Dashboard() {
           {!developer && landing === true && <>
             <Landing open={openWebApp} />
             {button('Developer apps', 'code-slash-outline', () => setDeveloper(true))}
+            {button('Sample apps', 'apps-outline', () => { void Linking.openURL(window.location.origin + '/samples'); })}
           </>}
           {!isWeb && !intro && !demo && nativeTab !== 'account' && <>
             <Text accessibilityRole="header" style={[styles.heading, { color: colors.ink }]}>{tabs.find(({ id }) => id === nativeTab)?.name}</Text>

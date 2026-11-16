@@ -1,4 +1,6 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
+import { openEmailVerification } from './email-verification.mjs';
+import { validateProfile } from './identity-profile.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import {
   generateAuthenticationOptions, generateRegistrationOptions,
@@ -47,7 +49,7 @@ async function body(req) {
   throw new AccountError(400, 'Invalid request.');
 }
 
-export function createAccounts({ database, origin }) {
+export function createAccounts({ database, origin, sendVerification, profileKey }) {
   const url = new URL(origin);
   if (url.origin !== origin || url.protocol !== 'https:') throw new Error('Set the exact HTTPS account origin');
   const rpID = url.hostname;
@@ -61,11 +63,43 @@ export function createAccounts({ database, origin }) {
       created INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS account_sessions (hash TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES accounts(id),
       created INTEGER NOT NULL, expires INTEGER NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS identity_profiles (
+      owner TEXT PRIMARY KEY REFERENCES accounts(id), username TEXT UNIQUE NOT NULL,
+      given_name TEXT NOT NULL, surname TEXT NOT NULL, age_range TEXT NOT NULL
+    ) STRICT;
     CREATE TABLE IF NOT EXISTS verified_emails (owner TEXT NOT NULL REFERENCES accounts(id),
       address TEXT PRIMARY KEY, verified INTEGER NOT NULL) STRICT;
   `);
+  const verification = openEmailVerification(db,{ send:sendVerification, origin });
   const q = (sql) => db.prepare(sql);
   const account = q('SELECT name FROM accounts WHERE id=?');
+  const readProfile = q('SELECT username,given_name AS givenName,surname,age_range AS ageRange FROM identity_profiles WHERE owner=?');
+  if (profileKey && profileKey.length !== 32) throw new Error('Invalid profile encryption key');
+  const profileContext = (owner, username) => Buffer.from(JSON.stringify(['authnjs.profile.v1',owner,username]));
+  function profile(owner) {
+    const row = readProfile.get(owner);
+    const prefix = 'profile-v1:';
+    if (!row?.givenName.startsWith(prefix)) return row;
+    const packed = Buffer.from(row.givenName.slice(prefix.length),'base64url');
+    const cipher = createDecipheriv('aes-256-gcm',profileKey,packed.subarray(0,12));
+    cipher.setAAD(profileContext(owner,row.username));
+    cipher.setAuthTag(packed.subarray(12,28));
+    return {username:row.username,...JSON.parse(Buffer.concat([cipher.update(packed.subarray(28)),cipher.final()]).toString())};
+  }
+  function writeProfile(owner,{username,givenName,surname,ageRange}) {
+    if (!profileKey) {
+      insertProfile.run(owner,username,givenName,surname,ageRange);
+      return;
+    }
+    const nonce = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm',profileKey,nonce);
+    cipher.setAAD(profileContext(owner,username));
+    const data = Buffer.concat([cipher.update(JSON.stringify({givenName,surname,ageRange})),cipher.final()]);
+    const envelope = Buffer.concat([nonce,cipher.getAuthTag(),data]).toString('base64url');
+    insertProfile.run(owner,username,'profile-v1:'+envelope,'','');
+  }
+  const insertProfile = q('INSERT INTO identity_profiles VALUES (?,?,?,?,?)');
+  const reservedNames = (process.env.AUTHNJS_RESERVED_USERNAMES ?? '').split(',').map((name) => name.trim().toLowerCase());
   const keys = q('SELECT id,label,created,transports FROM passkeys WHERE owner=? ORDER BY created,id');
   const key = q('SELECT * FROM passkeys WHERE id=?');
   const emails = q('SELECT address,verified FROM verified_emails WHERE owner=? ORDER BY verified');
@@ -120,6 +154,7 @@ export function createAccounts({ database, origin }) {
       if (!active) return { account: null };
       return { account: {
         name: account.get(active.owner).name,
+        profile: profile(active.owner) ?? null,
         passkeys: keys.all(active.owner).map(({ id, label, created }) => ({ id, label, created })),
         emails: emails.all(active.owner),
       } };
@@ -135,7 +170,23 @@ export function createAccounts({ database, origin }) {
     }
     if (pathname === '/account/email') {
       requireCondition(active, 401, 'Sign in first.');
-      throw new AccountError(503, 'Email verification is unavailable. No address was saved.');
+      const outcome = await verification.start(active.owner,input.email);
+      if (!outcome.ok) throw new AccountError(outcome.status,outcome.error);
+      return outcome;
+    }
+    if (pathname === '/account/email/confirm') {
+      requireCondition(active,401,'Sign in first.');
+      requireCondition(verification.confirm(active.owner,input.token),400,'The verification link was invalid, expired or already used.');
+      return { ok:true };
+    }
+    if (pathname === '/account/profile') {
+      recent(active);
+      requireCondition(!profile(active.owner),409,'This account already has a profile.');
+      const candidate = validateProfile(input,reservedNames);
+      requireCondition(!candidate.error,422,candidate.error);
+      requireCondition(!q('SELECT 1 FROM identity_profiles WHERE username=?').get(candidate.username),409,'This username is unavailable.');
+      writeProfile(active.owner,candidate);
+      return { ok:true };
     }
     if (pathname === '/account/passkey/remove') {
       recent(active);
@@ -160,15 +211,21 @@ export function createAccounts({ database, origin }) {
       const name = typeof input.name === 'string' ? input.name.trim() : '';
       requireCondition(name.length >= 1 && name.length <= 64 && !/[\u0000-\u001f\u007f]/.test(name), 422,
         action === 'signup' ? 'Enter an account name.' : 'Enter a passkey name.');
+      let newProfile;
+      if (action === 'signup') {
+        newProfile = validateProfile(input, reservedNames);
+        requireCondition(!newProfile.error, 422, newProfile.error);
+        requireCondition(!q('SELECT 1 FROM identity_profiles WHERE username=?').get(newProfile.username), 409, 'This username is unavailable.');
+      }
       const owner = active?.owner ?? randomUUID();
       const options = await generateRegistrationOptions({
         rpName: 'X-Center ID', rpID, userID: new TextEncoder().encode(owner),
-        userName: action === 'signup' ? name : account.get(owner).name,
+        userName: newProfile?.username ?? profile(owner)?.username ?? account.get(owner).name,
         attestationType: 'none',
         excludeCredentials: keys.all(owner).map(({ id, transports }) => ({ id, transports: JSON.parse(transports) })),
         authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
       });
-      prepare(res, { action, owner, name, expected: options.challenge, sessionHash: active?.hash });
+      prepare(res, { action, owner, name, newProfile, expected: options.challenge, sessionHash: active?.hash });
       return options;
     }
     requireCondition(pathname.endsWith('/finish'), 404, 'Account route unavailable.');
@@ -198,7 +255,12 @@ export function createAccounts({ database, origin }) {
     const { credential } = result.registrationInfo;
     db.exec('BEGIN IMMEDIATE');
     try {
-      if (action === 'signup') q('INSERT INTO accounts VALUES (?,?,?)').run(challenge.owner, challenge.name, now());
+      if (action === 'signup') {
+        const { username } = challenge.newProfile;
+        q('INSERT INTO accounts VALUES (?,?,?)').run(challenge.owner,username,now());
+        requireCondition(!q('SELECT 1 FROM identity_profiles WHERE username=?').get(username), 409, 'This username is unavailable.');
+        writeProfile(challenge.owner,challenge.newProfile);
+      }
       requireCondition(keys.all(challenge.owner).length < 20, 409, 'Passkey limit reached.');
       q('INSERT INTO passkeys VALUES (?,?,?,?,?,?,?)').run(credential.id, challenge.owner,
         action === 'signup' ? 'First passkey' : challenge.name, credential.publicKey, credential.counter,
@@ -213,7 +275,7 @@ export function createAccounts({ database, origin }) {
     return { ok: true };
   }
 
-  return async (req, res, pathname) => {
+  async function handle(req, res, pathname) {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -224,5 +286,13 @@ export function createAccounts({ database, origin }) {
       if (res.statusCode === 500) console.error('account_request_failed', error?.constructor?.name);
       res.end(JSON.stringify({ error: error instanceof AccountError ? error.message : 'Account service error.' }));
     }
+  }
+  return {
+    handle,
+    current: (req) => session(req),
+    identity(owner) {
+      const found = profile(owner);
+      return found ? { ...found, emails: emails.all(owner) } : null;
+    },
   };
 }

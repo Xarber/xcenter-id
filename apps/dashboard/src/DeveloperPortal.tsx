@@ -15,14 +15,12 @@ export default function DeveloperPortal({ back }: { back: () => void }) {
   const [notice, setNotice] = useState('Checking developer access…');
   const [name, setName] = useState('');
   const [callback, setCallback] = useState('');
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [credentials, setCredentials] = useState<{ clientId: string; clientSecret: string } | null>(null);
   const [saving, setSaving] = useState(false);
-  const enabled = process.env.EXPO_PUBLIC_AUTHNJS_DEVELOPER_PORTAL === 'enabled';
+
 
   useEffect(() => {
-    if (!enabled) {
-      setNotice('Registration opens when the identity service is connected.');
-      return;
-    }
     const controller = new AbortController();
     fetch(endpoint, { credentials: 'same-origin', signal: controller.signal })
       .then(async (response) => {
@@ -34,7 +32,7 @@ export default function DeveloperPortal({ back }: { back: () => void }) {
       })
       .catch(() => { if (!controller.signal.aborted) setNotice('Sign in through the developer account service to register an app.'); });
     return () => controller.abort();
-  }, [enabled]);
+  }, []);
 
   async function submit() {
     if (saving || !apps) return;
@@ -59,6 +57,37 @@ export default function DeveloperPortal({ back }: { back: () => void }) {
     }
   }
 
+  async function activate(id: string) {
+    setNotice('Checking the DNS record…');
+    setSaving(true);
+    try {
+      const result = await fetch(endpoint + '/' + id + '/verify', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'X-AuthNJS-Request': 'developer-portal' },
+      });
+      if (!result.ok) throw new Error();
+      const issued = await result.json();
+      setCredentials(issued);
+      setApps((previous) => (previous ?? []).map((app) => app.id === id
+        ? { ...app, status: 'active', client: issued.clientId } : app));
+      setNotice('App activated.');
+    } catch {
+      setNotice('Verification failed. Confirm that the public TXT record matches and try again after thirty seconds.');
+    } finally { setSaving(false); }
+  }
+
+  async function revoke(id: string) {
+    setSaving(true);
+    try {
+      const result = await fetch(endpoint + '/' + id + '/revoke', {method:'POST',headers:{'X-AuthNJS-Request':'developer-portal'}});
+      if (!result.ok) throw new Error();
+      setApps((previous) => (previous ?? []).map((app) => app.id === id ? { ...app, status:'revoked' } : app));
+      setCredentials(null);
+      setNotice('App access revoked.');
+    } catch { setNotice('Could not revoke this app.'); }
+    finally { setSaving(false); setRevoking(null); }
+  }
+
   function action(label: string, handler: () => void, disabled = false) {
     return <Pressable accessibilityRole="button" disabled={disabled} accessibilityState={{ disabled }}
       onPress={handler} style={({ pressed }) => [styles.button, { borderColor: border, opacity: disabled || pressed ? 0.6 : 1 }]}>
@@ -69,7 +98,7 @@ export default function DeveloperPortal({ back }: { back: () => void }) {
   return <Animated.View entering={entering} style={styles.content}>
     {action('Back to X-Center ID', back)}
     <Text accessibilityRole="header" style={[styles.title, { color: ink }]}>Developer apps</Text>
-    <Text style={{ color: ink }}>Register your application and its HTTPS callback. Review and activation are required before your app can request access to shared data.</Text>
+    <Text style={{ color: ink }}>Register an exact HTTPS callback. 1. Register an exact HTTPS callback. 2. Publish the DNS ownership record. 3. Activate your app and save its one-time credentials in your backend’s secret storage.</Text>
     {apps && <>
       <Text style={{ color: ink }}>Application name</Text>
       <TextInput accessibilityLabel="Application name" style={[styles.input, { color: ink, borderColor: border }]} value={name} onChangeText={setName} maxLength={80} />
@@ -80,8 +109,24 @@ export default function DeveloperPortal({ back }: { back: () => void }) {
       {apps.map((app) => <View key={app.id} style={[styles.item, { borderColor: border }]}>
         <Text style={{ color: ink, fontWeight: '700' }}>{app.name}</Text>
         <Text style={{ color: ink }}>{app.status}{app.client ? ' · ' + app.client : ''}</Text>
+        {app.status === 'active' && (revoking === app.id ? <>
+          <Text style={{color:ink}}>This immediately disables sign-in and data access for this client.</Text>
+          {action('Confirm revoke', () => { void revoke(app.id); }, saving)}
+          {action('Cancel', () => setRevoking(null), saving)}
+        </> : action('Revoke app', () => setRevoking(app.id), saving))}
+        {app.status === 'pending' && <>
+          <Text selectable style={{ color: ink }}>Name: {'_xcenter-id.' + new URL(app.callback).hostname}</Text>
+          <Text selectable style={{ color: ink }}>TXT: {'xcenter-id=' + app.id}</Text>
+          {action('Verify domain and activate', () => { void activate(app.id); }, saving)}
+        </>}
       </View>)}
     </>}
+    {credentials && <View style={[styles.item, { borderColor: border }]}>
+      <Text style={{ color: ink }}>Save the client secret now. It is displayed once.</Text>
+      <Text selectable style={{ color: ink }}>{credentials.clientId}</Text>
+      <Text selectable style={{ color: ink }}>{credentials.clientSecret}</Text>
+      {action('Hide credentials', () => setCredentials(null))}
+    </View>}
     {!!notice && <Text accessibilityLiveRegion="polite" style={{ color: ink }}>{notice}</Text>}
   </Animated.View>;
 }

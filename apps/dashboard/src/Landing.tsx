@@ -37,7 +37,7 @@ export default function Landing({ open }: { open: () => void }) {
   return (
     <Animated.View entering={FadeIn.duration(180).reduceMotion(ReduceMotion.System)} style={styles.page}>
       <View style={[styles.hero, { backgroundColor: dark ? '#142744' : '#dce9ff', borderColor: border }]}>
-        <Ionicons name="shield-checkmark-outline" size={40} color={accent} />
+        <Ionicons name="id-card-outline" size={40} color={accent} />
         <Text accessibilityRole="header" style={[styles.title, { color: ink }]}>One account. You decide what apps can access.</Text>
         <Text style={[styles.summary, { color: secondary }]}>Review your security, connected apps and sharing permissions from the X-Center ID dashboard.</Text>
         <View style={styles.actions}>

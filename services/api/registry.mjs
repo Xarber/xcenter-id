@@ -12,6 +12,7 @@ export function openRegistry(path) {
   `);
   const add = db.prepare('INSERT INTO clients (id, developer, name, callback) SELECT ?, ?, ?, ? WHERE (SELECT count(*) FROM clients WHERE developer = ?) < 30');
   const list = db.prepare('SELECT id, name, callback, client, status FROM clients WHERE developer = ? ORDER BY name, id');
+  const lookup = db.prepare('SELECT id,name,callback,client,status FROM clients WHERE id=? AND developer=?');
   const active = db.prepare("SELECT 1 FROM clients WHERE client = ? AND status = 'active'");
   const approve = db.prepare("UPDATE clients SET client = ?, status = 'active' WHERE id = ? AND status = 'pending'");
   const revoke = db.prepare("UPDATE clients SET status = 'revoked' WHERE id = ? AND status = 'active'");
@@ -23,7 +24,10 @@ export function openRegistry(path) {
         ? { id, name, callback, status: 'pending' }
         : null;
     },
+    lookup: (owner,id) => lookup.get(id,owner),
     list: (developer) => list.all(developer),
+    published: () => db.prepare("SELECT client,name FROM clients WHERE status='active' ORDER BY name,client LIMIT 200").all(),
+    revokeOwned: (owner,id) => db.prepare("UPDATE clients SET status='revoked' WHERE developer=? AND id=? AND status='active'").run(owner,id).changes === 1,
     has: (client) => Boolean(active.get(client)),
     approve: (id, client) => approve.run(client, id).changes === 1,
     revoke: (id) => revoke.run(id).changes === 1,
