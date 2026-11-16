@@ -1,0 +1,168 @@
+{
+  "uadsVersion": "2026-11-16-instructions",
+  "manifestVersion": 1,
+  "project": {
+    "name": "AuthNJS",
+    "repository": "Xarber/AuthNJS",
+    "profiles": [
+      "web-app",
+      "mobile-app",
+      "backend-service"
+    ],
+    "platforms": [
+      "web",
+      "ios",
+      "android"
+    ],
+    "framework": "Legacy Node.js and isolated Expo SDK 58 dashboard",
+    "hosting": "X-Center planned"
+  },
+  "features": {
+    "legacyIdentity": "legacy",
+    "sampleDashboard": "implemented",
+    "passwordlessIdentity": "planned",
+    "sharedDataService": "planned",
+    "pwa": "planned"
+  },
+  "distribution": {
+    "githubReleases": "pending authorization and verification"
+  },
+  "quality": [
+    "schema and references",
+    "dashboard type check",
+    "Expo dependency alignment",
+    "sample data tests",
+    "dependency audit"
+  ],
+  "requirements": [
+    {
+      "id": "UADS-DOC-001",
+      "applicability": "required",
+      "state": "pending",
+      "references": [
+        "docs/LEGACY_REVIEW.md"
+      ]
+    },
+    {
+      "id": "UADS-CI-001",
+      "applicability": "required",
+      "state": "pending",
+      "references": [
+        "docs/ACTIVE_TASKS.md"
+      ]
+    },
+    {
+      "id": "UADS-PLAT-001",
+      "applicability": "required",
+      "state": "pending",
+      "references": [
+        "docs/DASHBOARD.md"
+      ]
+    },
+    {
+      "id": "UADS-PLAT-002",
+      "applicability": "required",
+      "state": "pending",
+      "references": [
+        "docs/ACTIVE_TASKS.md"
+      ]
+    },
+    {
+      "id": "UADS-UI-001",
+      "applicability": "required",
+      "state": "pending",
+      "references": [
+        "docs/DASHBOARD.md"
+      ]
+    },
+    {
+      "id": "UADS-UI-002",
+      "applicability": "required",
+      "state": "pending",
+      "references": [
+        "docs/DASHBOARD.md"
+      ]
+    },
+    {
+      "id": "UADS-UI-003",
+      "applicability": "required",
+      "state": "pending",
+      "references": [
+        "docs/ACTIVE_TASKS.md"
+      ]
+    },
+    {
+      "id": "UADS-DEV-001",
+      "applicability": "required",
+      "state": "pending",
+      "references": [
+        "docs/ACTIVE_TASKS.md"
+      ]
+    },
+    {
+      "id": "UADS-DEV-002",
+      "applicability": "required",
+      "state": "pending",
+      "references": [
+        "docs/ACTIVE_TASKS.md"
+      ]
+    },
+    {
+      "id": "UADS-DATA-001",
+      "applicability": "required",
+      "state": "pending",
+      "references": [
+        "docs/DASHBOARD.md"
+      ]
+    },
+    {
+      "id": "UADS-SEC-001",
+      "applicability": "required",
+      "state": "pending",
+      "references": [
+        "docs/AUTHNJS_REDEVELOPMENT_PLAN.md"
+      ]
+    },
+    {
+      "id": "UADS-SEC-002",
+      "applicability": "required",
+      "state": "pending",
+      "references": [
+        "docs/AUTHNJS_REDEVELOPMENT_PLAN.md"
+      ]
+    },
+    {
+      "id": "UADS-QA-001",
+      "applicability": "required",
+      "state": "pending",
+      "references": [
+        "docs/DASHBOARD.md"
+      ]
+    },
+    {
+      "id": "UADS-REL-001",
+      "applicability": "conditional",
+      "state": "pending",
+      "references": [
+        "docs/ACTIVE_TASKS.md"
+      ]
+    },
+    {
+      "id": "UADS-DIST-001",
+      "applicability": "conditional",
+      "state": "pending",
+      "references": [
+        "docs/ACTIVE_TASKS.md"
+      ]
+    },
+    {
+      "id": "UADS-OPS-001",
+      "applicability": "conditional",
+      "state": "pending",
+      "references": [
+        "docs/AUTHNJS_REDEVELOPMENT_PLAN.md"
+      ]
+    }
+  ],
+  "exceptions": []
+}

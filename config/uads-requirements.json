@@ -1,0 +1,114 @@
+[
+  {
+    "id": "UADS-DOC-001",
+    "section": 4,
+    "title": "Reusable project context",
+    "applicability": "required",
+    "verification": "Review repository inventory and validate Markdown links"
+  },
+  {
+    "id": "UADS-CI-001",
+    "section": 8,
+    "title": "Build start gate",
+    "applicability": "required",
+    "verification": "Review ordered queue and record build prerequisite"
+  },
+  {
+    "id": "UADS-PLAT-001",
+    "section": 10,
+    "title": "Multiplatform dashboard",
+    "applicability": "required",
+    "verification": "Run browser and installed iOS and Android flows"
+  },
+  {
+    "id": "UADS-PLAT-002",
+    "section": 32,
+    "title": "Installable web app",
+    "applicability": "required",
+    "verification": "Verify manifest, installation, offline fallback and updates"
+  },
+  {
+    "id": "UADS-UI-001",
+    "section": 42,
+    "title": "Accessible interface",
+    "applicability": "required",
+    "verification": "Test keyboard, screen reader, contrast, scaling and reduced motion"
+  },
+  {
+    "id": "UADS-UI-002",
+    "section": 36,
+    "title": "Purposeful motion",
+    "applicability": "required",
+    "verification": "Check transitions and Reduced Motion on target platforms"
+  },
+  {
+    "id": "UADS-UI-003",
+    "section": 37,
+    "title": "Onboarding and authentic screenshots",
+    "applicability": "required",
+    "verification": "Verify first launch and capture official screenshots"
+  },
+  {
+    "id": "UADS-DEV-001",
+    "section": 15,
+    "title": "Developer Options",
+    "applicability": "required",
+    "verification": "Verify activation, expiry and protected diagnostics"
+  },
+  {
+    "id": "UADS-DEV-002",
+    "section": 35,
+    "title": "Developer Ideas",
+    "applicability": "required",
+    "verification": "Verify persistence and import and export"
+  },
+  {
+    "id": "UADS-DATA-001",
+    "section": 20,
+    "title": "Sample data isolation",
+    "applicability": "required",
+    "verification": "Inspect data sources and verify sample mutations remain local"
+  },
+  {
+    "id": "UADS-SEC-001",
+    "section": 43,
+    "title": "Authorization enforcement",
+    "applicability": "required",
+    "verification": "Test account, client, resource and revocation boundaries"
+  },
+  {
+    "id": "UADS-SEC-002",
+    "section": 43,
+    "title": "Passwordless credentials",
+    "applicability": "required",
+    "verification": "Verify platform passkeys and physical FIDO keys"
+  },
+  {
+    "id": "UADS-QA-001",
+    "section": 42,
+    "title": "Source quality checks",
+    "applicability": "required",
+    "verification": "Run dashboard checks and retain CI results"
+  },
+  {
+    "id": "UADS-REL-001",
+    "section": 44,
+    "title": "Release validation",
+    "applicability": "conditional",
+    "verification": "Validate artifacts when a release is authorized"
+  },
+  {
+    "id": "UADS-DIST-001",
+    "section": 39,
+    "title": "Distribution synchronization",
+    "applicability": "conditional",
+    "verification": "Verify only authorized published distribution channels"
+  },
+  {
+    "id": "UADS-OPS-001",
+    "section": 45,
+    "title": "Production monitoring and recovery",
+    "applicability": "conditional",
+    "verification": "Verify production health and an isolated restore"
+  }
+]
