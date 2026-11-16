@@ -1,6 +1,6 @@
 # X-Center ID public deployment
 
-The live issuer is https://id.xcenter.it. Nginx terminates TLS using the appliance's existing wildcard certificate and routes this host to revision 9aa9969 on loopback 18793. Rollback uses container `xcenter-id-public-rollback-1e940dd` and `/srv/xcenter/infra/changes/id.xcenter.it.before-9aa9969.conf`. Start the rollback container and verify its local health before restoring Nginx routing. The versioned exports live in `/srv/xcenter/apps/xcenter-id/releases/`. Persistent SQLite databases live in `/srv/xcenter/data/xcenter-id-public`. Signing, storage, cookie and pairwise-subject keys stay under the protected public identity secret directory. Preserve the subject key across upgrades. Protect the stable relying-party domain.
+The live issuer is https://id.xcenter.it. Nginx terminates TLS using the appliance's existing wildcard certificate and routes this host to revision 9745b7f on loopback 18794. Rollback uses container `xcenter-id-public-rollback-9aa9969` and `/srv/xcenter/infra/changes/id.xcenter.it.before-9745b7f.conf`. Start the rollback container and verify its local health before restoring Nginx routing. The versioned exports live in `/srv/xcenter/apps/xcenter-id/releases/`. Persistent SQLite databases live in `/srv/xcenter/data/xcenter-id-public`. Signing, storage, cookie and pairwise-subject keys stay under the protected public identity secret directory. Preserve the subject key across upgrades. Protect the stable relying-party domain.
 
 The preexisting private account service still uses its own database and hostname. Browser credentials created there are scoped to its relying-party domain. Re-enrollment or a verified account migration is needed for those users on the public origin.
 
@@ -17,3 +17,7 @@ The daily timer takes SQLite online snapshots and verifies each copy with SQLite
 ## Mail
 
 The dedicated SMTP container listens on the appliance and negotiates STARTTLS. Its accepted domains are mail.xcenter.it and hme.xcenter.it. The internet probe still received connection refused on TCP 25 after the service started. The root domain uses iCloud MX and was left in place. The public identity service does not advertise active inbox routing, aliases or verification delivery until an external path and configured sender are verified. Certificate renewal must refresh the protected SMTP copy before internet mail activation.
+
+## Dashboard follow-up
+
+Public Chrome verification for revision 9745b7f covered scrolling at 390×510, Reduced Motion and the public sample sign-in redirect. Staged Chrome verified passkey management, nested file uploads, third-party consent and durable sharing, structured sample records, deletion and app sign-out. The 11 API tests and dashboard typecheck passed. No physical device, external security key or standalone PWA fullscreen validation was performed.
