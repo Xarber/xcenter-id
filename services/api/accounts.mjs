@@ -49,7 +49,7 @@ async function body(req) {
   throw new AccountError(400, 'Invalid request.');
 }
 
-export function createAccounts({ database, origin, sendVerification, profileKey }) {
+export function createAccounts({ database, origin, sendVerification, profileKey, outboundMail }) {
   const url = new URL(origin);
   if (url.origin !== origin || url.protocol !== 'https:') throw new Error('Set the exact HTTPS account origin');
   const rpID = url.hostname;
@@ -157,6 +157,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey 
         profile: profile(active.owner) ?? null,
         passkeys: keys.all(active.owner).map(({ id, label, created }) => ({ id, label, created })),
         emails: emails.all(active.owner),
+        canSendMail: !!outboundMail,
       } };
     }
 
@@ -167,6 +168,14 @@ export function createAccounts({ database, origin, sendVerification, profileKey 
       if (active) removeSession.run(active.hash);
       setCookie(res, '__Host-authnjs', '', 0);
       return { ok: true };
+    }
+    if (pathname === '/account/mail/send') {
+      requireCondition(active,401,'Sign in first.');
+      const identity = profile(active.owner);
+      requireCondition(outboundMail && identity,503,'Mail sending is unavailable.');
+      const result = await outboundMail.send(active.owner,identity.username,input);
+      if (!result.ok) throw new AccountError(result.status,result.error);
+      return result;
     }
     if (pathname === '/account/email') {
       requireCondition(active, 401, 'Sign in first.');

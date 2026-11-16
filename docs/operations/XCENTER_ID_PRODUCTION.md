@@ -1,6 +1,6 @@
 # X-Center ID public deployment
 
-The live issuer is https://id.xcenter.it. Nginx terminates TLS using the appliance's existing wildcard certificate and routes this host to the identity container on loopback 18791. The versioned exports live in `/srv/xcenter/apps/xcenter-id/releases/`. Persistent SQLite databases live in `/srv/xcenter/data/xcenter-id-public`. Signing, storage, cookie and pairwise-subject keys stay under the protected public identity secret directory. Preserve the subject key across upgrades. Protect the stable relying-party domain.
+The live issuer is https://id.xcenter.it. Nginx terminates TLS using the appliance's existing wildcard certificate and routes this host to revision 1e940dd on loopback 18792. The previous b7b5a9a container and Nginx configuration are retained for rollback. The versioned exports live in `/srv/xcenter/apps/xcenter-id/releases/`. Persistent SQLite databases live in `/srv/xcenter/data/xcenter-id-public`. Signing, storage, cookie and pairwise-subject keys stay under the protected public identity secret directory. Preserve the subject key across upgrades. Protect the stable relying-party domain.
 
 The preexisting private account service still uses its own database and hostname. Browser credentials created there are scoped to its relying-party domain. Re-enrollment or a verified account migration is needed for those users on the public origin.
 

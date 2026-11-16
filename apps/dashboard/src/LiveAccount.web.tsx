@@ -8,6 +8,7 @@ type Account = {
   name: string;
   profile: null | { username: string; givenName: string; surname: string; ageRange: string };
   passkeys: { id: string; label: string }[];
+  canSendMail?: boolean;
   emails: { address: string; verified: number }[];
 };
 
@@ -33,6 +34,10 @@ export default function LiveAccount() {
   const [ageRange, setAgeRange] = useState('');
   const [email, setEmail] = useState('');
   const [showSharing, setShowSharing] = useState(false);
+  const [composing, setComposing] = useState(false);
+  const [to, setTo] = useState('');
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
   const [showInbox, setShowInbox] = useState(false);
   const [messages, setMessages] = useState<{ id: string; received: number; size: number }[] | null>(null);
   const [remove, setRemove] = useState<string | null>(null);
@@ -158,7 +163,20 @@ export default function LiveAccount() {
       {button(`Download email received ${new Date(received).toLocaleString()} (${size} bytes)`,
         () => window.location.assign('/account/inbox/' + id))}
     </View>) : <Text style={{color:ink}}>Your inbox is empty.</Text>)}
-    {button('Sign out', () => { void act(async () => { await request('logout', {}); setEmail(''); setName(''); setRemove(null); setShowInbox(false); setShowSharing(false); setMessages(null); await refresh(); }); })}
+    {account.canSendMail && button(composing ? 'Cancel draft' : 'Write email', () => setComposing(!composing))}
+    {account.canSendMail && composing && <View style={styles.group}>
+      {input('Recipient', to, setTo, true)}
+      {input('Subject', subject, setSubject)}
+      <Text style={{color:ink}}>Message</Text>
+      <TextInput multiline accessibilityLabel="Message" value={message} onChangeText={setMessage} maxLength={30000}
+        style={[styles.input,{minHeight:100,color:ink,borderColor:border}]} />
+      {button('Send email', () => { void act(async () => {
+        await request('mail/send',{to,subject,text:message});
+        setNotice('Your mail provider accepted the message.');
+        setComposing(false); setTo(''); setSubject(''); setMessage('');
+      }); },pending || !to.trim() || !subject.trim() || !message.trim())}
+    </View>}
+    {button('Sign out', () => { void act(async () => { await request('logout', {}); setEmail(''); setName(''); setRemove(null); setShowInbox(false); setShowSharing(false); setMessages(null); setComposing(false); setTo(''); setSubject(''); setMessage(''); await refresh(); }); })}
   </View>;
 }
 

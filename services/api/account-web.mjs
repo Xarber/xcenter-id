@@ -2,6 +2,7 @@ import { Resolver } from 'node:dns/promises';
 import { createServer } from 'node:http';
 import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { createOutboundMail } from './outbound-mail.mjs';
 import { createVerificationMailer } from './email-verification.mjs';
 import { createAccounts } from './accounts.mjs';
 import { openMailStore } from './mail-store.mjs';
@@ -16,6 +17,7 @@ const mailConfig = process.env.AUTHNJS_MAIL_CONFIG
   ? JSON.parse(readFileSync(process.env.AUTHNJS_MAIL_CONFIG,'utf8')) : null;
 const configuration = process.env.AUTHNJS_OIDC_CONFIG ? JSON.parse(readFileSync(process.env.AUTHNJS_OIDC_CONFIG, 'utf8')) : null;
 const accounts = createAccounts({
+  outboundMail:createOutboundMail(mailConfig),
   profileKey: configuration ? Buffer.from(configuration.profileKey,'hex') : null,
   sendVerification: createVerificationMailer(mailConfig?.submission),
   origin: process.env.AUTHNJS_ACCOUNT_ORIGIN,

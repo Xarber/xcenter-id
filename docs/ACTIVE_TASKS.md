@@ -35,8 +35,8 @@ Five-hour window reached 9% remaining and resets 16 November at 16:05:56 CET. We
 
 | Order and ID | Priority and request | State | Dependencies and next action |
 | --- | --- | --- | --- |
-| 15 AUTHN-015 | Replace shield branding with an original icon | Implemented | Layered identity-card SVG and raster exports. Verify the next integrated build. |
-| 16 AUTHN-016 | Expand identity profiles and OIDC consent | In Progress | Username reservation, profile fields and issuer integration. Verify exact callbacks, pairwise claims, age bands, and optional verified email in an isolated end-to-end flow. |
-| 17 AUTHN-017 | Ship actual sample apps, permissions, shared storage and developer onboarding | In Progress | Requires issuer callbacks, scoped grants and persisted app data. |
-| 18 AUTHN-018 | Provide inbound SMTP, outbound delivery, verified email and Hide My Email | In Progress | Root MX belongs to iCloud. Add isolated mail intake and submission, verify routing and reconcile existing recipients before changing DNS. |
-| 19 AUTHN-019 | Publish the production account platform at id.xcenter.it | Queued | Existing host serves X-Center fallback. Establish a dedicated virtual host only after functional, privacy, mail, backup and release checks. |
+| 15 AUTHN-015 | Replace shield branding with an original icon | Implemented | Layered identity-card SVG and raster exports deployed and fetched from public HTTPS. Native runtime remains pending. |
+| 16 AUTHN-016 | Expand identity profiles and OIDC consent | In Progress | Profile and OIDC exchange passed two-client virtual-authenticator tests. Mail-backed choices and physical security keys still need live verification. |
+| 17 AUTHN-017 | Ship actual sample apps, permissions, shared storage and developer onboarding | In Progress | Two sample apps passed stage OAuth, writes, grant/revoke, and shared-folder tests. Portal submission passed; public DNS-proof activation and developer revocation remain to be exercised end to end. |
+| 18 AUTHN-018 | Provide inbound SMTP, outbound delivery, verified email and Hide My Email | In Progress | Local SMTP and STARTTLS verified. Public port 25 is refused and the root MX remains iCloud. Configure routing and authenticate an SMTP submission provider before enabling public receive, verification and outbound. |
+| 19 AUTHN-019 | Publish the production account platform at id.xcenter.it | Implemented | Live web/OIDC revision 1e940dd verified. Daily SQLite snapshots active. Public mail, off-device restore and native artifacts remain open. |
