@@ -24,3 +24,5 @@ The Expo web export was the smallest build needed to verify the redesigned publi
 
 | 13 AUTHN-013 | Deploy a real passkey-first identity service and account settings | In Progress | Same-origin account backend and Expo Web passkey settings implemented. Verify enrollment and sign-in with a synthetic account in isolated storage before cutover. Email enrollment is unavailable until an ownership-verification transport is configured. |
 | 14 AUTHN-014 | Brand X-Center ID and add native tabs | Implemented | Editable icon, native tab bar and shared branding added. Run web and source checks, then validate native artifacts and device behavior. |
+
+AUTHN-013 deployed at ; browser tests passed against isolated X-Center storage. AUTHN-014 branding and tab code passed TypeScript. Pending work includes email verification delivery, OAuth and shared-data integration, account-backup validation, and native artifacts/device checks. Next action: configure and verify email ownership delivery, then connect OIDC and consent to the passkey session. See [live deployment](XCENTER_ID.md).
