@@ -1,0 +1,16 @@
+# Security findings and storage design
+
+The static review covered the legacy file save, upload, move, remove, list and download handlers, shared permissions, session lookup and encryption helpers. Historical keys and account records were left in place. No legacy endpoint was exercised.
+
+| Finding | Evidence and impact | Current protection |
+| --- | --- | --- |
+| Unreliable path confinement | The legacy handlers concatenate request-derived values into filesystem destinations after selective string removal. Move also builds a second destination and upload uses an original name. The code lacks a uniform containment check anchored at the authorized directory. The impact is potential access outside the selected app or account namespace. | The legacy listener is disabled by default; the replacement never interprets data supplied by applications as filesystem paths. |
+| Mixed trust and permissions | Legacy linking accepts app claims from caller inputs and permissions are checked independently inside handlers. Session metadata can be updated before the app credential is checked. | The replacement verifies issuer, token audience and registered client, then scopes prepared statements to the authenticated account and app. |
+| Legacy storage may contain plaintext | The legacy helper compresses content when encryption is omitted. Other branches use unauthenticated CBC with externally managed IVs and fallback behavior. The password verifier decodes stored passwords. | The replacement stores only new synthetic or authorized data. It never loads the legacy password or key data. |
+| Request-driven key mutation | Legacy handlers write a caller-provided custom key to a live key file and restore it later. Parallel requests or interruption can leave confusing state. | The replacement loads one managed key at startup, outside request control. Each record uses a fresh nonce and authenticated context. |
+
+## Encryption boundaries
+
+Saved-place payloads use a versioned AES-256-GCM envelope with a fresh 96-bit nonce and a 128-bit tag. Authenticated context includes account, source app, dataset, record ID and revision. Moving ciphertext between records or using a different key fails authentication. Schema version, owner and app IDs, grants and revisions remain relational metadata. Restrict filesystem access and encrypt database volumes and backups when that metadata needs confidentiality. This is server-side encryption at rest. The service can read authorized payloads. Key rotation, key version custody, disaster recovery and metadata encryption require completion before production.
+
+The legacy code and pages remain in `index.js` and `HTML/`. Treat them as restricted archive material. Before a live migration, determine whether any historical key, session, account record or archive remains sensitive or in use. The account artifact provenance and exploitability of the original handlers were not established by this review.

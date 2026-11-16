@@ -25,6 +25,9 @@ import deasync        from "deasync";
 import base32         from "hi-base32";
 import os             from "os";
 import checkDiskSpace from "check-disk-space";
+if (process.env.AUTHNJS_ENABLE_LEGACY !== "isolated-archive") {
+    throw new Error("AuthNJS legacy runtime is disabled. Use the replacement service and Expo dashboard.");
+}
 let    peerjs       = false;
 let    websocket    = false;
 try {
