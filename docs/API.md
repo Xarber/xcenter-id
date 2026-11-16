@@ -8,6 +8,7 @@ Requests use JSON and a bearer access token. The only unauthenticated route is `
 
 | Method and route | Action |
 | --- | --- |
+| GET / POST `/v1/developer/apps` | List your registrations or submit a pending HTTPS registration using an authorized developer token |
 | GET `/health` | Process health |
 | POST `/v1/records/saved-place` | Create a record in the calling application's namespace with `label`, `latitude` and `longitude` |
 | GET `/v1/records/saved-place` | List the app's own records. An optional registered `source` requires a live read grant for the destination. Pages contain up to 100 records. Send the returned `nextCursor` as `after` to continue. |
@@ -30,7 +31,7 @@ Run `npm ci` and `npm test` from `services/api` with Node 24. A production-like 
 | `AUTHNJS_USER_SCOPE` | Scope issued exclusively for authenticated end-user grants |
 | `AUTHNJS_AUDIENCE` | AuthNJS data service OAuth audience |
 | `AUTHNJS_CONSOLE_CLIENT` | Registered account console client ID |
-| `AUTHNJS_APP_CLIENTS` | Comma-separated registered application client IDs |
+| `AUTHNJS_DEVELOPER_CLIENT` | Separate confidential developer portal client |
 | `AUTHNJS_DATA_KEY_HEX` | 32-byte encryption key injected from secret storage |
 | `AUTHNJS_DATA_DIR` | Dedicated, operator-owned storage directory outside the checkout |
 | `AUTHNJS_PORT` | Loopback port, default 8787 |
@@ -44,3 +45,5 @@ The typed data API is an initial slice. Live passkey signup, recovery and sessio
 ## Verification
 
 Node 24 API tests passed for account and client isolation, grant creation and revocation, revision conflicts, ciphertext at rest, authentication failures on wrong key or record context, and signed token issuer/audience/time/user-scope validation. The dependency audit returned zero known findings at execution. Tests used synthetic accounts, temporary SQLite storage and a generated signing key. Live identity and deployment remain unverified.
+
+The [integration guide](INTEGRATION.md) defines the issuer policy and operator approval procedure for the live client registry. Production data access requires both an active registered client and the issuer-controlled confidential-client claim.

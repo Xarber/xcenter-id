@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRemoteJWKSet, jwtVerify, errors } from 'jose';
 import { openStore } from './store.mjs';
+import { openRegistry } from './registry.mjs';
 
 const dataset = 'saved-place.v1';
 const jsonLimit = 8192;
@@ -59,19 +60,35 @@ function savedPlace(body) {
   return { label: label.trim(), latitude, longitude };
 }
 
-export function createApi({ store, authenticate, apps, consoleClient }) {
+export function createApi({ store, authenticate, apps, consoleClient, developerClient, registry }) {
   return createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
       const method = req.method;
       if (method === 'GET' && url.pathname === '/health') return json(res, 200, { status: 'ok' });
+      const developerRoute = url.pathname === '/v1/developer/apps';
       const consoleRoute = url.pathname === '/v1/grants';
       const recordRoute = url.pathname === '/v1/records/saved-place';
       const recordId = url.pathname.match(/^\/v1\/records\/saved-place\/([^/]+)$/)?.[1];
-      if (!consoleRoute && !recordRoute && !recordId) throw new HttpError(404, 'not_found');
+      if (!developerRoute && !consoleRoute && !recordRoute && !recordId) throw new HttpError(404, 'not_found');
       const principal = await authenticate(req);
       if (!principal?.owner || !principal.client) throw new HttpError(401, 'invalid_token');
       const { owner, client } = principal;
+      if (developerRoute) {
+        if (!registry || client !== developerClient || principal.developer !== true) throw new HttpError(403, 'forbidden');
+        if (method === 'GET') return json(res, 200, { apps: registry.list(owner) });
+        if (method !== 'POST') throw new HttpError(405, 'method_not_allowed');
+        const { name, callback } = await readJson(req);
+        let target;
+        try { if (typeof callback === 'string' && callback.length <= 512) target = httpsUrl(callback); } catch {}
+        if (typeof name !== 'string' || !name.trim() || name.length > 80 || !target ||
+            !target.pathname || target.pathname === '/' || target.pathname.includes('*')) {
+          throw new HttpError(422, 'invalid_registration');
+        }
+        const app = registry.submit(owner, name.trim(), target.href);
+        if (!app) throw new HttpError(409, 'registration_quota_reached');
+        return json(res, 201, app);
+      }
       if (consoleRoute) {
         if (client !== consoleClient) throw new HttpError(403, 'forbidden');
         if (method === 'GET') return json(res, 200, { grants: store.listGrants(owner) });
@@ -92,7 +109,7 @@ export function createApi({ store, authenticate, apps, consoleClient }) {
         return json(res, 200, { source, destination, dataset, expires });
       }
 
-      if (!apps.has(client)) throw new HttpError(403, 'forbidden');
+      if (!apps.has(client) || (registry && principal.confidential !== true)) throw new HttpError(403, 'forbidden');
       if (recordId) {
         if (!uuid.test(recordId)) throw new HttpError(404, 'not_found');
         if (method === 'PUT') {
@@ -157,7 +174,12 @@ export function createAuthenticator({ issuer, audience, jwks, scope }) {
         typeof payload.scope !== 'string' || !payload.scope.split(/\s+/).includes(scope)) {
       throw new HttpError(401, 'invalid_token');
     }
-    return { owner: payload.sub, client: payload.azp };
+    return {
+      owner: payload.sub,
+      client: payload.azp,
+      developer: payload.authnjs_developer === true,
+      confidential: payload.authnjs_confidential === true,
+    };
   };
 }
 
@@ -167,8 +189,8 @@ function start(env) {
   const jwks = createRemoteJWKSet(httpsUrl(required(env, 'AUTHNJS_JWKS_URL')));
   const audience = required(env, 'AUTHNJS_AUDIENCE');
   const consoleClient = required(env, 'AUTHNJS_CONSOLE_CLIENT');
-  const apps = new Set(required(env, 'AUTHNJS_APP_CLIENTS').split(',').map((part) => part.trim()));
-  if (apps.has('') || apps.has(consoleClient)) throw new Error('Invalid app client configuration');
+  const developerClient = required(env, 'AUTHNJS_DEVELOPER_CLIENT');
+  if (developerClient === consoleClient) throw new Error('Use separate developer and account console clients');
   const keyHex = required(env, 'AUTHNJS_DATA_KEY_HEX');
   if (!/^[0-9a-f]{64}$/i.test(keyHex)) throw new Error('Invalid data key');
   const directory = resolve(required(env, 'AUTHNJS_DATA_DIR'));
@@ -179,7 +201,9 @@ function start(env) {
   const authenticate = createAuthenticator({
     issuer, audience, jwks, scope: required(env, 'AUTHNJS_USER_SCOPE'),
   });
-  createApi({ store, authenticate, apps, consoleClient })
+  const registry = openRegistry(databasePath);
+  const apps = { has: (client) => client !== consoleClient && client !== developerClient && registry.has(client) };
+  createApi({ store, authenticate, apps, consoleClient, developerClient, registry })
     .listen(Number(env.AUTHNJS_PORT ?? 8787), '127.0.0.1', () => console.log('AuthNJS API listening'));
 }
 

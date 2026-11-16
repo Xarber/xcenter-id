@@ -108,10 +108,54 @@ test('signed tokens require the configured issuer, audience, time and user scope
     return authenticate({ headers: { authorization: 'Bearer ' + token } });
   }
 
-  assert.deepEqual(await request(), { owner: 'alice', client: 'source' });
+  assert.deepEqual(await request(), { owner: 'alice', client: 'source', developer: false, confidential: false });
   await assert.rejects(request({}, 'https://other.example.test'));
   await assert.rejects(request({}, issuer, 'other-api'));
   await assert.rejects(request({}, issuer, audience, now - 700));
   await assert.rejects(request({ typ: 'ID' }));
   await assert.rejects(request({ scope: 'openid' }));
+});
+
+test('developer submissions cannot activate apps or assume a confidential client identity', async () => {
+  const { openRegistry } = await import('./registry.mjs');
+  const registry = openRegistry(':memory:');
+  const store = openStore(':memory:', randomBytes(32));
+  const identities = new Map([
+    ['developer', { owner: 'alice', client: 'developer-portal', developer: true }],
+    ['other', { owner: 'bob', client: 'developer-portal', developer: true }],
+    ['ordinary', { owner: 'alice', client: 'developer-portal' }],
+    ['public', { owner: 'alice', client: 'registered-client' }],
+    ['confidential', { owner: 'alice', client: 'registered-client', confidential: true }],
+  ]);
+  const server = createApi({ store, apps: registry, registry, consoleClient: 'console', developerClient: 'developer-portal',
+    authenticate: (req) => identities.get(req.headers.authorization),
+  }).listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    function call(token, path = 'developer/apps', method = 'GET', body) {
+      return fetch(`http://127.0.0.1:${server.address().port}/v1/${path}`, {
+        method, headers: { authorization: token, 'content-type': 'application/json' },
+        body: body && JSON.stringify(body),
+      });
+    }
+    assert.equal((await call('ordinary')).status, 403);
+    const request = { name: 'Example app', callback: 'https://example.test/auth/callback', client: 'registered-client', status: 'active' };
+    const result = await call('developer', 'developer/apps', 'POST', request);
+    assert.equal(result.status, 201);
+    const registration = await result.json();
+    assert.equal(registration.status, 'pending');
+    assert.equal(registration.client, undefined);
+    assert.deepEqual(await (await call('other')).json(), { apps: [] });
+    const path = 'records/saved-place';
+    assert.equal((await call('confidential', path)).status, 403);
+    assert.equal(registry.approve(registration.id, 'registered-client'), true);
+    assert.equal((await call('public', path)).status, 403);
+    assert.equal((await call('confidential', path)).status, 200);
+    assert.equal(registry.revoke(registration.id), true);
+    assert.equal((await call('confidential', path)).status, 403);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    registry.close();
+    store.close();
+  }
 });
