@@ -7,6 +7,8 @@ AuthNJS is an account and consent service concept. The legacy Node application c
 - [Security findings](SECURITY.md) covers file boundaries and encryption.
 - [Redevelopment plan](AUTHNJS_REDEVELOPMENT_PLAN.md) describes the planned passwordless identity service, Expo SDK and data-sharing contract.
 - [Dashboard development and testing](DASHBOARD.md) explains the Expo entry point, data isolation and checks.
+- [Integration guide](INTEGRATION.md) covers registering apps, trust, and integrating web and Expo clients.
+- [X-Center preview](XCENTER_PREVIEW.md) records how to access and roll back the deployed web shell.
 - [Active tasks](ACTIVE_TASKS.md) records current work and pending verification.
 - [UADS verification baseline](UADS_REQUIREMENTS.md) describes the current manifest and quality checks.
 

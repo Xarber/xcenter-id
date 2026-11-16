@@ -1,3 +1,5 @@
+import { AccountEntry } from '@authnjs/expo';
+import DeveloperPortal from './DeveloperPortal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState, type ComponentProps } from 'react';
@@ -27,6 +29,7 @@ const entrance = FadeIn.duration(180).reduceMotion(ReduceMotion.System);
 function Dashboard() {
   const colors = useColorScheme() === 'dark' ? dark : light;
   const wide = useWindowDimensions().width >= 740;
+  const [developer, setDeveloper] = useState(false);
   const [landing, setLanding] = useState<boolean | null>(isWeb ? null : false);
   const [intro, setIntro] = useState<boolean | null>(null);
   const [demo, setDemo] = useState(false);
@@ -108,7 +111,7 @@ function Dashboard() {
         <View style={styles.content}>
           <View style={styles.header}>
             {isWeb ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="AuthNJS home" onPress={() => setLanding(true)} style={styles.header}>
+              <Pressable accessibilityRole="button" accessibilityLabel="AuthNJS home" onPress={() => { setDeveloper(false); setLanding(true); }} style={styles.header}>
                 <Ionicons name="shield-checkmark" color={colors.accent} size={30} />
                 <Text style={[styles.brand, { color: colors.ink }]}>AuthNJS</Text>
               </Pressable>
@@ -118,8 +121,12 @@ function Dashboard() {
             </>}
             {demo && landing === false && <Text style={[styles.badge, { color: colors.accent, backgroundColor: colors.soft }]}>Sample data</Text>}
           </View>
-          {landing === true && <Landing open={openWebApp} />}
-          {landing === false && intro !== null && <Animated.View key={intro ? 'intro' : section?.id ?? 'overview'} entering={entrance} style={styles.stack}>
+          {developer && <DeveloperPortal back={() => setDeveloper(false)} />}
+          {!developer && landing === true && <>
+            <Landing open={openWebApp} />
+            {button('Developer apps', 'code-slash-outline', () => setDeveloper(true))}
+          </>}
+          {!developer && landing === false && intro !== null && <Animated.View key={intro ? 'intro' : section?.id ?? 'overview'} entering={entrance} style={styles.stack}>
             {section && button('Account overview', 'arrow-back', () => { setPending(null); setSection(null); })}
             <Text accessibilityRole="header" style={[styles.heading, { color: colors.ink }]}>{heading}</Text>
             {intro ? <>
@@ -129,10 +136,11 @@ function Dashboard() {
                 {button('Skip introduction', 'close', exitIntro)}
               </View>
             </> : !demo ? <>
-              {row('Account service unavailable', 'Explore the dashboard with sample data while sign-in is being developed.', 'cloud-offline-outline')}
+              <AccountEntry />
               <View style={styles.actions}>
                 {button('Explore sample dashboard', 'eye-outline', () => { setNotice(''); setDemo(true); })}
                 {button('View introduction', 'information-circle-outline', () => setIntro(true))}
+                {isWeb && button('Developer apps', 'code-slash-outline', () => setDeveloper(true))}
               </View>
             </> : section ? <>
               <Text style={[styles.secondary, { color: colors.muted }]}>{section.description}</Text>

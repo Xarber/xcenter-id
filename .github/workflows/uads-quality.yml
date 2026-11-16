@@ -21,6 +21,7 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             /apps/dashboard/
+            /packages/expo/
             /docs/
             /config/
             /scripts/validate-uads.py

@@ -1,0 +1,10 @@
+{
+  "name": "@authnjs/expo",
+  "version": "0.1.0",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "./index.tsx",
+  "types": "./index.tsx",
+  "files": ["index.tsx", "README.md", "LICENSE"],
+  "peerDependencies": { "react": "^19.0.0", "react-native": ">=0.83 <0.89" }
+}
