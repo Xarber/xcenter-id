@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+umask 077
+state=/srv/xcenter/data/xcenter-id-public
+snapshots=/srv/xcenter/data/xcenter-id-backups
+release=$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/app"}}{{.Source}}{{end}}{{end}}' xcenter-id-public)
+case "$release" in
+  /srv/xcenter/apps/xcenter-id/releases/*/api) ;;
+  *) exit 1 ;;
+esac
+disk=$(df -Pk "$snapshots" | awk 'NR==2 {print $4}')
+test "$disk" -ge 2097152
+name="snapshot-$(date -u +%Y%m%dT%H%M%SZ)"
+image=$(docker inspect --format '{{.Image}}' xcenter-id-public)
+docker run --rm --pull never --network none --user 1000:1000 --read-only --cap-drop ALL \
+  --security-opt no-new-privileges -v "$release:/app:ro" -v "$state:/state:ro" \
+  -v "$snapshots:/backup" "$image" node /app/backup.mjs /state "/backup/$name"

@@ -2,7 +2,7 @@ import { AccountEntry } from '@authnjs/expo';
 import { openBrowserAsync } from 'expo-web-browser';
 import { useState } from 'react';
 
-const accountUrl = 'https://xcenter-main-server-acer.tail91c405.ts.net:8443/';
+const accountUrl = process.env.EXPO_PUBLIC_XCENTER_ID_URL ?? 'https://id.xcenter.it/';
 
 export default function LiveAccount() {
   const [pending, setPending] = useState(false);

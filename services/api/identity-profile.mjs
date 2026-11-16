@@ -3,9 +3,9 @@ const reserved = new Set([
   'hostmaster', 'info', 'mailer-daemon', 'management', 'mail', 'noc', 'noreply', 'no-reply',
   'postmaster', 'privacy', 'root', 'security', 'support', 'webmaster', 'xarber', 'xcenter',
   'schoolmanager', 'scuola', 'scuola2u', 'scuola2g', 'authnjs', 'authnjso', 'authphp', 'xauth',
-  'aichat', 'aurea', 'assets', 'botanitags', 'chat', 'class', 'datapro', 'echo', 'exobot',
-  'fetch', 'fieldplay', 'hme', 'homeassistant', 'homebridge', 'homenet', 'id', 'logs',
-  'music', 'pages', 'pathway', 'persona', 'persona-sites', 'projects', 'proxy', 'res',
+  'aichat', 'app', 'aurea', 'assets', 'botanitags', 'chat', 'class', 'datapro', 'echo', 'exobot',
+  'db', 'fetch', 'fieldplay', 'harmony', 'hme', 'homeassistant', 'homebridge', 'homenet', 'id', 'logs',
+  'music', 'old', 'openrecode', 'pages', 'pathway', 'persona', 'persona-sites', 'projects', 'proxy', 'res',
   'respring', 's1tinfoil', 's2tinfoil', 's3tinfoil', 'sleepwell', 'ss', 'tempo',
   'tinfoil', 'unmasked', 'url', 'velunivo', 'wave', 'whasync',
 ]);

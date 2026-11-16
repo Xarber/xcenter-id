@@ -1,0 +1,9 @@
+[Unit]
+Description=Take a consistent X-Center ID SQLite snapshot
+Requires=xcenter-appliance-storage.target docker.service
+After=xcenter-appliance-storage.target docker.service
+RequiresMountsFor=/srv/xcenter/apps /srv/xcenter/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/xcenter-id-backup
