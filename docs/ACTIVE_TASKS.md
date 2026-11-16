@@ -15,8 +15,8 @@ Assignment opened 16 November 2026. Legacy source baseline `e617758`.
 
 | 9 AUTHN-009 | Stage AuthNJS on X-Center for testing | Implemented | Private web preview served over HTTPS at 6882dae. Browser verified developer navigation and account entry. Live API and account preview need a validated issuer and gateway. See [preview runbook](XCENTER_PREVIEW.md). |
 | 10 AUTHN-010 | Developer registration and app identity enforcement | Implemented | Pending registry, operator approval and API checks pass synthetic tests. Expo page requires authenticated gateway, trusted issuance policy and live verification. |
-| 11 AUTHN-011 | Reusable React Native package and integration documentation | Implemented | Dashboard consumes the package. Hosted session adapter and native build verification remain open. See [integration guide](INTEGRATION.md). |
-| 12 AUTHN-012 | Build native artifacts under §8 and §9 | Queued | Parallel device/simulator and APK/AAB workflow prepared. The authorized preview build can run on an isolated native-preview branch after §8 reconciliation. Android jobs require release signing secrets. Live identity remains an independent external deployment and verification dependency. |
+| 11 AUTHN-011 | Reusable React Native package and integration documentation | Implemented | Dashboard consumes the package. Native browser PKCE helper passes SDK 58 type checking. Live callback, backend token exchange, session storage and physical-device verification remain open. See [integration guide](INTEGRATION.md). |
+| 12 AUTHN-012 | Build native artifacts under §8 and §9 | Queued | [Run 43853292379](https://github.com/Xarber/AuthNJS/actions/runs/43853292379) submitted for 0762414. iOS jobs started. Both Android jobs stopped at signing validation before compiling. A subsequent SDK change needs its own verification when ready. Live identity remains an independent external dependency. |
 
 AUTHN-006 and the storage portion of AUTHN-007 moved ahead of live identity integration to address the requested security and data-integrity priority.
 

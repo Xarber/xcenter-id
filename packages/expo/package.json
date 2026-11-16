@@ -5,6 +5,32 @@
   "type": "module",
   "main": "./index.tsx",
   "types": "./index.tsx",
-  "files": ["index.tsx", "README.md", "LICENSE"],
-  "peerDependencies": { "react": "^19.0.0", "react-native": ">=0.83 <0.89" }
+  "files": [
+    "index.tsx",
+    "README.md",
+    "LICENSE",
+    "authorize-native.ts"
+  ],
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-native": ">=0.83 <0.89",
+    "expo-auth-session": "~58.0.18",
+    "expo-crypto": "~58.0.8",
+    "expo-web-browser": "~58.0.8"
+  },
+  "exports": {
+    ".": "./index.tsx",
+    "./authorize-native": "./authorize-native.ts"
+  },
+  "peerDependenciesMeta": {
+    "expo-auth-session": {
+      "optional": true
+    },
+    "expo-crypto": {
+      "optional": true
+    },
+    "expo-web-browser": {
+      "optional": true
+    }
+  }
 }

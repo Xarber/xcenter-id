@@ -21,7 +21,7 @@ The API also validates issuer, subject, signature, audience, expiration, token a
 
 - Install the shared [React Native package](../packages/expo/README.md) from a local checkout or a privately shared pack artifact. The AuthNJS dashboard uses the same component. The package exposes themed sign-in and account-creation entry points with loading and error states.
 - Use your approved host adapter to open the system authentication browser. Use an Expo development build to verify your app's verified Universal Link or Android App Link callback. Store host session credentials in OS-backed secure storage. The mobile app calls its own backend, which performs privileged data access. Never embed a confidential client credential in a mobile bundle.
-- The package currently supplies the shared screen and callback contract. A reusable hosted OIDC session adapter, account recovery screens and production consent wiring are pending. Use the [Expo AuthSession guide](https://docs.expo.dev/versions/v58.0.0/sdk/auth-session/) and [OAuth Security BCP](https://www.rfc-editor.org/rfc/rfc9700.html).
+- The package also includes a native system-browser authorization helper with PKCE S256, state and nonce. Host apps still need backend code exchange, session handling, hosted account recovery and production consent wiring. Use the [Expo AuthSession guide](https://docs.expo.dev/versions/v58.0.0/sdk/auth-session/) and [OAuth Security BCP](https://www.rfc-editor.org/rfc/rfc9700.html).
 
 ## Developer portal gateway contract
 

@@ -15,7 +15,7 @@
       "android"
     ],
     "framework": "Legacy Node.js and isolated Expo SDK 58 dashboard",
-    "hosting": "X-Center planned"
+    "hosting": "X-Center private web preview; authentication and API deployment pending"
   },
   "features": {
     "legacyIdentity": "legacy",
@@ -23,7 +23,10 @@
     "passwordlessIdentity": "planned",
     "sharedDataService": "implemented",
     "pwa": "implemented",
-    "webLanding": "implemented"
+    "webLanding": "implemented",
+    "developerRegistration": "implemented",
+    "sharedExpoUi": "implemented",
+    "nativeAuthorizationHelper": "implemented"
   },
   "distribution": {
     "githubReleases": "pending authorization and verification"

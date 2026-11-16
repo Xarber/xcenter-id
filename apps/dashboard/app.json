@@ -5,8 +5,18 @@
     "version": "0.1.0",
     "scheme": "authnjs-dashboard",
     "userInterfaceStyle": "automatic",
-    "ios": { "supportsTablet": true, "bundleIdentifier": "com.xarber.authnjs.dashboard" },
-    "android": { "package": "com.xarber.authnjs.dashboard" },
-    "web": { "bundler": "metro" }
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.xarber.authnjs.dashboard"
+    },
+    "android": {
+      "package": "com.xarber.authnjs.dashboard"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }
