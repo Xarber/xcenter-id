@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test src/*.test.mjs",
     "start": "expo start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "export:web": "expo export --platform web && node scripts/prepare-web.mjs"
   },
   "license": "AGPL-3.0-only",
   "type": "module",

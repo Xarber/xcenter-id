@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState, type ComponentProps } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import Landing from './Landing';
 import { sample, type AccountItem } from './sample';
 
 const sections = [
@@ -18,12 +19,15 @@ type Icon = ComponentProps<typeof Ionicons>['name'];
 
 const light = { background: '#f3f5f8', panel: '#ffffff', ink: '#142438', muted: '#4b5a6c', border: '#d6dee9', accent: '#174eaa', soft: '#e4edff' };
 const dark = { background: '#101722', panel: '#192433', ink: '#f4f7ff', muted: '#b1c0d2', border: '#344359', accent: '#a8c7ff', soft: '#203a61' };
+const isWeb = Platform.OS === 'web';
+const webPreference = 'authnjs.dashboard.web-entry.v1';
 const preference = 'authnjs.dashboard.onboarding.v1';
 const entrance = FadeIn.duration(180).reduceMotion(ReduceMotion.System);
 
 function Dashboard() {
   const colors = useColorScheme() === 'dark' ? dark : light;
   const wide = useWindowDimensions().width >= 740;
+  const [landing, setLanding] = useState<boolean | null>(isWeb ? null : false);
   const [intro, setIntro] = useState<boolean | null>(null);
   const [demo, setDemo] = useState(false);
   const [section, setSection] = useState<Section | null>(null);
@@ -33,12 +37,23 @@ function Dashboard() {
 
   useEffect(() => {
     let active = true;
+    if (isWeb) {
+      AsyncStorage.getItem(webPreference).then(
+        (value) => { if (active) setLanding(value !== 'entered'); },
+        () => { if (active) setLanding(true); },
+      );
+    }
     AsyncStorage.getItem(preference).then(
       (value) => { if (active) setIntro(value !== 'complete'); },
       () => { if (active) setIntro(true); },
     );
     return () => { active = false; };
   }, []);
+
+  function openWebApp() {
+    setLanding(false);
+    void AsyncStorage.setItem(webPreference, 'entered').catch(() => {});
+  }
 
   function exitIntro() {
     setIntro(false);
@@ -92,11 +107,19 @@ function Dashboard() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Ionicons name="shield-checkmark" color={colors.accent} size={30} />
-            <Text style={[styles.brand, { color: colors.ink }]}>AuthNJS</Text>
-            {demo && <Text style={[styles.badge, { color: colors.accent, backgroundColor: colors.soft }]}>Sample data</Text>}
+            {isWeb ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="AuthNJS home" onPress={() => setLanding(true)} style={styles.header}>
+                <Ionicons name="shield-checkmark" color={colors.accent} size={30} />
+                <Text style={[styles.brand, { color: colors.ink }]}>AuthNJS</Text>
+              </Pressable>
+            ) : <>
+              <Ionicons name="shield-checkmark" color={colors.accent} size={30} />
+              <Text style={[styles.brand, { color: colors.ink }]}>AuthNJS</Text>
+            </>}
+            {demo && landing === false && <Text style={[styles.badge, { color: colors.accent, backgroundColor: colors.soft }]}>Sample data</Text>}
           </View>
-          {intro !== null && <Animated.View key={intro ? 'intro' : section?.id ?? 'overview'} entering={entrance} style={styles.stack}>
+          {landing === true && <Landing open={openWebApp} />}
+          {landing === false && intro !== null && <Animated.View key={intro ? 'intro' : section?.id ?? 'overview'} entering={entrance} style={styles.stack}>
             {section && button('Account overview', 'arrow-back', () => { setPending(null); setSection(null); })}
             <Text accessibilityRole="header" style={[styles.heading, { color: colors.ink }]}>{heading}</Text>
             {intro ? <>

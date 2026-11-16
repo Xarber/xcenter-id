@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <g id="background"><path fill="#264eb5" d="M0 0h512v512H0z"/></g>
+  <g id="shield"><path fill="#e1ebff" d="M256 122c38 30 90 46 117 49v76c0 75-43 122-117 153-74-31-117-78-117-153v-76c27-3 79-19 117-49z"/></g>
+  <g id="check"><path fill="none" stroke="#264eb5" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" d="m208 252 34 34 63-72"/></g>
+</svg>

@@ -21,8 +21,9 @@
     "legacyIdentity": "legacy",
     "sampleDashboard": "implemented",
     "passwordlessIdentity": "planned",
-    "sharedDataService": "planned",
-    "pwa": "planned"
+    "sharedDataService": "implemented",
+    "pwa": "implemented",
+    "webLanding": "implemented"
   },
   "distribution": {
     "githubReleases": "pending authorization and verification"
@@ -32,7 +33,8 @@
     "dashboard type check",
     "Expo dependency alignment",
     "sample data tests",
-    "dependency audit"
+    "dependency audit",
+    "API isolation and encryption tests"
   ],
   "requirements": [
     {
