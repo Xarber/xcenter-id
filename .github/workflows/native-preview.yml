@@ -106,6 +106,7 @@ jobs:
       - name: Build signed release
         env:
           TARGET: ${{ matrix.target }}
+          EXPECTED_CERT_SHA256: 85b2683b006bd96b629cb62b9c2110653e3c0fdee5e5b7282a1de5e352d4ff44
           KEYSTORE: ${{ secrets.AUTHNJS_ANDROID_KEYSTORE_BASE64 }}
           ALIAS: ${{ secrets.AUTHNJS_ANDROID_KEY_ALIAS }}
           STORE_PASSWORD: ${{ secrets.AUTHNJS_ANDROID_STORE_PASSWORD }}
@@ -116,6 +117,16 @@ jobs:
           trap 'rm -f "$AUTHNJS_SIGNING_FILE"' EXIT
           umask 077
           printf '%s' "$KEYSTORE" | base64 --decode > "$AUTHNJS_SIGNING_FILE"
+          sha256_certificate() {
+            LC_ALL=C keytool -J-Duser.language=en -J-Duser.country=US -printcert "$@" |
+              awk '$1 == "SHA256:" { gsub(":", "", $2); print tolower($2) }'
+          }
+          configured=$(keytool -exportcert -keystore "$AUTHNJS_SIGNING_FILE" -alias "$ALIAS" -storepass:env STORE_PASSWORD |
+            sha256_certificate)
+          if [[ "$configured" != "$EXPECTED_CERT_SHA256" ]]; then
+            echo "::error::The configured Android release key certificate does not match this app"
+            exit 1
+          fi
           cat > "$RUNNER_TEMP/authnjs-signing.gradle" <<'GRADLE'
           allprojects {
             plugins.withId("com.android.application") {
@@ -139,7 +150,8 @@ jobs:
             artifact="$RUNNER_TEMP/output/AuthNJS-v$version-android-universal.apk"
             cp app/build/outputs/apk/release/app-release.apk "$artifact"
             apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
-            "$apksigner" verify "$artifact"
+            observed=$("$apksigner" verify --print-certs "$artifact" |
+              awk '/^Signer #[0-9]+ certificate SHA-256 digest:/ { print tolower($NF) }')
             for arch in armeabi-v7a arm64-v8a x86 x86_64; do
               unzip -Z1 "$artifact" | awk -v dir="lib/$arch/" 'index($0, dir) == 1 { found=1 } END {exit !found}'
             done
@@ -149,6 +161,11 @@ jobs:
             artifact="$RUNNER_TEMP/output/AuthNJS-v$version-android.aab"
             cp app/build/outputs/bundle/release/app-release.aab "$artifact"
             jarsigner -verify "$artifact"
+            observed=$(sha256_certificate -jarfile "$artifact")
+          fi
+          if [[ "$observed" != "$EXPECTED_CERT_SHA256" ]]; then
+            echo "::error::The Android artifact certificate does not match this app"
+            exit 1
           fi
           cd "$RUNNER_TEMP/output"
           sha256sum AuthNJS-* > SHA256SUMS
