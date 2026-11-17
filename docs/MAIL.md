@@ -27,7 +27,7 @@ A locally configured dashboard can read mail from the on-appliance inbox and sub
 - Direct self-hosted internet delivery requires reachable inbound TCP 25 and MX, working outbound TCP 25, appropriate PTR and forward DNS, SPF and DKIM, DMARC, a stable sending IP, queue monitoring, and verified behavior with external recipients. Installing an MTA on X-Center would not resolve the observed reachability problem. Preserve the existing apex MX.
 - The work to enable external delivery is deferred. No Postfix service, public submission listener, paid relay, or DNS change is part of the compose update.
 
-The web inbox opens a dedicated composer only after the fixed New email action is selected. Closing it keeps the current draft while the inbox page remains open. A successful submission clears the draft.
+The web inbox opens a dedicated composer only after the fixed New email action is selected. Native opens a dedicated composition screen from the same action. Canceling preserves fields and the selected attachment while the Mail tab is open. A successful submission clears the draft. Native type checking passed and installed-device validation remains open.
 
 ## Reading and cleanup
 

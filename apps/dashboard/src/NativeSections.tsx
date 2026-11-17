@@ -5,8 +5,10 @@ import { accountShortcuts, accountStatus } from './account-overview';
 import BirthdayPicker from './BirthdayPicker';
 import type { MailMessage, PrivateAddress } from './mail-message';
 import { pickDocumentAsync, pickProfilePhoto, shareDownload } from './native-files';
-import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useEffect, useState, type ReactNode } from 'react';
+import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AccountRequestError, accountHost, nativeRequest } from './native-account';
 import { formatBytes, storageCategories } from './storage-summary';
 import type { Account } from './web-account';
@@ -36,6 +38,7 @@ type Props = {
 
 const message = (error:unknown)=>error instanceof Error?error.message:'Could not complete the request.';
 const date=(timestamp:number)=>new Date(timestamp).toLocaleDateString();
+const composeEntrance=FadeIn.duration(180).reduceMotion(ReduceMotion.System);
 
 export default function NativeSections({ section,token,account,colors,reload,expired,passkeys,navigate }:Props) {
   const [devices,setDevices]=useState<Device[]>([]);
@@ -71,6 +74,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [selectedKey,setSelectedKey]=useState<string|null>(null);
   const [keyName,setKeyName]=useState('');
   const [email,setEmail]=useState('');
+  const [compose,setCompose]=useState(false);
   const [recipient,setRecipient]=useState('');
   const [subject,setSubject]=useState('');
   const [mailText,setMailText]=useState('');
@@ -336,23 +340,50 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           item.active&&button(accountMessage('disableAddress','Disable address'),()=>confirm('Disable this address?','Future messages to this address will be rejected.',
             ()=>run(async()=>{await api('mail/aliases/'+item.address,{},'DELETE');await load();},'Private address disabled.'),
           ))))}
-        {account.canSendMail&&<>{!account.externalMailSubmission&&paragraph('You can send to X-Center mailboxes.')} {field(accountMessage('recipient','Recipient'),recipient,setRecipient,{keyboardType:'email-address',autoCapitalize:'none'})}
-          {field(accountMessage('subject','Subject'),subject,setSubject,{maxLength:120})}{field(accountMessage('message','Message'),mailText,setMailText,{multiline:true})}
-          {button(formatted?'Use plain text':'Format message',()=>setFormatted(value=>!value))}
-          {formatted&&paragraph('Use **bold** or _italics_ in your message.')}
-          {attachment ? button('Remove '+attachment.name,()=>setAttachment(undefined))
-            : button('Attach a file (up to 256 KB)',()=>run(async()=>{const file=await pickDocumentAsync(256*1024);if(file)setAttachment(file);}))}
-          {button(accountMessage('sendEmail','Send email'),()=>run(async()=>{
-            await api('mail/send',{to:recipient,subject,text:mailText,formatted,attachment});
-            setRecipient('');setSubject('');setMailText('');setFormatted(false);setAttachment(undefined);
-          },'Mail accepted for delivery.'))}</>}
+        {account.canSendMail&&button(accountMessage('newEmail','New email'),()=>{setStatus('');setCompose(true);})}
+        {compose&&<Modal animationType="none" onRequestClose={()=>{if(!busy)setCompose(false);}}>
+          <SafeAreaProvider>
+            <SafeAreaView style={[styles.composeScreen,{backgroundColor:colors.background}]}>
+              <KeyboardAvoidingView style={styles.composeScreen} behavior={Platform.OS==='ios'?'padding':undefined}>
+                <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.composeContent}>
+                  <Animated.View entering={composeEntrance} accessibilityViewIsModal style={styles.card}>
+                    <View style={styles.composeHeader}>
+                      <Text accessibilityRole="header" style={[styles.overviewTitle,{color:colors.ink,flex:1}]}>{accountMessage('newEmail','New email')}</Text>
+                      {button(accountMessage('cancel','Cancel'),()=>{setStatus('');setCompose(false);})}
+                    </View>
+                    {!account.externalMailSubmission&&paragraph('You can send to X-Center mailboxes.')}
+                    {field(accountMessage('recipient','Recipient'),recipient,setRecipient,{keyboardType:'email-address',autoCapitalize:'none',editable:!busy})}
+                    {field(accountMessage('subject','Subject'),subject,setSubject,{maxLength:120,editable:!busy})}
+                    {field(accountMessage('message','Message'),mailText,setMailText,{multiline:true,maxLength:30_000,editable:!busy})}
+                    {button(formatted?'Use plain text':'Format message',()=>setFormatted(value=>!value))}
+                    {formatted&&paragraph('Use **bold** or _italics_ in your message.')}
+                    {attachment ? button('Remove '+attachment.name,()=>setAttachment(undefined))
+                      : button('Attach a file (up to 256 KB)',()=>run(async()=>{
+                        const file=await pickDocumentAsync(256*1024);
+                        if(file)setAttachment(file);
+                      }))}
+                    {button(accountMessage('sendEmail','Send email'),()=>run(async()=>{
+                      await api('mail/send',{to:recipient,subject,text:mailText,formatted,attachment});
+                      setRecipient('');setSubject('');setMailText('');setFormatted(false);setAttachment(undefined);
+                      setCompose(false);
+                    },'Mail accepted for delivery.'),busy||!recipient.trim()||!subject.trim()||!mailText.trim())}
+                    {status&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}
+                  </Animated.View>
+                </ScrollView>
+              </KeyboardAvoidingView>
+            </SafeAreaView>
+          </SafeAreaProvider>
+        </Modal>}
       </>;
   }
   return <View style={[styles.card,{backgroundColor:colors.panel}]}>{content}
-    {status&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}</View>;
+    {status&&!compose&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}</View>;
 }
 
 const styles=StyleSheet.create({
+  composeScreen:{flex:1},
+  composeContent:{width:'100%',maxWidth:680,alignSelf:'center'},
+  composeHeader:{flexDirection:'row',alignItems:'center',gap:12},
   fileAction:{width:44,height:44,borderRadius:11,alignItems:'center',justifyContent:'center'},
   overviewHero:{gap:9,borderRadius:18,padding:16},
   overviewTitle:{fontSize:25,fontWeight:'700'},
