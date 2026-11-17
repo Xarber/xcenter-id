@@ -1,3 +1,4 @@
+import { SupportPage } from './Support.web';
 import FriendsPage from './FriendsPage.web';
 import { accountMessage } from './account-locale';
 import { accountShortcuts, accountStatus } from './account-overview';
@@ -22,6 +23,7 @@ const sections = [
 ] as const;
 function LayersIcon(props:{size?:number}){return <Grid2X2 {...props}/>;}
 const titles:Record<string,[string,string]> = {
+  support:['Support','Send feedback or get help with your X-Center ID.'],
   profile:['Your profile','Manage the personal details associated with your X-Center ID.'],
   devices:['Your devices','Review where you are signed in.'],
   security:['Sign-in & security','Manage the passkeys that protect your account.'],
@@ -285,6 +287,7 @@ export default function WebApp(){
   else if(page==='files'||page==='storage')content=<FilesPage key={page} summary={page==='storage'}/>;
   else if(page==='mail')content=<MailPage account={account}/>;
   else if(page==='security')content=<Security account={account} update={load} addPasskey={()=>passkey('add')}/>;
+  else if(page==='support')content=<SupportPage/>;
   else if(page==='admin')content=account.admin?<AdminPage/>:<section className="xc-card xc-pad">Administrator access is required.</section>;
   else if(page==='developer')content=<section className="xc-card xc-pad"><DeveloperPortal back={()=>window.location.assign('/apps')}/></section>;
   else if(page==='apps')content=<><section className="xc-card"><ConnectedApps/></section><section className="xc-card xc-pad">
@@ -293,6 +296,7 @@ export default function WebApp(){
     <div className="xc-list-row"><div><strong>Developer portal</strong><p>Register or review your applications.</p></div><a className="xc-button xc-secondary" href="/developer"><Code2 size={16}/> Developer apps</a></div>
   </section></>;
   else if(page==='settings')content=<section className="xc-card xc-pad">
+    <div className="xc-list-row"><span>Feedback and support</span><a className="xc-button xc-secondary" href="/support">Contact support</a></div>
     <div className="xc-list-row"><div className="xc-row-head"><CircleHelp size={22}/><div><strong>Introduction</strong><p>See how your X-Center ID works.</p></div></div><button className="xc-button xc-secondary" onClick={()=>setIntro(true)}>View introduction</button></div>
     <div className="xc-list-row"><div><strong>App version</strong><p>X-Center ID for web</p></div><button className="xc-button xc-secondary" onClick={()=>{
       taps.current+=1;

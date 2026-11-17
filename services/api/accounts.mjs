@@ -96,6 +96,11 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     CREATE TABLE IF NOT EXISTS account_storage_caps(owner TEXT PRIMARY KEY REFERENCES accounts(id),bytes INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS verified_emails (owner TEXT NOT NULL REFERENCES accounts(id),
       address TEXT PRIMARY KEY, verified INTEGER NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS account_restrictions(owner TEXT PRIMARY KEY REFERENCES accounts(id),
+      status TEXT NOT NULL CHECK(status IN ('locked','deleted'))) STRICT;
+    CREATE TABLE IF NOT EXISTS retired_usernames(username TEXT PRIMARY KEY) STRICT;
+    CREATE TABLE IF NOT EXISTS account_admin_events(id TEXT PRIMARY KEY, actor TEXT NOT NULL,
+      target TEXT NOT NULL, action TEXT NOT NULL, created INTEGER NOT NULL) STRICT;
   `);
   const native = openNativeSession(db);
   const emailSignIn=openEmailSignIn(db,{send:sendVerification,secret:profileKey??randomBytes(32)});
@@ -103,6 +108,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   const adminIds = new Set((process.env.AUTHNJS_ADMIN_ACCOUNT_IDS ?? '').split(',').map(item=>item.trim()).filter(Boolean));
   const isAdmin = (active) => !!(active && adminIds.has(active.owner));
   const q = (sql) => db.prepare(sql);
+  const restriction=q('SELECT status FROM account_restrictions WHERE owner=?');
+  const available=owner=>!!account.get(owner)&&!restriction.get(owner);
   const storageCapacity=owner=>q('SELECT bytes FROM account_storage_caps WHERE owner=?').get(owner)?.bytes??standardStorage;
   const account = q('SELECT name FROM accounts WHERE id=?');
   const readProfile = q('SELECT username,given_name AS givenName,surname,age_range AS ageRange FROM identity_profiles WHERE owner=?');
@@ -138,6 +145,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   const reservedOwner = q('SELECT owner FROM signup_usernames WHERE username=? AND expires>?');
   const reservedUsername = q('SELECT username FROM signup_usernames WHERE owner=? AND expires>?');
   function ensureAvailable(name, owner) {
+    requireCondition(!q('SELECT 1 FROM retired_usernames WHERE username=?').get(name),409,'This username is unavailable.');
     const existing = usernameOwner.get(name)?.owner ?? reservedOwner.get(name,now())?.owner;
     requireCondition(!existing || existing === owner,409,'This username is unavailable.');
   }
@@ -158,7 +166,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   const keys = q('SELECT id,label,created,transports FROM passkeys WHERE owner=? ORDER BY created,id');
   const key = q('SELECT * FROM passkeys WHERE id=?');
   const emails = q('SELECT address,verified FROM verified_emails WHERE owner=? ORDER BY verified');
-  const lookupSession = q('SELECT * FROM account_sessions WHERE hash=? AND expires>?');
+  const lookupSession = q(`SELECT * FROM account_sessions WHERE hash=? AND expires>?
+    AND owner NOT IN (SELECT owner FROM account_restrictions)`);
   const insertSession = q('INSERT INTO account_sessions VALUES (?,?,?,?)');
   const removeSession = q('DELETE FROM account_sessions WHERE hash=?');
   const challenges = new Map();
@@ -189,6 +198,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     return browser+' on '+os;
   }
   function login(req,res, owner, nativeSource) {
+    requireCondition(available(owner),401,'Sign-in is unavailable.');
     const value = token();
     q('DELETE FROM account_sessions WHERE expires<=?').run(now());
     const hash=digest(value);
@@ -268,7 +278,16 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       requireCondition(isAdmin(active),403,'Administrator access is required.');
       return {accounts:q(`SELECT p.username,p.owner,coalesce(e.premium_mail,0) AS premium FROM identity_profiles p
         LEFT JOIN account_entitlements e ON e.owner=p.owner ORDER BY p.username LIMIT 500`).all()
-        .map(row=>({username:row.username,premium:!!row.premium,capacity:storageCapacity(row.owner)}))};
+        .map(row=>({username:row.username,premium:!!row.premium,capacity:storageCapacity(row.owner),
+          locked:restriction.get(row.owner)?.status==='locked',protected:adminIds.has(row.owner)}))};
+    }
+    const adminPhoto=/^\/account\/admin\/accounts\/([a-z][a-z0-9]{2,23})\/avatar$/.exec(pathname)?.[1];
+    if(req.method==='GET'&&adminPhoto){
+      requireCondition(isAdmin(active),403,'Administrator access is required.');
+      const selected=usernameOwner.get(adminPhoto);
+      const picture=selected&&profile(selected.owner)?.picture;
+      requireCondition(picture,404,'Profile photo unavailable.');
+      return Buffer.from(picture,'base64');
     }
     if (req.method === 'GET' && pathname === '/account/avatar') {
       const picture = active && profile(active.owner)?.picture;
@@ -286,7 +305,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         const username=typeof input.username==='string'?input.username.trim().toLowerCase():'';
         requireCondition(/^[a-z][a-z0-9]{2,23}$/.test(username),422,'Enter a valid X-Center username.');
         const owner=usernameOwner.get(username)?.owner;
-        requireCondition(owner,404,'No X-Center ID uses this username.');
+        requireCondition(owner&&available(owner),404,'No available X-Center ID uses this username.');
         const email=emails.all(owner)[0]?.address;
         if(!email||!emailSignIn.enabled)return {method:'passkey'};
         const result=await emailSignIn.start(owner,email,channel);
@@ -311,6 +330,38 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     requireCondition(allowsMutation(req),403,'Invalid origin.');
     if (pathname === '/account/mail/send') requireCondition(active,401,'Sign in first.');
     const input = await body(req,pathname==='/account/mail/send'?512*1024:undefined);
+    if(active)requireCondition(session(req),401,'Sign in first.');
+    if(pathname==='/account/admin/account-status'){
+      requireCondition(isAdmin(active),403,'Administrator access is required.');
+      recent(active);
+      requireCondition(req.headers['x-authnjs-request']==='account-consent',403,'Invalid request.');
+      const {username,action,confirmation}=input;
+      const target=typeof username==='string'&&usernameOwner.get(username)?.owner;
+      requireCondition(target&&!adminIds.has(target),422,'Choose an account that is not an administrator.');
+      requireCondition(['lock','unlock','delete'].includes(action),422,'Choose a valid account action.');
+      requireCondition(action!=='delete'||confirmation===username,422,'Enter the username to confirm deletion.');
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        if(action==='unlock') q("DELETE FROM account_restrictions WHERE owner=? AND status='locked'").run(target);
+        else {
+          q(`INSERT INTO account_restrictions VALUES(?,?) ON CONFLICT(owner)
+            DO UPDATE SET status=excluded.status`).run(target,action==='delete'?'deleted':'locked');
+          q('DELETE FROM account_sessions WHERE owner=?').run(target);
+          q('DELETE FROM email_signins WHERE owner=?').run(target);
+        }
+        if(action==='delete'){
+          q('INSERT INTO retired_usernames VALUES(?)').run(username);
+          for(const table of ['passkeys','connected_apps','app_disconnects','account_entitlements','account_storage_caps',
+            'identity_profiles','signup_usernames','verified_emails','email_verifications']){
+            q('DELETE FROM '+table+' WHERE owner=?').run(target);
+          }
+          q("UPDATE accounts SET name='Deleted account' WHERE id=?").run(target);
+        }
+        q('INSERT INTO account_admin_events VALUES(?,?,?,?,?)').run(randomUUID(),active.owner,target,action,now());
+        db.exec('COMMIT');
+      } catch(error){db.exec('ROLLBACK');throw error;}
+      return {ok:true};
+    }
     if(pathname==='/account/native/authorize'){
       requireCondition(active && req.headers.origin===origin,401,'Sign in to X-Center ID first.');
       limitChallenges();
@@ -379,6 +430,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       candidate.username = profile(active.owner)?.username ?? candidate.username;
       db.exec('BEGIN IMMEDIATE');
       try {
+        requireCondition(session(req),401,'Sign in first.');
         ensureAvailable(candidate.username,active.owner);
         writeProfile(active.owner,{...candidate,picture});
         q('DELETE FROM signup_usernames WHERE owner=?').run(active.owner);
@@ -443,7 +495,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     requireCondition(input.response && typeof input.response.id === 'string', 400, 'Invalid passkey response.');
     if (action === 'login') {
       const saved = key.get(input.response.id);
-      requireCondition(saved, 401, 'Could not sign in with this passkey.');
+      requireCondition(saved&&available(saved.owner), 401, 'Could not sign in with this passkey.');
       const handle = input.response.response?.userHandle;
       requireCondition(!handle || handle === Buffer.from(saved.owner).toString('base64url'), 401, 'Could not sign in with this passkey.');
       const result = await verifyAuthenticationResponse({
@@ -453,6 +505,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       }).catch(() => null);
       requireCondition(result?.verified && (!challenge.username || profile(saved.owner)?.username === challenge.username),
         401, 'Could not sign in with this passkey and username.');
+      requireCondition(available(saved.owner),401,'Sign-in is unavailable.');
       requireCondition(q('UPDATE passkeys SET counter=? WHERE id=? AND counter=?')
         .run(result.authenticationInfo.newCounter, saved.id, saved.counter).changes === 1, 409, 'Sign-in changed. Try again.');
       login(req,res,saved.owner);
@@ -467,6 +520,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     const label = challenge.name ?? await suggestLabel({ aaguid, transports: credential.transports });
     db.exec('BEGIN IMMEDIATE');
     try {
+      if(action==='add')requireCondition(session(req),401,'Sign in first.');
       if (action === 'signup') {
         ensureAvailable(challenge.signupUsername);
         q('DELETE FROM signup_usernames WHERE expires<=?').run(now());
@@ -507,6 +561,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   return {
     handle,
     current: (req) => session(req),
+    available,
     username: (owner) => q('SELECT username FROM identity_profiles WHERE owner=?').get(owner)?.username,
     allowsMutation,
     storageCapacity,
@@ -523,7 +578,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       db.exec('BEGIN IMMEDIATE');
       try {
         const current = profile(owner);
-        if (current?.username !== from || usernameOwner.get(to) || reservedOwner.get(to,now())) {
+        if (current?.username !== from || usernameOwner.get(to) || reservedOwner.get(to,now()) ||
+          q('SELECT 1 FROM retired_usernames WHERE username=?').get(to)) {
           db.exec('ROLLBACK');
           return false;
         }
@@ -550,6 +606,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         AND NOT EXISTS (SELECT 1 FROM connected_apps a WHERE a.owner=d.owner AND a.client=d.client)`).get(owner,client);
     },
     grantAllowed(owner,client,grant) {
+      if(!available(owner))return false;
       if(!q('SELECT 1 FROM app_disconnects WHERE owner=? AND client=?').get(owner,client))return true;
       return !!grant&&!!q('SELECT 1 FROM app_link_grants WHERE owner=? AND client=? AND grant_id=?').get(owner,client,grant);
     },
@@ -581,6 +638,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     },
     premiumEligible: (owner) => q('SELECT premium_mail FROM account_entitlements WHERE owner=?').get(owner)?.premium_mail===1,
     identity(owner) {
+      if(!available(owner))return undefined;
       const found = profile(owner);
       return found ? { username:found.username, givenName:found.givenName,surname:found.surname,
         ageRange:found.ageRange, hasPicture:!!found.picture, emails:emails.all(owner) } : null;

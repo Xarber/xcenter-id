@@ -39,7 +39,9 @@
     "perAppPermissions": "implemented",
     "developerAppProfiles": "implemented",
     "administratorVerification": "implemented",
-    "mailComposer": "implemented"
+    "mailComposer": "implemented",
+    "accountModeration": "implemented",
+    "supportInbox": "implemented"
   },
   "distribution": {
     "githubReleases": "pending authorization and verification"

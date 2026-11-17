@@ -128,3 +128,16 @@ Dedicated mailbox readers now use individual web URLs and native modal screens. 
 The weekly window reached 34% remaining with no reset credits and a reset scheduled for 23 November at 11:05:56 CET. UADS §0 applies a 35% minimum with five to six days until reset. The five-hour window had 49% remaining and resets 17 November at 22:45:39 CET. Implementation and verification commits through `7821843` were confirmed on `origin/testing`. No native release workflow was dispatched.
 
 When usage permits, resume AUTHN-039 first. Verify public delivery with an independent sender, confirm outbound TCP 25 availability with the line provider, and validate outbound delivery before enabling verification mail. Recheck production snapshot readiness on the low-space mount before staging a cutover. Continue independent localization and native release preparation, then apply the UADS §8 build gate and verify the Android certificate and both iOS artifact formats. AUTHN-043 remains ordered after email. Generate distribution metadata from validated release receipts.
+
+### Admin and support continuation
+
+The user waived the weekly pause for this assignment and requested the native preview build after changes. The five-hour checkpoint still applies.
+
+| Order and ID | Request | State | Dependencies and next action |
+| --- | --- | --- | --- |
+| 47 AUTHN-047 | Admin photos, account locks and deletion | Implemented | API and isolated 390 px Chrome verified admin JPEG access, lock, session loss, unlock and confirmed deletion. Identity information is removed and separate encrypted data remains subject to retention. Installed native and production verification remain open. |
+| 48 AUTHN-048 | Member feedback, shared admin support inbox and mailbox replies | Implemented | Two admins could open the same request on an isolated issuer. Chrome and API checks confirmed one reply reaches the requester's Mail and role checks reject unauthorized readers. Native runtime and production remain open. |
+| 49 AUTHN-049 | Accept support email at the requested domains | Implemented | Isolated SMTP accepted both exact opt-in addresses and denied other recipients on their domains. Public `id.xcenter.it` is a CNAME. Apex MX remains iCloud. Public delivery and external replies depend on inbound routing and an authorized outbound sender. |
+| 50 AUTHN-050 | Start the native build after implementation | Queued | Dispatch the four-job preview workflow for the final tested commit, verify receipt and record the run. |
+
+Build gate reconciliation. Admin and in-app support implementation and source preparation are complete. The isolated browser and SMTP checks passed. Public routing, external mail, production backup headroom and installed-device checks depend on services or artifacts outside this source change. This user explicitly requested a native preview after changes. Dispatch it on the tested development revision without release publication.

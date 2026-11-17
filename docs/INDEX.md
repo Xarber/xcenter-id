@@ -12,6 +12,7 @@ X-Center ID is a passkey-first identity and consent service with an Expo account
 - [X-Center preview](XCENTER_PREVIEW.md) records how to access and roll back the deployed web shell.
 - [X-Center ID integration](IDENTITY.md) covers production OIDC, developer activation and sample apps.
 - [Friends and file sharing](FRIENDS.md) covers invitations, grants and revocation.
+- [Support and moderation](SUPPORT.md) covers administrator actions, feedback and external intake.
 - [Mail delivery](MAIL.md) records SMTP, verification and address reservations.
 - [Branding](BRANDING.md) describes the original identity-card icon.
 - [Active tasks](ACTIVE_TASKS.md) records current work and pending verification.

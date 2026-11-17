@@ -116,3 +116,5 @@ body{overflow-y:auto}
 .xc-compose-dialog::backdrop{background:#10152275}
 .xc-compose-header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
 .xc-compose-dialog form label{display:grid;gap:6px;font-weight:650}
+
+.xc-admin-avatar{object-fit:cover;border-radius:50%;background:var(--soft);flex:none}

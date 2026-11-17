@@ -1,3 +1,4 @@
+import type { ManagedAccount, SupportMessage, SupportRequest } from './support-model';
 import { accountMessage } from './account-locale';
 import { placeLabel, type Friend, type SharedFile, type FriendRecordIndex, type ShareablePlace } from './friends-model';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,7 +24,7 @@ type Grant = {source:string;destination:string;expires:number};
 type SampleGrant = {source:string;destination:string;sourceName:string;app:string;shared:boolean;expires:number|null};
 type App = {client:string;name:string};
 type Theme = {background:string;panel:string;ink:string;muted:string;accent:string;soft:string};
-export type NativeSection = 'dashboard'|'profile'|'devices'|'security'|'apps'|'developer'|'permissions'|'storage'|'files'|'friends'|'mail';
+export type NativeSection = 'dashboard'|'profile'|'devices'|'security'|'apps'|'developer'|'permissions'|'storage'|'files'|'friends'|'mail'|'support'|'admin';
 
 type Props = {
   section:NativeSection;
@@ -57,6 +58,14 @@ function MailScreen({colors,close,children}:{colors:Theme;close:()=>void;childre
 }
 
 export default function NativeSections({ section,token,account,colors,reload,expired,passkeys,navigate }:Props) {
+  const [supportSubject,setSupportSubject]=useState('');
+  const [supportText,setSupportText]=useState('');
+  const [managed,setManaged]=useState<ManagedAccount[]>([]);
+  const [accountFilter,setAccountFilter]=useState('');
+  const [target,setTarget]=useState('');
+  const [typedName,setTypedName]=useState('');
+  const [requests,setRequests]=useState<SupportRequest[]>([]);
+  const [request,setRequest]=useState<{id:string;message:SupportMessage}|null>(null);
   const [devices,setDevices]=useState<Device[]>([]);
   const [apps,setApps]=useState<ConnectedApp[]>([]);
   const [grants,setGrants]=useState<Grant[]>([]);
@@ -106,6 +115,10 @@ export default function NativeSections({ section,token,account,colors,reload,exp
     else setStatus(message(error));
   }
   async function load() {
+    if(section==='admin'&&account.admin){
+      setManaged((await api('admin/accounts')).accounts);
+      setRequests((await api('admin/support')).requests);
+    }
     if(section==='devices')setDevices((await api('devices')).devices);
     if(section==='apps')setApps((await api('connected-apps')).apps);
     if(section==='permissions'){
@@ -323,6 +336,65 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         </>}
       </>;
       break;
+    case 'support':
+      content=<>
+        {paragraph('X-Center administrators can read your request. Replies arrive in Mail.')}
+        {field('Subject',supportSubject,setSupportSubject,{maxLength:120,editable:!busy})}
+        {field('Message',supportText,setSupportText,{multiline:true,maxLength:3000,editable:!busy})}
+        {button('Send to support',()=>run(async()=>{
+          await api('support',{subject:supportSubject,text:supportText});
+          setSupportSubject('');setSupportText('');
+        },'Request sent. Check Mail for a reply.'),busy||!supportSubject.trim()||!supportText.trim())}
+      </>;
+      break;
+    case 'admin':
+      if(!account.admin){content=paragraph('Administrator access is required.');break;}
+      content=<>
+        {field('Find an account',accountFilter,setAccountFilter,{autoCapitalize:'none'})}
+        {managed.filter(user=>user.username.includes(accountFilter.trim().toLowerCase())).slice(0,40).map(user=>
+          row(user.username,'@'+user.username,formatBytes(user.capacity)+' storage'+(user.locked?' · Locked':''),<>
+            <Image source={{uri:accountHost+'/account/admin/accounts/'+user.username+'/avatar',headers:{
+              Authorization:'Bearer '+token,'X-AuthNJS-Native':'account-manager',
+            }}} style={styles.adminAvatar}/>
+            {!user.protected&&<View style={styles.actions}>
+              {button(user.locked?'Unlock':'Lock account',()=>run(async()=>{
+                await api('admin/account-status',{username:user.username,action:user.locked?'unlock':'lock'});await load();
+              },user.locked?'Account unlocked.':'Account locked.'))}
+              {button('Delete account',()=>{setTarget(user.username);setTypedName('');})}
+            </View>}
+            {target===user.username&&<>
+              {paragraph('This removes the profile and credentials and signs out every device. Enter the username to confirm.')}
+              {field('Confirm username',typedName,setTypedName,{autoCapitalize:'none'})}
+              {button('Permanently delete account',()=>run(async()=>{
+                await api('admin/account-status',{username:target,action:'delete',confirmation:typedName});
+                setTarget('');await load();
+              },'Account deleted.'),busy||typedName!==target)}
+              {button('Cancel deletion',()=>setTarget(''))}
+            </>}
+          </>))}
+        <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Support inbox</Text>
+        {request?<>{button('All requests',()=>{setRequest(null);setSupportText('');})}
+          {row(request.id,request.message.subject||'(No subject)',request.message.sender)}
+          {paragraph(request.message.text)}
+          {request.message.external&&paragraph('Unverified email sender. External replies require a configured sender.')}
+          {request.message.canReply&&<>
+            {field('Reply',supportText,setSupportText,{multiline:true,maxLength:3000,editable:!busy})}
+            {button('Send mailbox reply',()=>run(async()=>{
+              await api('admin/support/'+request.id,{text:supportText});
+              setRequest(null);setSupportText('');await load();
+            },'Reply delivered to Mail.'),busy||!supportText.trim())}
+          </>}
+          {button('Remove request',()=>confirm('Remove this support request?','This removes it for every administrator.',()=>run(async()=>{
+            await api('admin/support/'+request.id,{},'DELETE');setRequest(null);await load();
+          },'Request removed.')))}
+        </>:<>
+          {button('Refresh requests',()=>run(load))}
+          {!requests.length&&paragraph('No support requests.')}
+          {requests.map(item=><View key={item.id}>{button((item.external?'Incoming email':item.replied?'Answered request':'Account request')+' · '+new Date(item.received).toLocaleString(),
+            ()=>run(async()=>{setRequest({id:item.id,message:await api('admin/support/'+item.id)});setSupportText('');}))}</View>)}
+        </>}
+      </>;
+      break;
     case 'mail':
       content=<>{paragraph(account.mailbox??'No mailbox has been reserved.')}
         {paragraph(account.canReceiveMail?(messages.length?'Your inbox':accountMessage('inboxEmpty','Your inbox is empty.')):'Mailbox delivery is unavailable.')}
@@ -389,6 +461,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
 }
 
 const styles=StyleSheet.create({
+  adminAvatar:{width:44,height:44,borderRadius:22},
   mailScreen:{flex:1},
   mailContent:{width:'100%',maxWidth:680,alignSelf:'center'},
   composeHeader:{flexDirection:'row',alignItems:'center',gap:12},

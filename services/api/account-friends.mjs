@@ -5,7 +5,7 @@ const digest = value => createHash('sha256').update(value).digest('hex');
 const inviteLifetime = 15 * 60_000;
 const pair = (first, second) => [first, second].sort();
 
-export function openFriends(database) {
+export function openFriends(database,available=()=>true) {
   const db = new DatabaseSync(database);
   db.exec(`
     PRAGMA busy_timeout=3000;
@@ -41,7 +41,7 @@ export function openFriends(database) {
       try {
         const hash=digest(code);
         const invite=findInvite.get(hash,Date.now());
-        if (!invite || invite.owner===owner || count.get(owner,owner).count>=100 || count.get(invite.owner,invite.owner).count>=100) {
+        if (!invite || !available(invite.owner) || invite.owner===owner || count.get(owner,owner).count>=100 || count.get(invite.owner,invite.owner).count>=100) {
           db.exec('ROLLBACK');
           return false;
         }
@@ -51,8 +51,8 @@ export function openFriends(database) {
         return true;
       } catch (error) { db.exec('ROLLBACK'); throw error; }
     },
-    list: owner => list.all(owner,owner).map(row=>({id:row.id,owner:row.first===owner?row.second:row.first,created:row.created})),
-    linked: (owner, friend) => match.get(...pair(owner,friend))?.id,
+    list: owner => list.all(owner,owner).filter(row=>available(row.first)&&available(row.second)).map(row=>({id:row.id,owner:row.first===owner?row.second:row.first,created:row.created})),
+    linked: (owner, friend) => available(owner)&&available(friend)?match.get(...pair(owner,friend))?.id:undefined,
     remove: (owner,id) => remove.run(id,owner,owner).changes===1,
     close: () => db.close(),
   };

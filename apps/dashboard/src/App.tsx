@@ -17,7 +17,7 @@ const pages = [
   ['devices','Devices','phone-portrait-outline'],['security','Sign-in & security','key-outline'],
   ['apps','Apps','apps-outline'],['permissions','Permissions','shield-checkmark-outline'],
   ['storage','Data usage','server-outline'],['files','Files','folder-open-outline'],['friends','Friends','people-outline'],['mail','Mail','mail-outline'],
-  ['settings','Settings','settings-outline'],['developer','Developer apps','code-slash-outline'],
+  ['settings','Settings','settings-outline'],['support','Support','help-circle-outline'],['admin','Admin','shield-outline'],['developer','Developer apps','code-slash-outline'],
 ] as const satisfies ReadonlyArray<readonly [string,string,Icon]>;
 const copy:Record<string,string> = {
   dashboard:'Review your passkeys, profile, and connected apps.', profile:'Edit your photo, name, birthday, and email.',
@@ -25,7 +25,7 @@ const copy:Record<string,string> = {
   apps:'Review connected apps and open the developer portal.', permissions:'Choose what each app can access.',
   storage:'Review file storage used by your account.', files:'Upload, download, and manage private files.',
   friends:'Manage invitations and shared files.',
-  mail:'Read and send mail from your mailbox.', settings:'Manage your X-Center ID experience.',developer:'Register and manage your integrations.',
+  mail:'Read and send mail from your mailbox.', settings:'Manage your X-Center ID experience.',developer:'Register and manage your integrations.',support:'Send feedback or get help.',admin:'Manage accounts and support requests.',
 };
 const pref = 'authnjs.dashboard.onboarding.v1';
 
@@ -53,7 +53,7 @@ function NativeAccount() {
     return ()=>{live=false;if(timer.current)clearTimeout(timer.current);};
   },[]);
   function expired(){
-    setAccount(null);setToken(null);
+    setAccount(null);setToken(null);setTab(pages[0]);
     void clearSession().catch(()=>{});
   }
   const load=async (value:string)=>{
@@ -114,7 +114,7 @@ function NativeAccount() {
       <Text style={[styles.brand,{color:colors.ink}]}>X-Center ID</Text>
     </View>
     {token&&account&&<View><ScrollView horizontal showsHorizontalScrollIndicator accessibilityRole="tablist" contentContainerStyle={styles.tabs}>
-      {pages.filter(page=>page[0]!=='developer').map(page=><Pressable key={page[0]} accessibilityRole="tab" accessibilityState={{selected:page===tab}}
+      {pages.filter(page=>page[0]!=='developer'&&(page[0]!=='admin'||account?.admin)).map(page=><Pressable key={page[0]} accessibilityRole="tab" accessibilityState={{selected:page===tab}}
         style={[styles.tab,page===tab&&{backgroundColor:colors.soft}]}
         onPress={()=>{setTab(page);setDeveloper(false);setSampleMode(false);taps.current=0;if(timer.current)clearTimeout(timer.current);}}>
         <Ionicons name={page[2]} size={20} color={page===tab?colors.accent:colors.muted}/>

@@ -21,7 +21,8 @@ test('SMTP accepts registered destinations and aliases, rejects relay and isolat
   accounts.exec("CREATE TABLE identity_profiles(owner TEXT,username TEXT); INSERT INTO identity_profiles VALUES ('alex-owner','alex');");
   accounts.close();
   const store = openMailStore({ accountsPath, mailPath, configuration:{
-    inboundDomains:['mail.xcenter.it','hme.xcenter.it'], storageKey:randomBytes(32).toString('hex'),
+    inboundDomains:['mail.xcenter.it','hme.xcenter.it'], supportAddresses:['support@id.xcenter.it','support@xcenter.it'],
+    storageKey:randomBytes(32).toString('hex'),
   } });
   // TLS is deliberately disabled for this local synthetic test.
   const server = createInboundServer({ store,name:'mail.test',tls:{ disabledCommands:['STARTTLS','AUTH'] } });
@@ -58,6 +59,13 @@ test('SMTP accepts registered destinations and aliases, rejects relay and isolat
     assert.equal(store.alias('alex-owner','test-client'),null);
     assert.equal(store.revokeAlias('alex-owner',premium),true);
     assert.equal(store.resolveRecipient(premium),null);
+    await send('support@id.xcenter.it');
+    await send('support@xcenter.it');
+    await assert.rejects(send('alex@id.xcenter.it'),{responseCode:550});
+    await assert.rejects(send('alex@xcenter.it'),{responseCode:550});
+    assert.equal(store.listSupport().length,2);
+    assert.ok(store.listSupport().every(item=>item.external));
+    assert.equal((await store.readSupport(store.listSupport()[0].id)).canReply,false);
     assert.ok(!readFileSync(mailPath).includes(Buffer.from('ciphertext check')));
     for (let i=0;i<100;i++) assert.equal(store.receive(['alex@mail.xcenter.it'],Buffer.from('fixture')),true);
     const timestamps = new DatabaseSync(mailPath);

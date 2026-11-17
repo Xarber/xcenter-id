@@ -1,3 +1,5 @@
+import { AdminSupport } from './Support.web';
+import type { ManagedAccount } from './support-model';
 import { accountMessage } from './account-locale';
 import type { Friend } from './friends-model';
 import type { MailMessage, PrivateAddress } from './mail-message';
@@ -263,9 +265,10 @@ export function MailPage({ account }:{account:Account}) {
 
 type AdminApp={id:string;name:string;status:string;callback:string;developerName?:string;repository?:string;verified:boolean};
 type AdminDeveloper={owner:string;name:string;status:string;repository?:string};
-type AdminUser={username:string;premium:boolean;capacity:number};
 export function AdminPage() {
-  const [users,setUsers]=useState<AdminUser[]>([]);
+  const [users,setUsers]=useState<ManagedAccount[]>([]);
+  const [deleting,setDeleting]=useState('');
+  const [confirmation,setConfirmation]=useState('');
   const [apps,setApps]=useState<AdminApp[]>([]);
   const [developers,setDevelopers]=useState<AdminDeveloper[]>([]);
   const [filter,setFilter]=useState('');
@@ -285,10 +288,14 @@ export function AdminPage() {
   }
   return <>
     <section className="xc-card xc-pad"><div className="xc-row-head"><span className="xc-symbol xc-lavender"><ShieldCheck size={21}/></span>
-      <div><h2>Accounts</h2><p>Manage storage capacity and premium Hide My Email eligibility.</p></div></div>
+      <div><h2>Accounts</h2><p>Manage account access, storage and premium alias eligibility.</p></div></div>
       <label className="xc-admin-search">Find an account<input type="search" value={filter} onChange={event=>setFilter(event.target.value)} placeholder="Username"/></label>
       {users.filter(user=>user.username.includes(filter.trim().toLowerCase())).map(user=><div className="xc-list-row xc-permission-row" key={user.username}>
-        <div><strong>@{user.username}</strong><p>{formatBytes(user.capacity)} storage</p></div>
+        <div className="xc-row-head">
+          <img className="xc-admin-avatar" width={44} height={44} alt="" loading="lazy"
+            src={'/account/admin/accounts/'+user.username+'/avatar'} onError={event=>{event.currentTarget.hidden=true;}}/>
+          <div><strong>@{user.username}</strong><p>{formatBytes(user.capacity)} storage{user.locked?' · Locked':''}</p></div>
+        </div>
         {edit===user.username?<form className="xc-actions" onSubmit={event=>{
           event.preventDefault();save('admin/storage',{username:user.username,capacity:Number(capacity)*1024**2},'Storage capacity updated.');
         }}><label>Capacity in MB<input required type="number" min={1} max={1024} step={1} value={capacity} onChange={event=>setCapacity(event.target.value)}/></label>
@@ -299,9 +306,22 @@ export function AdminPage() {
           <button className="xc-button xc-secondary" disabled={busy} onClick={()=>
             save('admin/premium',{username:user.username,enabled:!user.premium},'Eligibility updated.')}>
             {user.premium?'Disable premium aliases':'Enable premium aliases'}
-          </button></div>}
+          </button>
+          {!user.protected&&<><button className="xc-button xc-secondary" disabled={busy} onClick={()=>save('admin/account-status',
+            {username:user.username,action:user.locked?'unlock':'lock'},user.locked?'Account unlocked.':'Account locked.')}>{user.locked?'Unlock':'Lock account'}</button>
+            <button className="xc-button xc-secondary" disabled={busy} onClick={()=>{setDeleting(user.username);setConfirmation('');}}>Delete account</button></>}
+          </div>}
+        {deleting===user.username&&<form className="xc-stack" onSubmit={event=>{
+          event.preventDefault();save('admin/account-status',{username:user.username,action:'delete',confirmation},'Account deleted.');
+        }}>
+          <p>This removes the profile and credentials and signs out every device. Enter @{user.username} without the @ to confirm.</p>
+          <label>Confirm username<input value={confirmation} onChange={event=>setConfirmation(event.target.value)}/></label>
+          <div className="xc-actions"><button className="xc-button xc-secondary" disabled={busy||confirmation!==user.username}>Permanently delete account</button>
+          <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>setDeleting('')}>Cancel deletion</button></div>
+        </form>}
       </div>)}
     </section>
+    <AdminSupport/>
     <section className="xc-card xc-pad"><div className="xc-row-head"><BadgeCheck size={21}/><h2>Developer verification</h2></div>
       {developers.length===0&&<p className="xc-empty">No developer reviews.</p>}
       {developers.map(developer=><div className="xc-list-row xc-permission-row" key={developer.owner}>
