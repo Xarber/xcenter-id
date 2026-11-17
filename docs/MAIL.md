@@ -51,4 +51,6 @@ The SMTP container was upgraded to the receiver sources from `94ccae4`. A synthe
 
 Both clients offer **Load older email** after the first 100 messages. `GET /account/inbox` returns `messages` and an opaque `nextCursor` or null. Send that cursor as the `cursor` query parameter to load the next page. The server sorts by receipt time and message ID while applying the owner constraint on every page. Deleting the message at the page boundary does not invalidate the cursor.
 
+Both clients offer **Select messages** in the inbox and require confirmation before permanent deletion. `DELETE /account/inbox` accepts up to 100 message IDs, checks the authenticated owner and mutation intent, and returns the number deleted. It applies the whole batch in a single transaction. Requests can be retried safely. Chrome on an isolated issuer verified that cancellation preserved all messages and confirmed deletion removed only the selected messages after reload.
+
 At a 390 px Chrome viewport, the isolated HTTPS issuer passed username-first signup with a virtual passkey, loading the 101st message, reading its stored MIME, and confirming that deletion persisted after reloading. API coverage exercised tied timestamps, deleting the page boundary, owner isolation, and cursor validation. The installed native client and public delivery remain to verify.

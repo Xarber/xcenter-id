@@ -127,6 +127,9 @@ const mailLocation=()=>/^\/mail\/([0-9a-f-]{36})$/.exec(window.location.pathname
 export function MailPage({ account }:{account:Account}) {
   const [messages,setMessages]=useState<{id:string;received:number;size:number}[]|null>(null);
   const [inboxCursor,setInboxCursor]=useState<string|null>(null);
+  const [selecting,setSelecting]=useState(false);
+  const [selected,setSelected]=useState<string[]>([]);
+  const [confirmSelection,setConfirmSelection]=useState(false);
   const [status,setStatus]=useState('');
   const [messageId,setMessageId]=useState(mailLocation);
   const [loaded,setLoaded]=useState<{id:string;message:MailMessage}|null>(null);
@@ -178,6 +181,21 @@ export function MailPage({ account }:{account:Account}) {
     {messageId&&<button className="xc-button xc-secondary xc-self-start" onClick={()=>{
       setStatus('');returnToInbox();
     }}>{accountMessage('backToInbox','Back to inbox')}</button>}
+    {!messageId&&!!messages?.length&&<div className="xc-actions">
+      <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
+        setSelecting(!selecting);setSelected([]);setConfirmSelection(false);
+      }}>{selecting?'Cancel selection':'Select messages'}</button>
+      {selecting&&<button type="button" className="xc-button xc-secondary" disabled={busy||!selected.length} onClick={()=>{
+        if(!confirmSelection){setConfirmSelection(true);return;}
+        setBusy(true);setStatus('');
+        void api('inbox',{ids:selected},'DELETE').then(({deleted})=>{
+          const ids=new Set(selected);
+          setMessages(previous=>previous?.filter(message=>!ids.has(message.id))??null);
+          setSelecting(false);setSelected([]);setConfirmSelection(false);
+          setStatus(deleted+' messages deleted.');
+        }).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
+      }}>{confirmSelection?'Confirm permanent deletion':'Delete selected ('+selected.length+')'}</button>}
+    </div>}
     {open ? <article className="xc-stack">
       <h3>{open.message.subject || accountMessage('noSubject','(No subject)')}</h3>
       <p>{open.message.from}</p>
@@ -199,11 +217,16 @@ export function MailPage({ account }:{account:Account}) {
       </div>
     </article> : !messageId&&messages?.map(message=><div className="xc-list-row" key={message.id}>
       <span>Received {date(message.received)} · {size(message.size)}</span>
+      {selecting?<label><input type="checkbox" checked={selected.includes(message.id)}
+        disabled={busy||(!selected.includes(message.id)&&selected.length>=100)} onChange={event=>{
+          const checked=event.target.checked;
+          setSelected(previous=>checked?[...previous,message.id]:previous.filter(id=>id!==message.id));setConfirmSelection(false);
+        }}/> Select message</label>:
       <button className="xc-button xc-secondary" disabled={busy} onClick={()=>{
         setStatus('');
         window.history.pushState({inboxNavigation:true},'','/mail/'+message.id);
         setMessageId(message.id);
-      }}>{accountMessage('readEmail','Read email')}</button>
+      }}>{accountMessage('readEmail','Read email')}</button>}
     </div>)}
     {!messageId&&inboxCursor&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
       setBusy(true);setStatus('');

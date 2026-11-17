@@ -4,6 +4,23 @@ import { convert } from 'html-to-text';
 const inbox = '/account/inbox';
 const itemPath = /^\/account\/inbox\/([0-9a-f-]{36})(?:\/(view|attachments\/([0-9]{1,4})))?$/;
 const privateHeaders = { 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff' };
+const messageId=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
+
+async function selection(req) {
+  if (!/^application\/json(?:;|$)/i.test(req.headers['content-type']??'')) return null;
+  const chunks=[];
+  let size=0;
+  for await (const chunk of req.iterator({destroyOnReturn:false})) {
+    size+=chunk.length;
+    if(size>4096){req.resume();return null;}
+    chunks.push(chunk);
+  }
+  try {
+    const {ids}=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return Array.isArray(ids)&&ids.length>0&&ids.length<=100&&
+      ids.every(id=>typeof id==='string'&&messageId.test(id))?[...new Set(ids)]:null;
+  } catch { return null; }
+}
 
 function json(res, value, status = 200) {
   res.writeHead(status, { ...privateHeaders, 'Content-Type':'application/json' }).end(JSON.stringify(value));
@@ -42,7 +59,16 @@ export async function handleInbox(req, res, path, accounts, mail) {
   const session = accounts.current(req);
   if (!session) { json(res, {error:'Sign in to access your inbox.'},401); return true; }
   try {
-    if (req.method === 'DELETE' && match && !match[2]) {
+    if (req.method === 'DELETE' && path === inbox) {
+      const canDelete=()=>accounts.allowsMutation(req)&&req.headers['x-authnjs-request']==='account-consent';
+      if (!canDelete()) json(res,{error:'Invalid origin.'},403);
+      else {
+        const ids=await selection(req);
+        if (!ids) json(res,{error:'Select up to 100 messages.'},422);
+        else if (accounts.current(req)?.owner!==session.owner || !canDelete()) json(res,{error:'Sign in again to continue.'},403);
+        else json(res,{deleted:mail.removeMany(session.owner,ids)});
+      }
+    } else if (req.method === 'DELETE' && match && !match[2]) {
       if (!accounts.allowsMutation(req) || req.headers['x-authnjs-request'] !== 'account-consent') {
         json(res,{error:'Invalid origin.'},403);
       } else {

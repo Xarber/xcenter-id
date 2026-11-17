@@ -80,6 +80,10 @@ test('SMTP accepts registered destinations and aliases, rejects relay and isolat
     assert.equal(next.nextCursor,null);
     assert.ok(next.messages.every(row=>row.id>id));
     assert.deepEqual(store.page('different-owner',{received:Number(received),id}).messages,[]);
+    const selected=next.messages.map(row=>row.id);
+    assert.equal(store.removeMany('different-owner',selected),0);
+    assert.equal(store.removeMany('alex-owner',selected),2);
+    assert.equal(store.removeMany('alex-owner',selected),0);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     store.close();
@@ -122,6 +126,7 @@ test('inbox routes expose text and attachments to their owner and protect deleti
     page:(owner,cursor)=>({messages:[],nextCursor:owner==='reader'&&cursor?.id===id?'verified':null}),
     retrieve:owner=>owner==='reader'?message:null,
     remove:owner=>{if(owner==='reader')message=null;},
+    removeMany:(owner,ids)=>{assert.deepEqual(ids,[id]);return owner==='reader'?1:0;},
   };
   const server = createServer((req,res)=>void handleInbox(req,res,new URL(req.url,'http://localhost').pathname,accounts,mail));
   server.listen(0,'127.0.0.1');
@@ -130,6 +135,14 @@ test('inbox routes expose text and attachments to their owner and protect deleti
   const root = 'http://127.0.0.1:'+server.address().port+'/account/inbox/'+id;
   const reader = {'X-Test-Account':'reader'};
   const list = root.slice(0,-id.length-1);
+  const bulk=(owner,ids,origin='https://identity.example.test')=>fetch(list,{method:'DELETE',headers:{
+    'X-Test-Account':owner,origin,'X-AuthNJS-Request':'account-consent','Content-Type':'application/json',
+  },body:JSON.stringify({ids})});
+  assert.equal((await bulk('reader',[id],'https://other.test')).status,403);
+  assert.equal((await bulk('reader',Array(101).fill(id))).status,422);
+  assert.equal((await bulk('reader',['malformed'])).status,422);
+  assert.deepEqual(await (await bulk('reader',[id,id])).json(),{deleted:1});
+  assert.deepEqual(await (await bulk('someone-else',[id])).json(),{deleted:0});
   assert.equal((await fetch(list+'?cursor=invalid',{headers:reader})).status,400);
   assert.deepEqual(await (await fetch(list+'?cursor=1:'+id,{headers:reader})).json(),{messages:[],nextCursor:'verified'});
   assert.equal((await fetch(root+'/view')).status,401);

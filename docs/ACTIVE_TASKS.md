@@ -6,7 +6,7 @@ Assignment opened 16 November 2026. Legacy source baseline `e617758`.
 | --- | --- | --- | --- |
 | 1 AUTHN-001 | Review the legacy repository and save findings | Verified | Static inventory and source findings in [legacy review](LEGACY_REVIEW.md). Runtime and historical credential validity were outside this verification. |
 | 2 AUTHN-002 | Start the overhaul with an Expo account dashboard | Implemented | Source under `apps/dashboard`. Type check, sample test, Expo alignment, web export and Chrome sample flows passed. Native runtime remains pending. Next, establish the installed-device test baseline and keep web/PWA work independent of identity setup. |
-| 3 AUTHN-003 | Connect the account manager and reusable Expo SDK to passwordless identity and consent | Queued | Determine the issuer and validate the provider with synthetic accounts and external keys. Implement the hosted journeys and typed grant API before wiring live actions. |
+| 3 AUTHN-003 | Connect the account manager and reusable Expo SDK to passwordless identity and consent | Implemented | Isolated issuer tests verified the account and browser consent flows. The Expo SDK hands off to the issuer. Native device callback and physical FIDO2 verification remain open. |
 | 4 AUTHN-004 | Complete applicable UADS portal, SDK and operational requirements | Queued | Requires the identity/data services and release scope. Track PWA, onboarding screenshots, developer tools, updates, production configuration, accessibility and operations. |
 | 5 AUTHN-005 | Validate and release supported artifacts when authorized | Queued | Requires prior implementation and preparation. Apply UADS §8 before starting builds or triggering CI through a push. |
 | 6 AUTHN-006 | Critical priority, review file saving and account encryption | Verified | [Security findings](SECURITY.md). Static review established unsafe path construction and unauthenticated or optional encryption. Legacy runtime disabled by default. |
@@ -83,7 +83,7 @@ Native account controls and the registered sign-in component were submitted in [
 | 34 AUTHN-034 | Revise developer app profiles and add admin review, verification and storage controls | Implemented | Browser tests covered app editing, callbacks, global developer profile, review eligibility and admin access denial. API tests covered role and recency checks, app/developer verification and changing account quotas. Production admin access awaits a configured account. |
 | 35 AUTHN-035 | Create the Implement X-Center ID skill | Verified | Skill Creator validation passed after installing PyYAML in a temporary environment. |
 | 36 AUTHN-036 | Give mail composition a separate window and keep New email reachable | Verified | Isolated Chrome with an inbox fixture verified fixed launcher, separate dialog, Escape and draft retention. Local STARTTLS delivery was separately verified on X-Center. |
-| 37 AUTHN-037 | Evaluate external SMTP delivery | Queued | Deferred by user. Research completed. Retain the local SMTP path while external delivery is deferred. Activate only after a future request and verified network or relay prerequisites. |
+| 37 AUTHN-037 | Evaluate external SMTP delivery | Verified | Transport evaluation completed. Implementation and external delivery verification continue under AUTHN-039. |
 
 Public web revision bd6b402 is deployed on the account and sample origins. Both iOS artifacts are from the native preview source 72e60f8. The Admin dashboard awaits an authorized production account assignment. External SMTP delivery remains deferred by the user.
 
@@ -141,3 +141,7 @@ The user waived the weekly pause for this assignment and requested the native pr
 | 50 AUTHN-050 | Start the native build after implementation | Verified | [Run 44138528022](https://github.com/Xarber/xcenter-id/actions/runs/44138528022) was dispatched for `207627d`. Both Android jobs started while both iOS jobs were queued. Artifact validation and release remain under AUTHN-046. |
 
 Build gate reconciliation. Admin and in-app support implementation and source preparation are complete. The isolated browser and SMTP checks passed. Public routing, external mail, production backup headroom and installed-device checks depend on services or artifacts outside this source change. This user explicitly requested a native preview after changes. Dispatch it on the tested development revision without release publication.
+
+### Remaining queue continuation
+
+AUTHN-038 gained confirmed bulk mail cleanup on web and native. API tests passed for ownership, cross-origin denial, malformed input, request bounds and retry safety. Isolated Chrome at 390 px verified cancel and persistent selected-only deletion. Native runtime remains open. The latest native run targets an earlier commit and remains separate from this batch. Public web still reports `bd6b402`, and the production storage mount still has 1.4 GiB free.

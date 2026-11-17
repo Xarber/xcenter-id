@@ -75,6 +75,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [destination,setDestination]=useState('');
   const [messages,setMessages]=useState<Mail[]>([]);
   const [inboxCursor,setInboxCursor]=useState<string|null>(null);
+  const [selectingMail,setSelectingMail]=useState(false);
+  const [selectedMail,setSelectedMail]=useState<string[]>([]);
   const [aliases,setAliases]=useState<PrivateAddress[]>([]);
   const [openMail,setOpenMail]=useState<{id:string;message:MailMessage}|null>(null);
   const [confirmMailDeletion,setConfirmMailDeletion]=useState(false);
@@ -419,8 +421,28 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           {confirmMailDeletion&&button('Cancel deletion',()=>setConfirmMailDeletion(false))}
           {status&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}
         </MailScreen>}
-        {messages.map(item=>row(item.id,'Received '+date(item.received),formatBytes(item.size),
-          button(accountMessage('readEmail','Read email'),()=>run(async()=>setOpenMail({id:item.id,message:await api('inbox/'+item.id+'/view')})))))}
+        {!!messages.length&&button(selectingMail?'Cancel selection':'Select messages',()=>{
+          setSelectingMail(!selectingMail);setSelectedMail([]);
+        })}
+        {selectingMail&&button('Delete selected ('+selectedMail.length+')',()=>{
+          const ids=[...selectedMail];
+          confirm('Permanently delete selected messages?', 'This removes '+ids.length+' selected messages from your inbox.',()=>run(async()=>{
+            await api('inbox',{ids},'DELETE');
+            const removed=new Set(ids);
+            setMessages(items=>items.filter(item=>!removed.has(item.id)));
+            setSelectedMail([]);setSelectingMail(false);
+          },'Selected messages deleted.'));
+        },busy||!selectedMail.length)}
+        {messages.map(item=>{
+          const checked=selectedMail.includes(item.id);
+          return row(item.id,'Received '+date(item.received),formatBytes(item.size),selectingMail?
+            <Pressable accessibilityRole="checkbox" accessibilityState={{checked}} disabled={busy||(!checked&&selectedMail.length>=100)}
+              onPress={()=>setSelectedMail(previous=>checked?previous.filter(id=>id!==item.id):[...previous,item.id])}
+              style={[styles.button,{backgroundColor:colors.soft}]}>
+              <Text style={{color:colors.ink}}>{checked?'Deselect message':'Select message'}</Text>
+            </Pressable>:
+            button(accountMessage('readEmail','Read email'),()=>run(async()=>setOpenMail({id:item.id,message:await api('inbox/'+item.id+'/view')}))));
+        })}
         {inboxCursor&&button(accountMessage('olderEmail','Load older email'),()=>run(async()=>{
           const page=await api('inbox?cursor='+encodeURIComponent(inboxCursor));
           setMessages(previous=>[...previous,...page.messages]);setInboxCursor(page.nextCursor);

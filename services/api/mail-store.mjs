@@ -189,6 +189,12 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
       return {messages,nextCursor:rows.length>100 ? last.received+':'+last.id : null};
     },
     remove: (owner,id) => remove.run(owner,id).changes === 1,
+    removeMany(owner,ids) {
+      return transaction(()=>{
+        const deleted=ids.reduce((total,id)=>total+Number(remove.run(owner,id).changes),0);
+        return {deleted};
+      }).deleted;
+    },
     retrieve,
     close() { accounts.close(); db.close(); },
   };
