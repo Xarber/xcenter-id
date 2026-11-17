@@ -40,7 +40,7 @@ test('SMTP accepts registered destinations and aliases, rejects relay and isolat
     await send(premium);
     await assert.rejects(send('nobody@mail.xcenter.it'),{responseCode:550});
     await assert.rejects(send('someone@example.test'),{responseCode:550});
-    const messages = store.list('alex-owner');
+    const {messages} = store.page('alex-owner');
     assert.equal(messages.length,3);
     assert.ok(store.retrieve('alex-owner',messages[0].id).includes(Buffer.from('ciphertext check')));
     assert.equal(store.retrieve('different-owner',messages[0].id),null);
@@ -48,7 +48,7 @@ test('SMTP accepts registered destinations and aliases, rejects relay and isolat
     assert.equal(store.remove('alex-owner',messages[0].id),true);
     assert.equal(store.remove('alex-owner',messages[0].id),false);
     assert.equal(store.retrieve('alex-owner',messages[0].id),null);
-    assert.equal(store.list('alex-owner').length,2);
+    assert.equal(store.page('alex-owner').messages.length,2);
     assert.equal(store.aliases('alex-owner').length,2);
     assert.equal(store.aliases('different-owner').length,0);
     assert.equal(store.revokeAlias('different-owner',alias),false);
@@ -59,6 +59,19 @@ test('SMTP accepts registered destinations and aliases, rejects relay and isolat
     assert.equal(store.revokeAlias('alex-owner',premium),true);
     assert.equal(store.resolveRecipient(premium),null);
     assert.ok(!readFileSync(mailPath).includes(Buffer.from('ciphertext check')));
+    for (let i=0;i<100;i++) assert.equal(store.receive(['alex@mail.xcenter.it'],Buffer.from('fixture')),true);
+    const timestamps = new DatabaseSync(mailPath);
+    timestamps.exec('UPDATE inbox SET received=1');
+    timestamps.close();
+    const first = store.page('alex-owner');
+    assert.equal(first.messages.length,100);
+    const [received,id] = first.nextCursor.split(':');
+    assert.equal(store.remove('alex-owner',id),true);
+    const next = store.page('alex-owner',{received:Number(received),id});
+    assert.equal(next.messages.length,2);
+    assert.equal(next.nextCursor,null);
+    assert.ok(next.messages.every(row=>row.id>id));
+    assert.deepEqual(store.page('different-owner',{received:Number(received),id}).messages,[]);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     store.close();
@@ -98,15 +111,19 @@ test('inbox routes expose text and attachments to their owner and protect deleti
     allowsMutation:req=>req.headers.origin==='https://identity.example.test',
   };
   const mail = {
+    page:(owner,cursor)=>({messages:[],nextCursor:owner==='reader'&&cursor?.id===id?'verified':null}),
     retrieve:owner=>owner==='reader'?message:null,
     remove:owner=>{if(owner==='reader')message=null;},
   };
-  const server = createServer((req,res)=>void handleInbox(req,res,req.url,accounts,mail));
+  const server = createServer((req,res)=>void handleInbox(req,res,new URL(req.url,'http://localhost').pathname,accounts,mail));
   server.listen(0,'127.0.0.1');
   await once(server,'listening');
   t.after(()=>new Promise(resolve=>server.close(resolve)));
   const root = 'http://127.0.0.1:'+server.address().port+'/account/inbox/'+id;
   const reader = {'X-Test-Account':'reader'};
+  const list = root.slice(0,-id.length-1);
+  assert.equal((await fetch(list+'?cursor=invalid',{headers:reader})).status,400);
+  assert.deepEqual(await (await fetch(list+'?cursor=1:'+id,{headers:reader})).json(),{messages:[],nextCursor:'verified'});
   assert.equal((await fetch(root+'/view')).status,401);
   assert.equal((await fetch(root+'/view',{headers:{'X-Test-Account':'other'}})).status,404);
   const response = await fetch(root+'/view',{headers:reader});

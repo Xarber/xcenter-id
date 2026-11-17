@@ -46,6 +46,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [source,setSource]=useState('');
   const [destination,setDestination]=useState('');
   const [messages,setMessages]=useState<Mail[]>([]);
+  const [inboxCursor,setInboxCursor]=useState<string|null>(null);
   const [aliases,setAliases]=useState<PrivateAddress[]>([]);
   const [openMail,setOpenMail]=useState<{id:string;message:MailMessage}|null>(null);
   const [confirmMailDeletion,setConfirmMailDeletion]=useState(false);
@@ -102,7 +103,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
     }
     if(section==='mail'&&account.canReceiveMail){
       const [inbox,addresses]=await Promise.all([api('inbox'),api('mail/aliases')]);
-      setMessages(inbox.messages);setAliases(addresses.aliases);
+      setMessages(inbox.messages);setInboxCursor(inbox.nextCursor??null);setAliases(addresses.aliases);
     }
   }
   useEffect(()=>{void load().catch(report);},[section,folder,token]);
@@ -326,6 +327,10 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           {confirmMailDeletion&&button('Cancel deletion',()=>setConfirmMailDeletion(false))}
         </> : messages.map(item=>row(item.id,'Received '+date(item.received),formatBytes(item.size),
           button('Read email',()=>run(async()=>setOpenMail({id:item.id,message:await api('inbox/'+item.id+'/view')})))))}
+        {!openMail&&inboxCursor&&button('Load older email',()=>run(async()=>{
+          const page=await api('inbox?cursor='+encodeURIComponent(inboxCursor));
+          setMessages(previous=>[...previous,...page.messages]);setInboxCursor(page.nextCursor);
+        }))}
         {!openMail&&aliases.length>0&&<Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Hide My Email addresses</Text>}
         {!openMail&&aliases.map(item=>row(item.address,item.address,item.active?(item.premium?'Premium address':'Private address'):'Disabled',
           item.active&&button('Disable address',()=>confirm('Disable this address?','Future messages to this address will be rejected.',

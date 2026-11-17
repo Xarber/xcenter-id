@@ -52,7 +52,13 @@ export async function handleInbox(req, res, path, accounts, mail) {
     } else if (req.method !== 'GET') {
       json(res,{error:'Method not allowed.'},405);
     } else if (!match) {
-      json(res,{messages:mail.list(session.owner)});
+      const cursors = new URL(req.url,'http://localhost').searchParams.getAll('cursor');
+      const cursor = cursors.length ? /^(\d{1,15}):([0-9a-f-]{36})$/.exec(cursors[0]) : null;
+      if (cursors.length > 1 || (cursors.length && !cursor)) {
+        json(res,{error:'Invalid inbox page.'},400);
+      } else {
+        json(res,mail.page(session.owner,cursor ? {received:Number(cursor[1]),id:cursor[2]} : null));
+      }
     } else {
       const message = mail.retrieve(session.owner,match[1]);
       if (!message) json(res,{error:'Email not found.'},404);

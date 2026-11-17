@@ -38,7 +38,9 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
   const lookup = accounts.prepare('SELECT owner FROM identity_profiles WHERE username=?');
   const add = db.prepare('INSERT INTO inbox VALUES (?,?,?,?,?)');
   const count = db.prepare('SELECT total(size) AS bytes,count(*) AS messages FROM inbox WHERE owner=?');
-  const list = db.prepare('SELECT id,received,size FROM inbox WHERE owner=? ORDER BY received DESC,id LIMIT 100');
+  const list = db.prepare('SELECT id,received,size FROM inbox WHERE owner=? ORDER BY received DESC,id LIMIT 101');
+  const older = db.prepare(`SELECT id,received,size FROM inbox WHERE owner=? AND (received<? OR (received=? AND id>?))
+    ORDER BY received DESC,id LIMIT 101`);
   const remove = db.prepare('DELETE FROM inbox WHERE owner=? AND id=?');
   const get = db.prepare('SELECT * FROM inbox WHERE owner=? AND id=?');
 
@@ -111,7 +113,12 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
       } catch (error) { db.exec('ROLLBACK'); throw error; }
     },
     usage: (owner) => count.get(owner).bytes,
-    list: (owner) => list.all(owner),
+    page(owner,cursor) {
+      const rows = cursor ? older.all(owner,cursor.received,cursor.received,cursor.id) : list.all(owner);
+      const messages = rows.slice(0,100);
+      const last = messages.at(-1);
+      return {messages,nextCursor:rows.length>100 ? last.received+':'+last.id : null};
+    },
     remove: (owner,id) => remove.run(owner,id).changes === 1,
     retrieve(owner,id) {
       const row = get.get(owner,id);

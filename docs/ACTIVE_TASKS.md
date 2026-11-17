@@ -114,3 +114,5 @@ The five-hour window reached 9% remaining and resets at 17:28:55 CET on 17 Novem
 ### 17 November resumption
 
 Usage permit confirmed. Added publisher-approved friend sharing for saved places and the associated API isolation test. Production web still reported bd6b402, and DNS and signing configuration were present. Browser staging and native artifacts remain pending.
+
+Friend app-data sharing landed on `testing` at `be44dc9`. Chrome at 390 px passed mock-API sharing and revocation. A separate Chrome run against an isolated HTTPS issuer passed username-first signup with a virtual passkey, paging to the 101st stored email, opening it, deleting it, and confirming the deletion after reload. Both clients now expose older email. API suite passed 21 tests, dashboard suite passed 2, and dashboard typecheck and web export passed. External transport, a real publisher UI run, native verification and production deployment remain open.

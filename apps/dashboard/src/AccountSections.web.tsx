@@ -121,6 +121,7 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
 
 export function MailPage({ account }:{account:Account}) {
   const [messages,setMessages]=useState<{id:string;received:number;size:number}[]|null>(null);
+  const [inboxCursor,setInboxCursor]=useState<string|null>(null);
   const [status,setStatus]=useState('');
   const [open,setOpen]=useState<{id:string;message:MailMessage}|null>(null);
   const [confirmDelete,setConfirmDelete]=useState(false);
@@ -133,7 +134,9 @@ export function MailPage({ account }:{account:Account}) {
   const [attachment,setAttachment]=useState<{name:string;content:string}|undefined>();
   const [deliveryError,setDeliveryError]=useState('');
   const dialog=useRef<HTMLDialogElement>(null);
-  useEffect(()=>{void api('inbox').then(result=>setMessages(result.messages)).catch(error=>setStatus(notice(error)));},[]);
+  useEffect(()=>{void api('inbox').then(result=>{
+    setMessages(result.messages);setInboxCursor(result.nextCursor??null);
+  }).catch(error=>setStatus(notice(error)));},[]);
   useEffect(()=>{
     if(account.canReceiveMail)void api('mail/aliases').then(result=>setAliases(result.aliases)).catch(()=>{});
   },[account.canReceiveMail]);
@@ -170,6 +173,12 @@ export function MailPage({ account }:{account:Account}) {
           .catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
       }}>Read email</button>
     </div>)}
+    {!open&&inboxCursor&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
+      setBusy(true);setStatus('');
+      void api('inbox?cursor='+encodeURIComponent(inboxCursor)).then(result=>{
+        setMessages(previous=>[...(previous??[]),...result.messages]);setInboxCursor(result.nextCursor);
+      }).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
+    }}>Load older email</button>}
     {aliases.length>0&&<details>
       <summary>Hide My Email addresses</summary>
       {aliases.map(item=><div className="xc-list-row" key={item.address}>
