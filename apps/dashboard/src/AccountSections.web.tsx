@@ -1,3 +1,4 @@
+import { accountMessage } from './account-locale';
 import type { Friend } from './friends-model';
 import type { MailMessage, PrivateAddress } from './mail-message';
 import { formatBytes, storageCategories } from './storage-summary';
@@ -145,14 +146,14 @@ export function MailPage({ account }:{account:Account}) {
     <div className="xc-row-head"><span className="xc-symbol xc-sky"><Mail size={21}/></span><div><h2>{account.mailbox??'X-Center mailbox'}</h2>
     <p>{messages?'Your private mailbox.':'This address is reserved. Mailbox delivery is unavailable.'}</p></div></div>
     {messages&&!account.externalMail&&<p>This inbox can receive local X-Center mail. External delivery is unavailable.</p>}
-    {messages?.length===0 && <div className="xc-empty">Your inbox is empty.</div>}
+    {messages?.length===0 && <div className="xc-empty">{accountMessage('inboxEmpty','Your inbox is empty.')}</div>}
     {open ? <article className="xc-stack">
-      <button className="xc-button xc-secondary xc-self-start" onClick={()=>{setOpen(null);setConfirmDelete(false);}}>Back to inbox</button>
-      <h3>{open.message.subject || '(No subject)'}</h3>
+      <button className="xc-button xc-secondary xc-self-start" onClick={()=>{setOpen(null);setConfirmDelete(false);}}>{accountMessage('backToInbox','Back to inbox')}</button>
+      <h3>{open.message.subject || accountMessage('noSubject','(No subject)')}</h3>
       <p>{open.message.from}</p>
       <p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{open.message.text}</p>
       {open.message.attachments.map(file=><a key={file.index} href={'/account/inbox/'+open.id+'/attachments/'+file.index}>{file.name} · {size(file.size)}</a>)}
-      <a href={'/account/inbox/'+open.id}>Download original email</a>
+      <a href={'/account/inbox/'+open.id}>{accountMessage('downloadEmail','Download original email')}</a>
       <div className="xc-row-head">
         <button type="button" disabled={busy} className="xc-button xc-secondary" onClick={()=>{
           if(!confirmDelete){setConfirmDelete(true);return;}
@@ -160,10 +161,10 @@ export function MailPage({ account }:{account:Account}) {
           setBusy(true);
           void api('inbox/'+id,{},'DELETE').then(()=>{
             setMessages(previous=>previous?.filter(message=>message.id!==id)??null);
-            setOpen(null);setConfirmDelete(false);setStatus('Email deleted.');
+            setOpen(null);setConfirmDelete(false);setStatus(accountMessage('emailDeleted','Email deleted.'));
           }).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
-        }}><Trash2 size={18}/> {confirmDelete?'Confirm permanent deletion':'Delete email'}</button>
-        {confirmDelete&&<button className="xc-button xc-secondary" disabled={busy} onClick={()=>setConfirmDelete(false)}>Cancel</button>}
+        }}><Trash2 size={18}/> {confirmDelete?accountMessage('confirmEmailDeletion','Confirm permanent deletion'):accountMessage('deleteEmail','Delete email')}</button>
+        {confirmDelete&&<button className="xc-button xc-secondary" disabled={busy} onClick={()=>setConfirmDelete(false)}>{accountMessage('cancel','Cancel')}</button>}
       </div>
     </article> : messages?.map(message=><div className="xc-list-row" key={message.id}>
       <span>Received {date(message.received)} · {size(message.size)}</span>
@@ -171,16 +172,16 @@ export function MailPage({ account }:{account:Account}) {
         setBusy(true);setStatus('');
         void api('inbox/'+message.id+'/view').then(result=>setOpen({id:message.id,message:result}))
           .catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
-      }}>Read email</button>
+      }}>{accountMessage('readEmail','Read email')}</button>
     </div>)}
     {!open&&inboxCursor&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
       setBusy(true);setStatus('');
       void api('inbox?cursor='+encodeURIComponent(inboxCursor)).then(result=>{
         setMessages(previous=>[...(previous??[]),...result.messages]);setInboxCursor(result.nextCursor);
       }).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
-    }}>Load older email</button>}
+    }}>{accountMessage('olderEmail','Load older email')}</button>}
     {aliases.length>0&&<details>
-      <summary>Hide My Email addresses</summary>
+      <summary>{accountMessage('privateAddresses','Hide My Email addresses')}</summary>
       {aliases.map(item=><div className="xc-list-row" key={item.address}>
         <div><strong>{item.address}</strong><p>{item.active?(item.premium?'Premium address':'Private address'):'Disabled'}</p></div>
         {item.active&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
@@ -189,16 +190,16 @@ export function MailPage({ account }:{account:Account}) {
           void api('mail/aliases/'+item.address,{},'DELETE').then(()=>api('mail/aliases'))
             .then(result=>{setAliases(result.aliases);setConfirmAlias('');setStatus('Private address disabled.');})
             .catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
-        }}>{confirmAlias===item.address?'Confirm stopping delivery':'Disable address'}</button>}
-        {confirmAlias===item.address&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>setConfirmAlias('')}>Cancel</button>}
+        }}>{confirmAlias===item.address?'Confirm stopping delivery':accountMessage('disableAddress','Disable address')}</button>}
+        {confirmAlias===item.address&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>setConfirmAlias('')}>{accountMessage('cancel','Cancel')}</button>}
       </div>)}
     </details>}
     {account.canSendMail&&<div className="xc-mail-compose-action">
-      <button type="button" className="xc-button xc-primary" onClick={()=>{setDeliveryError('');setCompose(true);}}><MailPlus size={18}/> New email</button>
+      <button type="button" className="xc-button xc-primary" onClick={()=>{setDeliveryError('');setCompose(true);}}><MailPlus size={18}/> {accountMessage('newEmail','New email')}</button>
     </div>}
     {compose&&<dialog ref={dialog} className="xc-compose-dialog" aria-labelledby="compose-title"
       onCancel={event=>{event.preventDefault();if(!busy)setCompose(false);}}>
-      <div className="xc-compose-header"><h2 id="compose-title">New email</h2>
+      <div className="xc-compose-header"><h2 id="compose-title">{accountMessage('newEmail','New email')}</h2>
         <button type="button" className="xc-button xc-secondary" aria-label="Close compose" disabled={busy} onClick={()=>setCompose(false)}><X size={19}/></button>
       </div>
       <form className="xc-stack" onSubmit={event=>{
@@ -209,9 +210,9 @@ export function MailPage({ account }:{account:Account}) {
         }).catch(error=>setDeliveryError(notice(error))).finally(()=>setBusy(false));
       }}>
         {!account.externalMailSubmission&&<p>Send to a X-Center mailbox.</p>}
-        <label>Recipient<input type="email" autoFocus required value={draft.to} onChange={event=>setDraft({...draft,to:event.target.value})}/></label>
-        <label>Subject<input required maxLength={120} value={draft.subject} onChange={event=>setDraft({...draft,subject:event.target.value})}/></label>
-        <label>Message<textarea aria-label="Message" required rows={5} value={draft.text} onChange={event=>setDraft({...draft,text:event.target.value})}/></label>
+        <label>{accountMessage('recipient','Recipient')}<input type="email" autoFocus required value={draft.to} onChange={event=>setDraft({...draft,to:event.target.value})}/></label>
+        <label>{accountMessage('subject','Subject')}<input required maxLength={120} value={draft.subject} onChange={event=>setDraft({...draft,subject:event.target.value})}/></label>
+        <label>{accountMessage('message','Message')}<textarea aria-label={accountMessage('message','Message')} required rows={5} value={draft.text} onChange={event=>setDraft({...draft,text:event.target.value})}/></label>
         <label><input type="checkbox" checked={formatted} onChange={event=>setFormatted(event.target.checked)}/> Format message</label>
         {formatted&&<p>Use **bold** or _italics_ in your message.</p>}
         <label>Attachment (up to 256 KB)<input type="file" onChange={event=>{
@@ -224,7 +225,7 @@ export function MailPage({ account }:{account:Account}) {
         }}/></label>
         {attachment&&<button type="button" className="xc-button xc-secondary" onClick={()=>setAttachment(undefined)}>Remove {attachment.name}</button>}
         {deliveryError&&<p role="alert">{deliveryError}</p>}
-        <button className="xc-button xc-primary xc-self-start" disabled={busy}>{busy?'Sending…':'Send email'}</button>
+        <button className="xc-button xc-primary xc-self-start" disabled={busy}>{busy?'Sending…':accountMessage('sendEmail','Send email')}</button>
       </form>
     </dialog>}
     {status&&<p role="status">{status}</p>}

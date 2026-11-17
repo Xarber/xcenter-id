@@ -305,44 +305,44 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       break;
     case 'mail':
       content=<>{paragraph(account.mailbox??'No mailbox has been reserved.')}
-        {paragraph(account.canReceiveMail?(messages.length?'Your inbox':'Your inbox is empty.'):'Mailbox delivery is unavailable.')}
+        {paragraph(account.canReceiveMail?(messages.length?'Your inbox':accountMessage('inboxEmpty','Your inbox is empty.')):'Mailbox delivery is unavailable.')}
         {account.canReceiveMail&&!account.externalMail&&paragraph('This inbox can receive local X-Center mail. External delivery is unavailable.')}
         {openMail ? <>
-          {button('Back to inbox',()=>{setOpenMail(null);setConfirmMailDeletion(false);})}
-          {row(openMail.id,openMail.message.subject||'(No subject)',openMail.message.from)}
+          {button(accountMessage('backToInbox','Back to inbox'),()=>{setOpenMail(null);setConfirmMailDeletion(false);})}
+          {row(openMail.id,openMail.message.subject||accountMessage('noSubject','(No subject)'),openMail.message.from)}
           {paragraph(openMail.message.text)}
           {openMail.message.attachments.map(file=><View key={file.index}>
             {paragraph(file.name+' · '+formatBytes(file.size))}
             {button('Download attachment',()=>run(()=>shareDownload('inbox/'+openMail.id+'/attachments/'+file.index,'attachment-'+(file.index+1),token)))}
           </View>)}
-          {button('Download original email',()=>run(()=>shareDownload('inbox/'+openMail.id,'message.eml',token)))}
-          {button(confirmMailDeletion?'Confirm permanent deletion':'Delete email',()=>{
+          {button(accountMessage('downloadEmail','Download original email'),()=>run(()=>shareDownload('inbox/'+openMail.id,'message.eml',token)))}
+          {button(confirmMailDeletion?accountMessage('confirmEmailDeletion','Confirm permanent deletion'):accountMessage('deleteEmail','Delete email'),()=>{
             if(!confirmMailDeletion){setConfirmMailDeletion(true);return;}
             run(async()=>{
               await api('inbox/'+openMail.id,{},'DELETE');
               setMessages(items=>items.filter(item=>item.id!==openMail.id));
               setOpenMail(null);setConfirmMailDeletion(false);
-            },'Email deleted.');
+            },accountMessage('emailDeleted','Email deleted.'));
           })}
           {confirmMailDeletion&&button('Cancel deletion',()=>setConfirmMailDeletion(false))}
         </> : messages.map(item=>row(item.id,'Received '+date(item.received),formatBytes(item.size),
-          button('Read email',()=>run(async()=>setOpenMail({id:item.id,message:await api('inbox/'+item.id+'/view')})))))}
-        {!openMail&&inboxCursor&&button('Load older email',()=>run(async()=>{
+          button(accountMessage('readEmail','Read email'),()=>run(async()=>setOpenMail({id:item.id,message:await api('inbox/'+item.id+'/view')})))))}
+        {!openMail&&inboxCursor&&button(accountMessage('olderEmail','Load older email'),()=>run(async()=>{
           const page=await api('inbox?cursor='+encodeURIComponent(inboxCursor));
           setMessages(previous=>[...previous,...page.messages]);setInboxCursor(page.nextCursor);
         }))}
-        {!openMail&&aliases.length>0&&<Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Hide My Email addresses</Text>}
+        {!openMail&&aliases.length>0&&<Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>{accountMessage('privateAddresses','Hide My Email addresses')}</Text>}
         {!openMail&&aliases.map(item=>row(item.address,item.address,item.active?(item.premium?'Premium address':'Private address'):'Disabled',
-          item.active&&button('Disable address',()=>confirm('Disable this address?','Future messages to this address will be rejected.',
+          item.active&&button(accountMessage('disableAddress','Disable address'),()=>confirm('Disable this address?','Future messages to this address will be rejected.',
             ()=>run(async()=>{await api('mail/aliases/'+item.address,{},'DELETE');await load();},'Private address disabled.'),
           ))))}
-        {account.canSendMail&&<>{!account.externalMailSubmission&&paragraph('You can send to X-Center mailboxes.')} {field('Recipient',recipient,setRecipient,{keyboardType:'email-address',autoCapitalize:'none'})}
-          {field('Subject',subject,setSubject,{maxLength:120})}{field('Message',mailText,setMailText,{multiline:true})}
+        {account.canSendMail&&<>{!account.externalMailSubmission&&paragraph('You can send to X-Center mailboxes.')} {field(accountMessage('recipient','Recipient'),recipient,setRecipient,{keyboardType:'email-address',autoCapitalize:'none'})}
+          {field(accountMessage('subject','Subject'),subject,setSubject,{maxLength:120})}{field(accountMessage('message','Message'),mailText,setMailText,{multiline:true})}
           {button(formatted?'Use plain text':'Format message',()=>setFormatted(value=>!value))}
           {formatted&&paragraph('Use **bold** or _italics_ in your message.')}
           {attachment ? button('Remove '+attachment.name,()=>setAttachment(undefined))
             : button('Attach a file (up to 256 KB)',()=>run(async()=>{const file=await pickDocumentAsync(256*1024);if(file)setAttachment(file);}))}
-          {button('Send email',()=>run(async()=>{
+          {button(accountMessage('sendEmail','Send email'),()=>run(async()=>{
             await api('mail/send',{to:recipient,subject,text:mailText,formatted,attachment});
             setRecipient('');setSubject('');setMailText('');setFormatted(false);setAttachment(undefined);
           },'Mail accepted for delivery.'))}</>}

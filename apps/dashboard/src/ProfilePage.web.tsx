@@ -1,3 +1,4 @@
+import { accountMessage } from './account-locale';
 import { Camera, Check, CircleHelp, Mail, Save, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import DeveloperIdentityPanel from './DeveloperIdentity.web';
@@ -52,7 +53,7 @@ export default function ProfilePage({ account, update, complete }: {
           <label>Surname<input name="surname" autoComplete="family-name" maxLength={64} required defaultValue={profile?.surname}/></label>
           <label>X-Center username<input name="username" autoComplete="username" pattern="[A-Za-z][A-Za-z0-9]{2,23}"
             maxLength={24} required defaultValue={profile?.username??account.pendingUsername} readOnly={!!(profile?.username??account.pendingUsername)}/></label>
-          <label>Birthday<input name="birthday" type="date" autoComplete="bday" max={new Date().toISOString().slice(0,10)}
+          <label>{accountMessage('birthday','Birthday')}<input name="birthday" type="date" autoComplete="bday" max={new Date().toISOString().slice(0,10)}
             required defaultValue={profile?.birthday}/></label>
         </fieldset>
         <p className="xc-hint"><CircleHelp size={15}/> Apps can request your age range. Your exact birthday stays in your account.</p>
