@@ -4,7 +4,7 @@ import { createPasskeyLabelResolver, passkeyLabel } from './passkey-label.mjs';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import { openEmailVerification } from './email-verification.mjs';
 import sharp from 'sharp';
-import { ageRangeFromBirthday, validateProfile } from './identity-profile.mjs';
+import { ageRangeFromBirthday, validateProfile, validateUsername } from './identity-profile.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import {
   generateAuthenticationOptions, generateRegistrationOptions,
@@ -35,13 +35,13 @@ function setCookie(res, name, value, maxAge) {
   res.setHeader('Set-Cookie', `${name}=${value}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${maxAge}`);
 }
 
-async function body(req) {
+async function body(req, limit=65536) {
   requireCondition(/^application\/json(?:;|$)/i.test(req.headers['content-type'] ?? ''), 415, 'JSON required.');
   let size = 0;
   const chunks = [];
   for await (const chunk of req.iterator({ destroyOnReturn: false })) {
     size += chunk.length;
-    if (size > 65536) {
+    if (size > limit) {
       req.resume();
       throw new AccountError(413, 'Response is too large.');
     }
@@ -90,6 +90,9 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       owner TEXT PRIMARY KEY REFERENCES accounts(id), username TEXT UNIQUE NOT NULL,
       given_name TEXT NOT NULL, surname TEXT NOT NULL, age_range TEXT NOT NULL
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS signup_usernames (
+      owner TEXT PRIMARY KEY REFERENCES accounts(id), username TEXT UNIQUE NOT NULL, expires INTEGER NOT NULL
+    ) STRICT;
     CREATE TABLE IF NOT EXISTS account_storage_caps(owner TEXT PRIMARY KEY REFERENCES accounts(id),bytes INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS verified_emails (owner TEXT NOT NULL REFERENCES accounts(id),
       address TEXT PRIMARY KEY, verified INTEGER NOT NULL) STRICT;
@@ -132,6 +135,12 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   const insertProfile = q(`INSERT INTO identity_profiles VALUES (?,?,?,?,?) ON CONFLICT(owner)
     DO UPDATE SET username=excluded.username,given_name=excluded.given_name,surname=excluded.surname,age_range=excluded.age_range`);
   const usernameOwner = q('SELECT owner FROM identity_profiles WHERE username=?');
+  const reservedOwner = q('SELECT owner FROM signup_usernames WHERE username=? AND expires>?');
+  const reservedUsername = q('SELECT username FROM signup_usernames WHERE owner=? AND expires>?');
+  function ensureAvailable(name, owner) {
+    const existing = usernameOwner.get(name)?.owner ?? reservedOwner.get(name,now())?.owner;
+    requireCondition(!existing || existing === owner,409,'This username is unavailable.');
+  }
   async function normalizePicture(value) {
     requireCondition(profileKey,503,'Photo uploads are unavailable.');
     requireCondition(typeof value === 'string' && value.length <= 45_000 &&
@@ -186,7 +195,10 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     const created=nativeSource?.created ?? now();
     insertSession.run(hash,owner,created,nativeSource?.expires ?? created+sessionAge);
     if(nativeSource) native.bind(hash);
-    q('INSERT INTO account_devices VALUES (?,?,?)').run(randomUUID(),hash,nativeSource?'X-Center ID app':deviceLabel(req));
+    const nativePlatform = req.headers['x-authnjs-device-platform'];
+    const label = nativeSource ? (nativePlatform==='ios'?'X-Center ID on iPhone or iPad'
+      :nativePlatform==='android'?'X-Center ID on Android':'X-Center ID app') : deviceLabel(req);
+    q('INSERT INTO account_devices VALUES (?,?,?)').run(randomUUID(),hash,label);
     if(!nativeSource) setCookie(res, '__Host-authnjs', value, sessionAge / 1000);
     return value;
   }
@@ -226,6 +238,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       return { account: {
         name: account.get(active.owner).name,
         profile: saved ? { ...details, hasPicture:!!picture } : null,
+        pendingUsername: saved ? undefined : reservedUsername.get(active.owner,now())?.username,
         passkeys: keys.all(active.owner).map(({ id, label, created }) => ({ id, label, created })),
         emails: emails.all(active.owner),
         canSendMail: !!outboundMail,
@@ -296,7 +309,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       return {token:login(req,res,browser.owner,browser)};
     }
     requireCondition(allowsMutation(req),403,'Invalid origin.');
-    const input = await body(req);
+    if (pathname === '/account/mail/send') requireCondition(active,401,'Sign in first.');
+    const input = await body(req,pathname==='/account/mail/send'?512*1024:undefined);
     if(pathname==='/account/native/authorize'){
       requireCondition(active && req.headers.origin===origin,401,'Sign in to X-Center ID first.');
       limitChallenges();
@@ -356,15 +370,20 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       requireCondition(active,401,'Sign in first.');
       requireCondition(profileKey,503,'Profile editing requires encrypted account storage.');
       const existing = profile(active.owner);
-      const candidate = validateProfile({ ...input, username:existing?.username ?? input.username },reservedNames,existing?.username);
+      const chosen = existing?.username ?? reservedUsername.get(active.owner,now())?.username;
+      const candidate = validateProfile({ ...input, username:chosen ?? input.username },reservedNames,existing?.username);
       requireCondition(!candidate.error,422,candidate.error);
       let picture = existing?.picture;
       if (input.picture === null) picture = undefined;
       else if (input.picture !== undefined) picture = await normalizePicture(input.picture);
       candidate.username = profile(active.owner)?.username ?? candidate.username;
-      const owner = usernameOwner.get(candidate.username)?.owner;
-      requireCondition(!owner || owner === active.owner,409,'This username is unavailable.');
-      writeProfile(active.owner,{...candidate,picture});
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        ensureAvailable(candidate.username,active.owner);
+        writeProfile(active.owner,{...candidate,picture});
+        q('DELETE FROM signup_usernames WHERE owner=?').run(active.owner);
+        db.exec('COMMIT');
+      } catch (error) { db.exec('ROLLBACK'); throw error; }
       return { ok:true };
     }
     if (pathname === '/account/passkey/rename') {
@@ -401,15 +420,22 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       const name = passkeyLabel(input.name);
       requireCondition(input.name === undefined || name, 422, 'Enter a passkey name of up to 64 characters.');
       const owner = active?.owner ?? randomUUID();
+      let signupUsername;
+      if (action === 'signup') {
+        const result = validateUsername(input.username,reservedNames);
+        requireCondition(!result.error,422,result.error);
+        signupUsername = result.username;
+        ensureAvailable(signupUsername);
+      }
       const options = await generateRegistrationOptions({
         rpName: 'X-Center ID', rpID, userID: new TextEncoder().encode(owner),
-        userName: profile(owner)?.username ?? (active ? account.get(owner).name : 'xcenter-' + owner.slice(0,8)),
-        userDisplayName: active ? account.get(owner).name : 'New X-Center ID',
+        userName: signupUsername ?? profile(owner)?.username ?? account.get(owner)?.name ?? 'X-Center ID',
+        userDisplayName: signupUsername ?? account.get(owner)?.name ?? 'New X-Center ID',
         attestationType: 'none',
         excludeCredentials: keys.all(owner).map(({ id, transports }) => ({ id, transports: JSON.parse(transports) })),
         authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
       });
-      prepare(res, { action, owner, name, expected: options.challenge, sessionHash: active?.hash });
+      prepare(res, { action, owner, name, signupUsername, expected: options.challenge, sessionHash: active?.hash });
       return options;
     }
     requireCondition(pathname.endsWith('/finish'), 404, 'Account route unavailable.');
@@ -441,7 +467,12 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     const label = challenge.name ?? await suggestLabel({ aaguid, transports: credential.transports });
     db.exec('BEGIN IMMEDIATE');
     try {
-      if (action === 'signup') q('INSERT INTO accounts VALUES (?,?,?)').run(challenge.owner,'X-Center ID',now());
+      if (action === 'signup') {
+        ensureAvailable(challenge.signupUsername);
+        q('DELETE FROM signup_usernames WHERE expires<=?').run(now());
+        q('INSERT INTO accounts VALUES (?,?,?)').run(challenge.owner,'X-Center ID',now());
+        q('INSERT INTO signup_usernames VALUES (?,?,?)').run(challenge.owner,challenge.signupUsername,now()+86400_000);
+      }
       requireCondition(keys.all(challenge.owner).length < 20, 409, 'Passkey limit reached.');
       q('INSERT INTO passkeys VALUES (?,?,?,?,?,?,?)').run(credential.id, challenge.owner,
         label, credential.publicKey, credential.counter,
@@ -491,7 +522,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       db.exec('BEGIN IMMEDIATE');
       try {
         const current = profile(owner);
-        if (current?.username !== from || usernameOwner.get(to)) {
+        if (current?.username !== from || usernameOwner.get(to) || reservedOwner.get(to,now())) {
           db.exec('ROLLBACK');
           return false;
         }

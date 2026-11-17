@@ -18,7 +18,8 @@
     "plugins": [
       "expo-web-browser",
       "expo-secure-store",
-      "expo-sharing"
+      "expo-sharing",
+      "@react-native-community/datetimepicker"
     ],
     "icon": "./public/authnjs-512.png"
   }

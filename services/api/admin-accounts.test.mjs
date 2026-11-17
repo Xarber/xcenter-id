@@ -64,3 +64,31 @@ test('operator rename preserves ownership and re-authenticates encrypted profile
     rmSync(dir,{recursive:true,force:true});
   }
 });
+
+test('signup checks username availability before creating WebAuthn options', async () => {
+  const dir=mkdtempSync(join(tmpdir(),'authnjs-signup-'));
+  const database=join(dir,'accounts.sqlite');
+  const origin='https://id.example.test';
+  const service=createAccounts({database,origin});
+  const db=new DatabaseSync(database);
+  db.exec("INSERT INTO accounts VALUES ('owner','Synthetic owner',0); INSERT INTO identity_profiles VALUES ('owner','taken','Ada','Rossi','adult');");
+  const server=createServer((req,res)=>void service.handle(req,res,req.url)).listen(0,'127.0.0.1');
+  await once(server,'listening');
+  const enroll=username=>fetch('http://127.0.0.1:'+server.address().port+'/account/signup/options',{
+    method:'POST', headers:{origin,'Content-Type':'application/json'},body:JSON.stringify({username}),
+  });
+  try {
+    assert.equal((await enroll('xarber')).status,422);
+    assert.equal((await enroll('taken')).status,409);
+    const response=await enroll('ExampleNew');
+    assert.equal(response.status,200);
+    const options=await response.json();
+    assert.equal(options.user.name,'examplenew');
+    assert.equal(options.user.displayName,'examplenew');
+    assert.equal(db.prepare('SELECT count(*) AS n FROM signup_usernames').get().n,0);
+  } finally {
+    await new Promise(resolve=>server.close(resolve));
+    db.close();
+    rmSync(dir,{recursive:true,force:true});
+  }
+});

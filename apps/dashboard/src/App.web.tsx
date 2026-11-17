@@ -1,3 +1,5 @@
+import { accountMessage } from './account-locale';
+import { accountShortcuts, accountStatus } from './account-overview';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import {
   ArrowDownRight, ArrowLeft, ArrowRight, ChevronRight, CircleHelp, Code2, Fingerprint, FolderOpen,
@@ -55,7 +57,7 @@ function Intro({close}:{close:()=>void}){
 function SignIn({signup,busy,notice,authenticate,beginUsername,submitCode,create,continuation}:{
   signup:boolean;busy:boolean;notice:string;authenticate:(username?:string)=>void;
   beginUsername:(username:string)=>Promise<{method:string;ticket?:string}|undefined>;
-  submitCode:(ticket:string,code:string)=>void;create:()=>void;continuation:string|null;
+  submitCode:(ticket:string,code:string)=>void;create:(username:string)=>void;continuation:string|null;
 }){
   const [username,setUsername]=useState('');
   const [ticket,setTicket]=useState('');
@@ -85,10 +87,14 @@ function SignIn({signup,busy,notice,authenticate,beginUsername,submitCode,create
       <div className="xc-card xc-auth-card">
         <span className="xc-symbol xc-lavender">{signup?<IdCard size={24}/>:<Fingerprint size={24}/>}</span>
         <h1>{signup?'Create your X-Center ID':'Sign in to X-Center ID'}</h1>
-        <p>{signup?'Save a passkey first. Then set up your username and profile.':'Use your username or sign in directly with a passkey.'}</p>
-        {signup ? <button type="button" className="xc-button xc-primary xc-full" onClick={create} disabled={busy}>
-          <Fingerprint size={19}/>{busy?'Waiting for your passkey…':'Create passkey'}<ArrowRight size={17}/>
-        </button> : <>
+        <p>{signup?'Choose your username, then save a passkey for it.':'Use your username or sign in directly with a passkey.'}</p>
+        {signup ? <form onSubmit={event=>{event.preventDefault();create(username);}}>
+          <label>X-Center username<input name="username" autoComplete="username" spellCheck={false}
+            pattern="[A-Za-z][A-Za-z0-9]{2,23}" maxLength={24} required value={username} onChange={event=>setUsername(event.target.value)}/></label>
+          <button type="submit" className="xc-button xc-primary xc-full" disabled={busy||!username.trim()}>
+            <Fingerprint size={19}/>{busy?'Waiting for your passkey…':'Choose username and create passkey'}<ArrowRight size={17}/>
+          </button>
+        </form> : <>
           {ticket?<form onSubmit={event=>{event.preventDefault();submitCode(ticket,code);}}>
             <label>Email sign-in code<input name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6}
               value={code} onChange={event=>setCode(event.target.value)} required/></label>
@@ -200,7 +206,7 @@ export default function WebApp(){
   },[account?.profile,continuation,path,authDestination]);
 
   async function passkey(mode:'signup'|'login'|'add',value?:string){
-    const optionsJSON=await api(mode+'/options',mode==='login'?{username:value}:mode==='add'?{name:value}:{});
+    const optionsJSON=await api(mode+'/options',mode==='add'?{name:value}:{username:value});
     const response=mode==='login'?await startAuthentication({optionsJSON}):await startRegistration({optionsJSON});
     const result=await api(mode+'/finish',{response});
     await load();
@@ -226,7 +232,7 @@ export default function WebApp(){
       .catch(error=>setNotice(error.message)).finally(()=>setBusy(false));
   }
   if(account===undefined)return <div className="xc-loading"><Logo href="/"/><p role="status">Opening your account…</p></div>;
-  if(!account)return <SignIn signup={path==='signup'} continuation={continuation} busy={busy} notice={notice} authenticate={username=>login('login',username)} beginUsername={beginUsername} submitCode={submitCode} create={()=>login('signup')}/>;
+  if(!account)return <SignIn signup={path==='signup'} continuation={continuation} busy={busy} notice={notice} authenticate={username=>login('login',username)} beginUsername={beginUsername} submitCode={submitCode} create={username=>login('signup',username)}/>;
 
   if(path==='native-session'&&account.profile){
     const params=new URLSearchParams(window.location.search);
@@ -247,7 +253,7 @@ export default function WebApp(){
   const profile=account.profile;
   if(!profile) return <div className="xc-setup"><Logo href="/"/><div className="xc-page-title">
     <span className="xc-pill"><Fingerprint size={15}/> Passkey saved</span><h1>Set up your profile</h1>
-    <p>Choose your username and add your personal details.</p></div>
+    <p>Add your personal details to finish setup.</p></div>
     <ProfilePage account={account} update={load} complete={()=>{
       window.location.assign(continuation??'/dashboard');
     }}/></div>;
@@ -257,12 +263,10 @@ export default function WebApp(){
   const permissionClient=permissionRoute?.[1];
   const page=path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':path;
   const [title,summary]=titles[page]??['Account overview','Manage the details, devices, and apps connected to your X-Center ID.'];
-  const shortcuts=[
-    ['/profile','Your profile','Edit your photo and personal information',UserRound,'xc-sky'],
-    ['/security','Sign-in & security','Manage the passkeys on your account',Fingerprint,'xc-mint'],
-    ['/permissions','Permissions','Control what each app can access',ShieldCheck,'xc-lavender'],
-    ['/devices','Devices','Review active sign-ins',Laptop,'xc-sky'],
-  ] as const;
+  const shortcutIcons = {
+    profile:[UserRound,'xc-sky'],security:[Fingerprint,'xc-mint'],
+    permissions:[ShieldCheck,'xc-lavender'],devices:[Laptop,'xc-sky'],
+  } as const;
 
   let content:ReactNode;
   if(page==='profile')content=<>
@@ -305,12 +309,15 @@ export default function WebApp(){
       <div className="xc-avatar xc-hero-avatar">{picture?<img src={picture} alt=""/>:<UserRound size={43}/>}</div>
     </section>
     <section className="xc-shortcuts" aria-label="Account shortcuts">
-      {shortcuts.map(([link,label,desc,Icon,tint])=><a className="xc-card xc-shortcut" key={link} href={link}>
-        <span className={'xc-symbol '+tint}><Icon size={22}/></span><div><h2>{label}</h2><p>{desc}</p></div><ChevronRight className="xc-arrow" size={19}/>
-      </a>)}
+      {accountShortcuts.map(({id,label,description})=>{
+        const [Icon,tint]=shortcutIcons[id];
+        return <a className="xc-card xc-shortcut" key={id} href={'/'+id}>
+          <span className={'xc-symbol '+tint}><Icon size={22}/></span><div><h2>{label}</h2><p>{description}</p></div><ChevronRight className="xc-arrow" size={19}/>
+        </a>;
+      })}
     </section>
     <section className="xc-card xc-pad xc-account-status"><div className="xc-row-head"><span className="xc-symbol xc-mint"><ShieldCheck size={22}/></span>
-      <div><h2>Account status</h2><p>{account.passkeys.length} {account.passkeys.length===1?'passkey':'passkeys'} enrolled · {account.emails.length} verified {account.emails.length===1?'email':'emails'}</p></div></div>
+      <div><h2>Account status</h2><p>{accountStatus(account.passkeys.length,account.emails.length)}</p></div></div>
     </section>
   </>;
 
@@ -320,7 +327,7 @@ export default function WebApp(){
       <a href="/profile" className="xc-avatar" aria-label="Open profile">{picture?<img src={picture} alt=""/>:<UserRound size={19}/>}</a>
     </div></header>
     <aside className="xc-side">
-      <nav aria-label="Account sections">{sections.map(([id,label,Icon])=><a key={id} href={'/'+id} aria-current={page===id?'page':undefined}><Icon size={19}/><span>{label}</span></a>)}
+      <nav aria-label="Account sections">{sections.map(([id,label,Icon])=><a key={id} href={'/'+id} aria-current={page===id?'page':undefined}><Icon size={19}/><span>{accountMessage(id,label)}</span></a>)}
         {account.admin&&<a href="/admin" aria-current={page==='admin'?'page':undefined}><ShieldCheck size={19}/><span>Administration</span></a>}
       </nav>
       <button type="button" className="xc-signout" onClick={()=>void api('logout',{}).then(()=>window.location.assign('/signin')).catch(error=>setNotice(error.message))}><LogOut size={18}/> Sign out</button>

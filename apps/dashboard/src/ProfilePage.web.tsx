@@ -51,7 +51,7 @@ export default function ProfilePage({ account, update, complete }: {
           <label>Given name<input name="givenName" autoComplete="given-name" maxLength={64} required defaultValue={profile?.givenName}/></label>
           <label>Surname<input name="surname" autoComplete="family-name" maxLength={64} required defaultValue={profile?.surname}/></label>
           <label>X-Center username<input name="username" autoComplete="username" pattern="[A-Za-z][A-Za-z0-9]{2,23}"
-            maxLength={24} required defaultValue={profile?.username} readOnly={!!profile?.username}/></label>
+            maxLength={24} required defaultValue={profile?.username??account.pendingUsername} readOnly={!!(profile?.username??account.pendingUsername)}/></label>
           <label>Birthday<input name="birthday" type="date" autoComplete="bday" max={new Date().toISOString().slice(0,10)}
             required defaultValue={profile?.birthday}/></label>
         </fieldset>

@@ -41,3 +41,9 @@ Permissions opens a directory of registered, linked and test apps. A URL under `
 Profile save feedback reads Saving while a write is pending and Saved after the service accepts the write. Editing a field or changing the photo restores the Save changes action. The confirmation check animates briefly and stays still with Reduced Motion.
 
 The web design review covered app navigation, grant disclosures, form state, touch and keyboard targets, and animation costs. Permission rows wrap at narrow widths. Hover feedback applies to fine pointers. Text inputs stay at least 16 px at phone widths to avoid browser zoom on focus. Physical mobile browser review remains pending.
+
+## 17 November parity and localization
+
+The overview used separate web and native shortcut lists. Both now use the shared `account-overview.ts` model and display the same shortcuts and account status with their platform layout. Newly exchanged native sessions identify iOS or Android in device lists. Existing session labels remain readable. Native profile editing uses the system date picker, formats the date with the device locale and sends a calendar date without UTC conversion. The new locale catalog translates account navigation and date-picker labels in English, Italian, Spanish, French, German and Portuguese. Full screen copy remains to be localized.
+
+The private file list has labeled download and trash actions on both platforms. Sharing with other accounts still needs explicit invitations and resource-level grants. The native picker and UI require installed-device verification. Clean package installation, Expo dependency alignment, the dashboard test suite and type checking passed.

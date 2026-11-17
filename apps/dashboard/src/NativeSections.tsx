@@ -1,3 +1,6 @@
+import { Ionicons } from '@expo/vector-icons';
+import { accountShortcuts, accountStatus } from './account-overview';
+import BirthdayPicker from './BirthdayPicker';
 import type { MailMessage } from './mail-message';
 import { pickDocumentAsync, pickProfilePhoto, shareDownload } from './native-files';
 import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -56,6 +59,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [recipient,setRecipient]=useState('');
   const [subject,setSubject]=useState('');
   const [mailText,setMailText]=useState('');
+  const [formatted,setFormatted]=useState(false);
+  const [attachment,setAttachment]=useState<{name:string;content:string}|undefined>();
   const [busy,setBusy]=useState(false);
   const [status,setStatus]=useState('');
   const api=(path:string,data?:object,method?:string)=>nativeRequest(path,token,data,method);
@@ -96,6 +101,12 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       <Text style={{color:colors.accent,fontWeight:'700'}}>{label}</Text>
     </Pressable>;
   }
+  function fileAction(label:string, icon:'download-outline'|'trash-outline'|'folder-open-outline', work:()=>void) {
+    return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={busy} onPress={work}
+      style={({pressed})=>[styles.fileAction,{backgroundColor:colors.soft,opacity:pressed||busy?0.6:1}]}>
+      <Ionicons name={icon} size={21} color={colors.accent}/>
+    </Pressable>;
+  }
   function field(label:string,value:string,change:(text:string)=>void,options:Partial<React.ComponentProps<typeof TextInput>>={}) {
     return <View style={styles.field}><Text style={{color:colors.ink,fontWeight:'600'}}>{label}</Text>
       <TextInput value={value} onChangeText={change} accessibilityLabel={label} autoCorrect={false}
@@ -114,9 +125,18 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   let content:ReactNode;
   switch(section) {
     case 'dashboard':
-      content=<>{row('identity',account.name,account.mailbox??'')}
-        {row('passkeys',account.passkeys.length+' passkeys','Manage device passkeys and security keys.',button('Manage passkeys',()=>navigate('security')))}
-        {button('Edit profile',()=>navigate('profile'))}{button('Review permissions',()=>navigate('permissions'))}</>;
+      content=<>
+        <View style={[styles.overviewHero,{backgroundColor:colors.soft}]}>
+          <Text accessibilityRole="header" style={[styles.overviewTitle,{color:colors.ink}]}>Hello, {account.profile?.givenName||account.name}</Text>
+          {account.profile&&paragraph('@'+account.profile.username)}
+          {button('View profile',()=>navigate('profile'))}
+        </View>
+        {accountShortcuts.map(({id,label,description})=><Pressable key={id} accessibilityRole="button" onPress={()=>navigate(id)}
+          style={({pressed})=>[styles.overviewShortcut,{borderColor:colors.soft,opacity:pressed?0.7:1}]}>
+          <Text style={[styles.label,{color:colors.ink}]}>{label}</Text>{paragraph(description)}
+        </Pressable>)}
+        {row('account-status','Account status',accountStatus(account.passkeys.length,account.emails.length))}
+      </>;
       break;
     case 'profile':
       content=<>{paragraph(account.profile?'@'+account.profile.username:'Complete your profile to finish creating your account.')}
@@ -131,7 +151,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         </View>
         {field('Given name',givenName,setGiven,{maxLength:64,autoComplete:'given-name'})}
         {field('Surname',surname,setSurname,{maxLength:64,autoComplete:'family-name'})}
-        {field('Birthday (YYYY-MM-DD)',birthday,setBirthday,{maxLength:10})}
+        {<BirthdayPicker value={birthday} onChange={setBirthday} ink={colors.ink} accent={colors.accent}/>}
         {button('Save profile',()=>run(()=>mutate('profile',{givenName,surname,birthday,picture}),'Profile saved.'))}
         {account.emails.map(item=>row(item.address,item.address,'Verified email'))}
         {field('New email address',email,setEmail,{keyboardType:'email-address',autoCapitalize:'none',autoComplete:'email'})}
@@ -203,13 +223,13 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       content=<><View style={styles.actions}>{button('Your files',()=>setFolder(null))}
         {files?.breadcrumbs.map(item=><View key={item.id}>{button(item.name,()=>setFolder(item.id))}</View>)}</View>
         {files?.folders.map(item=>row(item.id,item.name,'Folder',<View style={styles.actions}>
-          {button('Open folder',()=>setFolder(item.id))}
-          {button('Remove folder',()=>confirm('Remove empty folder?','This action removes the folder.',
+          {fileAction('Open folder '+item.name,'folder-open-outline',()=>setFolder(item.id))}
+          {fileAction('Remove folder '+item.name,'trash-outline',()=>confirm('Remove empty folder?','This action removes the folder.',
             ()=>run(()=>mutate('files/folders/'+item.id,{},'DELETE'),'Folder removed.')))}
         </View>))}
         {files?.files.map(item=>row(item.id,item.name,formatBytes(item.size),<View style={styles.actions}>
-          {button('Open or save',()=>run(()=>shareDownload('files/'+item.id,item.name,token)))}
-          {button('Remove file',()=>confirm('Remove file?','This permanently removes the file.',
+          {fileAction('Download '+item.name,'download-outline',()=>run(()=>shareDownload('files/'+item.id,item.name,token)))}
+          {fileAction('Remove '+item.name,'trash-outline',()=>confirm('Remove file?','This permanently removes the file.',
             ()=>run(()=>mutate('files/'+item.id,{},'DELETE'),'File removed.')))}
         </View>))}
         {button('Upload file',()=>run(async()=>{const file=await pickDocumentAsync();if(file)await mutate('files',{...file,folder});}))}
@@ -243,7 +263,14 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           button('Read email',()=>run(async()=>setOpenMail({id:item.id,message:await api('inbox/'+item.id+'/view')})))))}
         {account.canSendMail&&<>{!account.externalMailSubmission&&paragraph('You can send to X-Center mailboxes.')} {field('Recipient',recipient,setRecipient,{keyboardType:'email-address',autoCapitalize:'none'})}
           {field('Subject',subject,setSubject,{maxLength:120})}{field('Message',mailText,setMailText,{multiline:true})}
-          {button('Send email',()=>run(async()=>{await api('mail/send',{to:recipient,subject,text:mailText});setRecipient('');setSubject('');setMailText('');},'Mail accepted for delivery.'))}</>}
+          {button(formatted?'Use plain text':'Format message',()=>setFormatted(value=>!value))}
+          {formatted&&paragraph('Use **bold** or _italics_ in your message.')}
+          {attachment ? button('Remove '+attachment.name,()=>setAttachment(undefined))
+            : button('Attach a file (up to 256 KB)',()=>run(async()=>{const file=await pickDocumentAsync(256*1024);if(file)setAttachment(file);}))}
+          {button('Send email',()=>run(async()=>{
+            await api('mail/send',{to:recipient,subject,text:mailText,formatted,attachment});
+            setRecipient('');setSubject('');setMailText('');setFormatted(false);setAttachment(undefined);
+          },'Mail accepted for delivery.'))}</>}
       </>;
   }
   return <View style={[styles.card,{backgroundColor:colors.panel}]}>{content}
@@ -251,6 +278,10 @@ export default function NativeSections({ section,token,account,colors,reload,exp
 }
 
 const styles=StyleSheet.create({
+  fileAction:{width:44,height:44,borderRadius:11,alignItems:'center',justifyContent:'center'},
+  overviewHero:{gap:9,borderRadius:18,padding:16},
+  overviewTitle:{fontSize:25,fontWeight:'700'},
+  overviewShortcut:{gap:4,borderWidth:1,borderRadius:12,padding:12,minHeight:52},
   card:{gap:14,padding:17,borderRadius:20},
   row:{gap:7,borderBottomWidth:StyleSheet.hairlineWidth,paddingBottom:12},
   avatar:{width:72,height:72,borderRadius:36},

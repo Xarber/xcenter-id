@@ -1,6 +1,6 @@
 import type { MailMessage } from './mail-message';
 import { formatBytes, storageCategories } from './storage-summary';
-import { BadgeCheck, File, FileUp, Folder, FolderPlus, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
+import { BadgeCheck, Download, File, FileUp, Folder, FolderPlus, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { api, fileAsBase64, type Account } from './web-account';
 
@@ -88,14 +88,16 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
         <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
           if(confirm!==item.id){setConfirm(item.id);return;}
           change(()=>api('files/folders/'+item.id,{},'DELETE'),'Folder removed.');
-        }}>{confirm===item.id?'Confirm folder removal':'Remove folder'}</button>
+        }} aria-label={confirm===item.id?'Confirm permanently removing '+item.name:'Remove folder '+item.name}><Trash2 size={16}/>{confirm===item.id?'Confirm removal':null}</button>
       </div>)}
       {state?.files.map(file=><div className="xc-list-row" key={file.id}>
         <div className="xc-file-meta"><a href={'/account/files/'+file.id}><strong>{file.name}</strong></a><p>{size(file.size)} · {date(file.created)}</p></div>
+        <div className="xc-actions">
+        <a className="xc-button xc-secondary" href={'/account/files/'+file.id} aria-label={'Download '+file.name}><Download size={16}/></a>
         <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
           if(confirm!==file.id){setConfirm(file.id);return;}
           change(()=>api('files/'+file.id,{},'DELETE'),'File removed.');
-        }}><Trash2 size={15}/>{confirm===file.id?'Confirm removal':'Remove'}</button>
+        }} aria-label={confirm===file.id?'Confirm permanently removing '+file.name:'Remove '+file.name}><Trash2 size={16}/>{confirm===file.id?'Confirm removal':null}</button></div>
       </div>)}
       {state?.files.length===0 && state.folders.length===0 && <div className="xc-empty">This folder is empty.</div>}
     </>}
@@ -111,6 +113,8 @@ export function MailPage({ account }:{account:Account}) {
   const [compose,setCompose]=useState(false);
   const [draft,setDraft]=useState({to:'',subject:'',text:''});
   const [busy,setBusy]=useState(false);
+  const [formatted,setFormatted]=useState(false);
+  const [attachment,setAttachment]=useState<{name:string;content:string}|undefined>();
   const [deliveryError,setDeliveryError]=useState('');
   const dialog=useRef<HTMLDialogElement>(null);
   useEffect(()=>{void api('inbox').then(result=>setMessages(result.messages)).catch(error=>setStatus(notice(error)));},[]);
@@ -157,7 +161,8 @@ export function MailPage({ account }:{account:Account}) {
       </div>
       <form className="xc-stack" onSubmit={event=>{
         event.preventDefault();setBusy(true);setDeliveryError('');
-        void api('mail/send',draft).then(()=>{
+        void api('mail/send',{...draft,formatted,attachment}).then(()=>{
+          setFormatted(false);setAttachment(undefined);
           setDraft({to:'',subject:'',text:''});setCompose(false);setStatus('Message accepted for delivery.');
         }).catch(error=>setDeliveryError(notice(error))).finally(()=>setBusy(false));
       }}>
@@ -165,6 +170,17 @@ export function MailPage({ account }:{account:Account}) {
         <label>Recipient<input type="email" autoFocus required value={draft.to} onChange={event=>setDraft({...draft,to:event.target.value})}/></label>
         <label>Subject<input required maxLength={120} value={draft.subject} onChange={event=>setDraft({...draft,subject:event.target.value})}/></label>
         <label>Message<textarea aria-label="Message" required rows={5} value={draft.text} onChange={event=>setDraft({...draft,text:event.target.value})}/></label>
+        <label><input type="checkbox" checked={formatted} onChange={event=>setFormatted(event.target.checked)}/> Format message</label>
+        {formatted&&<p>Use **bold** or _italics_ in your message.</p>}
+        <label>Attachment (up to 256 KB)<input type="file" onChange={event=>{
+          const file=event.target.files?.[0];event.target.value='';
+          if(!file)return;
+          if(file.size>256*1024 || !file.size){setDeliveryError('Choose a file between 1 byte and 256 KB.');return;}
+          setBusy(true);
+          void fileAsBase64(file).then(content=>{setAttachment({name:file.name,content});setDeliveryError('');})
+            .catch(error=>setDeliveryError(notice(error))).finally(()=>setBusy(false));
+        }}/></label>
+        {attachment&&<button type="button" className="xc-button xc-secondary" onClick={()=>setAttachment(undefined)}>Remove {attachment.name}</button>}
         {deliveryError&&<p role="alert">{deliveryError}</p>}
         <button className="xc-button xc-primary xc-self-start" disabled={busy}>{busy?'Sending…':'Send email'}</button>
       </form>

@@ -1,3 +1,4 @@
+import { composeContent } from './mail-compose.mjs';
 import nodemailer from 'nodemailer';
 
 const recipientPattern = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i;
@@ -32,6 +33,8 @@ export function createOutboundMail(config) {
       const text = typeof input.text === 'string' ? input.text.trim() : '';
       if (recipient.length > 254 || !recipientPattern.test(recipient) || !subject || subject.length > 120 ||
           /[\r\n\u0000]/.test(subject) || !text || text.length > 30_000) return {status:422,error:'Check the recipient, subject and message.'};
+      const content = composeContent(text,input);
+      if (!content) return {status:422,error:'Choose one attachment of up to 256 KB.'};
       const destination=recipient.split('@').at(-1).toLowerCase();
       const client=config.inboundDomains.includes(destination)&&local?local:upstream;
       if(!client)return {status:503,error:'Sending to external email addresses is unavailable.'};
@@ -49,7 +52,7 @@ export function createOutboundMail(config) {
       total++;
       try {
         const from = username+'@'+domain;
-        await client.sendMail({from,to:recipient,subject,text,envelope:{from,to:[recipient]}});
+        await client.sendMail({from,to:recipient,subject,...content,envelope:{from,to:[recipient]}});
         return {ok:true};
       } catch { return {status:503,error:'The mail provider did not accept the message.'}; }
     },

@@ -115,3 +115,14 @@ test('inbox routes expose text and attachments to their owner and protect deleti
   }})).status,200);
   assert.equal((await fetch(root+'/view',{headers:reader})).status,404);
 });
+
+test('outgoing formatting escapes markup and attachments use verified bytes', async () => {
+  const { composeContent } = await import('./mail-compose.mjs');
+  const text = '<strong>literal</strong> **bold** _italic_';
+  const mail = composeContent(text,{formatted:true,attachment:{name:'example.txt',content:'YWJj'}});
+  assert.equal(mail.text,text);
+  assert.equal(mail.html,'&lt;strong&gt;literal&lt;/strong&gt; <strong>bold</strong> <em>italic</em>');
+  assert.equal(mail.attachments[0].content.toString(),'abc');
+  assert.equal(composeContent(text,{attachment:{name:'example.txt',content:'YWJj==='}}),null);
+  assert.equal(composeContent(text,{attachment:{name:'unsafe/name',content:'YWJj'}}),null);
+});

@@ -21,15 +21,23 @@ export function ageRangeFromBirthday(birthday, today = new Date()) {
   return age < 13 ? 'child' : age < 18 ? 'teen' : 'adult';
 }
 
+export function validateUsername(value, additionallyReserved = [], currentUsername) {
+  const username = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (!/^[a-z][a-z0-9]{2,23}$/.test(username)) return {error:'Use 3–24 letters and numbers, starting with a letter.'};
+  if (username !== currentUsername && (reserved.has(username) || additionallyReserved.includes(username))) {
+    return {error:'This username is unavailable.'};
+  }
+  return {username};
+}
+
 export function validateProfile(input, additionallyReserved = [], currentUsername) {
   const givenName = typeof input.givenName === 'string' ? input.givenName.trim().normalize('NFC') : '';
   const surname = typeof input.surname === 'string' ? input.surname.trim().normalize('NFC') : '';
-  const username = typeof input.username === 'string' ? input.username.trim().toLowerCase() : '';
+  const result = validateUsername(input.username,additionallyReserved,currentUsername);
   if (!namePattern.test(givenName) || !namePattern.test(surname)) return { error: 'Enter your given name and surname.' };
   const birthday = input.birthday;
   const ageRange = ageRangeFromBirthday(birthday);
   if (!ageRange) return { error: 'Enter a valid birthday.' };
-  if (!/^[a-z][a-z0-9]{2,23}$/.test(username)) return { error: 'Use 3–24 letters and numbers, starting with a letter.' };
-  if (username !== currentUsername && (reserved.has(username) || additionallyReserved.includes(username))) return { error: 'This username is unavailable.' };
-  return { givenName, surname, username, birthday, ageRange };
+  if (result.error) return result;
+  return { givenName, surname, username:result.username, birthday, ageRange };
 }

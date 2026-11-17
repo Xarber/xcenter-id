@@ -31,3 +31,11 @@ Public HTTPS checks verified both apps, PKCE starts and exact callback targets. 
 ## Per-app permissions, developer tools and inbox rollout
 
 Revision bd6b402 passed public HTTPS checks on the identity issuer and both sample origins. The public per-app permission route returned the web app, and the admin app inventory rejected unauthenticated access. Browser staging verified per-app grants, profile save feedback, two distinct callback addresses, global developer display name, profile editing, and the fixed inbox composer. Fifteen API tests passed. The production service has no assigned administrator account. Configure stable account IDs in the protected deployment environment before using the admin controls. The previous web and sample vhosts are preserved for rollback.
+
+## 17 November account assignment
+
+The production identity vhost now uses the targeted account patch from c89b65b on loopback port 18801. The web export still identifies bd6b402. The stable account that previously owned `xarberyt` now owns `xarber` and is the only account in the protected administrator allowlist. Neither the user's passkeys nor the stable ID used by app subjects changed. This assignment does not change the existing iCloud address on the apex domain.
+
+Before cutover, the operator took a checked SQLite backup and verified rename, reverse rename and rename again against an isolated copy. The candidate passed issuer discovery and denied anonymous Admin API access before cutover. The first readiness probe hit a connection reset during startup, then the listener was rechecked and passed. After cutover, the stored profile matched the active administrator ID, HTTPS discovery passed and anonymous Admin requests returned 403. The user's authenticated browser session and Admin tab have not been exercised.
+
+Rollback is available from `/srv/xcenter/infra/changes/id.xcenter.it.before-admin-c89b65b.conf` and the preserved `xcenter-id-public` container. To reverse the username itself, use the audited operator tool to re-encrypt with the old username. A direct SQL rename would break authentication of the encrypted profile. The isolated staging container was stopped and the protected backup and original deployment were retained.

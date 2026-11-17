@@ -25,6 +25,11 @@ function html(res, content, status = 200, callbackOrigin = '') {
     .connection{display:flex;align-items:center;gap:.9rem;margin:1.2rem 0}
     .connection .avatar{width:56px;height:56px;display:grid;place-items:center;overflow:hidden;border-radius:.8rem;background:var(--soft);color:var(--text);font-weight:800}
     .connection img{width:100%;height:100%;object-fit:cover}.permission-list{list-style:none;padding:0;display:grid;gap:.65rem}
+    .permission-list .permission-toggle{display:flex;align-items:center;gap:.7rem;padding:.75rem .85rem;background:var(--soft);border-radius:.75rem;cursor:pointer;width:100%;min-height:46px}
+    .permission-toggle input{margin-inline-start:auto;flex:none;appearance:none;width:2.7rem;height:1.55rem;border-radius:2rem;border:1px solid var(--border);background:var(--card);position:relative;cursor:pointer}
+    .permission-toggle input::before{content:'';position:absolute;inset:.2rem auto .2rem .2rem;aspect-ratio:1;border-radius:50%;background:var(--muted);transition:transform 160ms ease}
+    .permission-toggle input:checked{background:var(--action);border-color:var(--action)}.permission-toggle input:checked::before{background:white;transform:translateX(1.1rem)}
+    @media(prefers-reduced-motion:reduce){.permission-toggle input::before{transition:none}}
     .permission-list li{display:flex;align-items:center;gap:.7rem}.permission-list svg,.connection svg{width:20px;height:20px;flex:none}
     :focus-visible{outline:3px solid #6b94ff;outline-offset:3px}
     @media(prefers-color-scheme:dark){:root{--bg:#101522;--card:#192132;--text:#f3f6ff;--muted:#b1c1dc;--border:#35445e;--action:#375fce;--soft:#23355d}.brand{color:#adc5ff}}
@@ -173,12 +178,14 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       if (selected === 'masked' && !alias) return html(res,'<h1>Hide My Email is unavailable</h1>',409);
       const email = premium || alias || selected;
       if (email && !alias && !premium && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
-      const allowed = ['openid', ...['profile','age_range','app_data'].filter((scope) => requested.has(scope)),
-        ...(email ? ['email'] : [])];
+      const choices = new Set(input.getAll('permission'));
+      const optional = ['profile','age_range','app_data'].filter(scope=>requested.has(scope));
+      const allowed = ['openid',...optional.filter(scope=>choices.has(scope)),...(email?['email']:[])];
+      const denied = [...optional.filter(scope=>!choices.has(scope)),...(requested.has('email')&&!email?['email']:[])];
       const linked=accounts.linkedGrant(active.owner,client.client_id);
       const grant=linked&&await provider.Grant.find(linked) || new provider.Grant({ accountId:active.owner, clientId:client.client_id });
-      grant.addOIDCScope(allowed.join(' '));
-      if (requested.has('email') && !email) grant.rejectOIDCScope('email');
+      grant.addOIDCScope(allowed);
+      if (denied.length) grant.rejectOIDCScope(denied);
       const grantId = await grant.save();
       if (email) await selections.upsert(grantId,premium ? { premium:true, client:client.client_id }
         : alias ? { alias:true, client:client.client_id } : { email });
@@ -197,28 +204,34 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       return html(res,`<h1>Choose your account</h1><p>Continue to ${escape(title)} as ${escape(person.givenName)} ${escape(person.surname)}.</p>
         <form method="post"><button name="action" value="approve">Continue</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin);
     }
+    const incremental=!!accounts.linkedGrant(active.owner,client.client_id);
     const permissions=[
-      ['id','App-specific account ID',true], ['user','Given name and surname',missing.has('profile')],
-      ['age','Age range',missing.has('age_range')], ['mail','Email address, if you choose to share it',missing.has('email')],
-      ['records','Access to records belonging to this app',missing.has('app_data')],
+      ['user','Given name and surname','profile'],
+      ['age','Age range','age_range'],
+      ['records','Access to records belonging to this app','app_data'],
     ];
     return html(res,`<div class="connection" aria-hidden="true">
       <span class="avatar">${person.hasPicture?'<img alt="" src="/account/avatar">':glyph('user')}</span>${glyph('link')}
       <span class="avatar">${brand?.icon?`<img alt="" src="data:image/png;base64,${escape(brand.icon)}">`:visual?glyph(visual):escape(title.slice(0,2).toUpperCase())}</span></div>
-      <h1>Link ${escape(title)} to X-Center ID</h1>
+      <h1>${incremental?'Authorize permissions':'Link '+escape(title)+' to X-Center ID'}</h1>
+      ${incremental?`<p>${escape(title)} is requesting additional access.</p>`:''}
       ${brand?.description?`<p>${escape(brand.description)}</p>`:''}
       <div class="context"><strong>${escape(person.givenName)} ${escape(person.surname)}</strong><br>
       Developed by ${escape(developerName)} at <strong>${escape(client.host)}</strong>
       ${brand?.verified?'<br>Verified app':''}${brand?.developerStatus==='verified'?'<br>Verified developer':''}</div>
-      <h2>Permissions</h2><ul class="permission-list">${permissions.filter(item=>item[2]).map(([symbol,label])=>`<li>${glyph(symbol)}<span>${label}</span></li>`).join('')}</ul>
+      <form method="post"><h2>Permissions</h2>
+      <ul class="permission-list">
+        ${!incremental?`<li>${glyph('id')}<span>App-specific account ID · required</span></li>`:''}
+        ${permissions.filter(item=>missing.has(item[2])).map(([symbol,label,scope])=>`<li><label class="permission-toggle">${glyph(symbol)}<span>${label}</span><input type="checkbox" role="switch" name="permission" value="${scope}"></label></li>`).join('')}
+      </ul>
       <p>You can review app access in X-Center ID.</p>
-      <form method="post">${missing.has('email') ? `<fieldset><legend>Email address to share</legend>
-      <label><input type="radio" name="email" value="" checked>Share only my user ID and the other agreed details</label>
+      ${missing.has('email') ? `<fieldset><legend>Email address to share</legend>
+      <label><input type="radio" name="email" value="" checked>Do not share an email address</label>
       ${mail?.premiumAvailable && accounts.premiumEligible(active.owner) ? '<label><input type="radio" name="email" value="premium">Use a premium private address</label>' : ''}
       ${mail?.maskedAvailable ? '<label><input type="radio" name="email" value="masked">Hide my email</label>' : ''}
       ${person.emails.map(({address}) => `<label><input type="radio" name="email" value="${escape(address)}">${escape(address)}</label>`).join('')}
       </fieldset>` : ''}
-      <button name="action" value="approve">Link app</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin);
+      <button name="action" value="approve">${incremental?'Authorize selected permissions':'Link app'}</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin);
   }
 
   return {

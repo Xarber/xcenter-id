@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import { openAuthSessionAsync } from 'expo-web-browser';
@@ -15,6 +16,7 @@ export async function nativeRequest(path:string, token?:string, data?:object, me
     method, credentials:'omit',
     headers:{
       'X-AuthNJS-Native':'account-manager','X-AuthNJS-Request':'account-consent',
+      'X-AuthNJS-Device-Platform':Platform.OS,
       ...(token?{Authorization:'Bearer '+token}:{}),
       ...(data?{'Content-Type':'application/json'}:{}),
     },

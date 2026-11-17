@@ -5,13 +5,13 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { isAvailableAsync, shareAsync } from 'expo-sharing';
 import { accountHost, AccountRequestError } from './native-account';
 
-export async function pickDocumentAsync() {
+export async function pickDocumentAsync(maxBytes=2*1024**2) {
   const result=await getDocumentAsync({copyToCacheDirectory:true});
   if(result.canceled)return null;
   const asset=result.assets[0];
   const file=new File(asset.uri);
   try {
-    if(!file.size||file.size>2*1024**2)throw new Error('Choose a file between 1 byte and 2 MB.');
+    if(!file.size||file.size>maxBytes)throw new Error('Choose a file within the stated size limit.');
     return {name:asset.name,content:await file.base64()};
   } finally {
     if(file.exists)file.delete();

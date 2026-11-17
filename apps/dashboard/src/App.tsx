@@ -1,3 +1,4 @@
+import { accountMessage } from './account-locale';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { openBrowserAsync } from 'expo-web-browser';
@@ -12,7 +13,7 @@ import type {Account} from './web-account';
 
 type Icon = ComponentProps<typeof Ionicons>['name'];
 const pages = [
-  ['dashboard','Account status','person-circle-outline'],['profile','Profile','id-card-outline'],
+  ['dashboard','Overview','person-circle-outline'],['profile','Profile','id-card-outline'],
   ['devices','Devices','phone-portrait-outline'],['security','Sign-in & security','key-outline'],
   ['apps','Apps','apps-outline'],['permissions','Permissions','shield-checkmark-outline'],
   ['storage','Data usage','server-outline'],['files','Files','folder-open-outline'],['mail','Mail','mail-outline'],
@@ -116,7 +117,7 @@ function NativeAccount() {
         style={[styles.tab,page===tab&&{backgroundColor:colors.soft}]}
         onPress={()=>{setTab(page);setDeveloper(false);setSampleMode(false);taps.current=0;if(timer.current)clearTimeout(timer.current);}}>
         <Ionicons name={page[2]} size={20} color={page===tab?colors.accent:colors.muted}/>
-        <Text style={{color:page===tab?colors.accent:colors.muted,fontWeight:page===tab?'700':'600'}}>{page[1]}</Text>
+        <Text style={{color:page===tab?colors.accent:colors.muted,fontWeight:page===tab?'700':'600'}}>{accountMessage(page[0],page[1])}</Text>
       </Pressable>)}
     </ScrollView></View>}
     <ScrollView contentContainerStyle={styles.content}>
@@ -130,7 +131,7 @@ function NativeAccount() {
           <AccountEntry onSignIn={()=>void signIn()} onCreateAccount={()=>void signIn(true)} pending={pending} error={error}
             onUsernameSubmit={username=>nativeRequest('login/username',undefined,{username})}
             onCodeSubmit={async(ticket,code)=>{const session=await nativeRequest('login/code',undefined,{ticket,code});await useSession(session.token);}}/>:
-          <><Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>{tab[1]}</Text>
+          <><Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>{accountMessage(tab[0],tab[1])}</Text>
           <Text style={{color:colors.muted}}>{copy[tab[0]]}</Text>
           {tab[0]==='settings'?<View style={[styles.card,{backgroundColor:colors.panel}]}>
           {action('View introduction','information-circle-outline',()=>setIntro(true))}
