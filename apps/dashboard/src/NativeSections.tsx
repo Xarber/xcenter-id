@@ -38,7 +38,23 @@ type Props = {
 
 const message = (error:unknown)=>error instanceof Error?error.message:'Could not complete the request.';
 const date=(timestamp:number)=>new Date(timestamp).toLocaleDateString();
-const composeEntrance=FadeIn.duration(180).reduceMotion(ReduceMotion.System);
+const mailEntrance=FadeIn.duration(180).reduceMotion(ReduceMotion.System);
+
+function MailScreen({colors,close,children}:{colors:Theme;close:()=>void;children:ReactNode}) {
+  return <Modal animationType="none" onRequestClose={close}>
+    <SafeAreaProvider>
+      <SafeAreaView style={[styles.mailScreen,{backgroundColor:colors.background}]}>
+        <KeyboardAvoidingView style={styles.mailScreen} behavior={Platform.OS==='ios'?'padding':undefined}>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.mailContent}>
+            <Animated.View entering={mailEntrance} accessibilityViewIsModal style={styles.card}>
+              {children}
+            </Animated.View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </SafeAreaProvider>
+  </Modal>;
+}
 
 export default function NativeSections({ section,token,account,colors,reload,expired,passkeys,navigate }:Props) {
   const [devices,setDevices]=useState<Device[]>([]);
@@ -311,7 +327,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       content=<>{paragraph(account.mailbox??'No mailbox has been reserved.')}
         {paragraph(account.canReceiveMail?(messages.length?'Your inbox':accountMessage('inboxEmpty','Your inbox is empty.')):'Mailbox delivery is unavailable.')}
         {account.canReceiveMail&&!account.externalMail&&paragraph('This inbox can receive local X-Center mail. External delivery is unavailable.')}
-        {openMail ? <>
+        {openMail&&<MailScreen colors={colors} close={()=>{if(!busy){setOpenMail(null);setConfirmMailDeletion(false);}}}>
           {button(accountMessage('backToInbox','Back to inbox'),()=>{setOpenMail(null);setConfirmMailDeletion(false);})}
           {row(openMail.id,openMail.message.subject||accountMessage('noSubject','(No subject)'),openMail.message.from)}
           {paragraph(openMail.message.text)}
@@ -329,60 +345,52 @@ export default function NativeSections({ section,token,account,colors,reload,exp
             },accountMessage('emailDeleted','Email deleted.'));
           })}
           {confirmMailDeletion&&button('Cancel deletion',()=>setConfirmMailDeletion(false))}
-        </> : messages.map(item=>row(item.id,'Received '+date(item.received),formatBytes(item.size),
+          {status&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}
+        </MailScreen>}
+        {messages.map(item=>row(item.id,'Received '+date(item.received),formatBytes(item.size),
           button(accountMessage('readEmail','Read email'),()=>run(async()=>setOpenMail({id:item.id,message:await api('inbox/'+item.id+'/view')})))))}
-        {!openMail&&inboxCursor&&button(accountMessage('olderEmail','Load older email'),()=>run(async()=>{
+        {inboxCursor&&button(accountMessage('olderEmail','Load older email'),()=>run(async()=>{
           const page=await api('inbox?cursor='+encodeURIComponent(inboxCursor));
           setMessages(previous=>[...previous,...page.messages]);setInboxCursor(page.nextCursor);
         }))}
-        {!openMail&&aliases.length>0&&<Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>{accountMessage('privateAddresses','Hide My Email addresses')}</Text>}
-        {!openMail&&aliases.map(item=>row(item.address,item.address,item.active?(item.premium?'Premium address':'Private address'):'Disabled',
+        {aliases.length>0&&<Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>{accountMessage('privateAddresses','Hide My Email addresses')}</Text>}
+        {aliases.map(item=>row(item.address,item.address,item.active?(item.premium?'Premium address':'Private address'):'Disabled',
           item.active&&button(accountMessage('disableAddress','Disable address'),()=>confirm('Disable this address?','Future messages to this address will be rejected.',
             ()=>run(async()=>{await api('mail/aliases/'+item.address,{},'DELETE');await load();},'Private address disabled.'),
           ))))}
         {account.canSendMail&&button(accountMessage('newEmail','New email'),()=>{setStatus('');setCompose(true);})}
-        {compose&&<Modal animationType="none" onRequestClose={()=>{if(!busy)setCompose(false);}}>
-          <SafeAreaProvider>
-            <SafeAreaView style={[styles.composeScreen,{backgroundColor:colors.background}]}>
-              <KeyboardAvoidingView style={styles.composeScreen} behavior={Platform.OS==='ios'?'padding':undefined}>
-                <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.composeContent}>
-                  <Animated.View entering={composeEntrance} accessibilityViewIsModal style={styles.card}>
-                    <View style={styles.composeHeader}>
-                      <Text accessibilityRole="header" style={[styles.overviewTitle,{color:colors.ink,flex:1}]}>{accountMessage('newEmail','New email')}</Text>
-                      {button(accountMessage('cancel','Cancel'),()=>{setStatus('');setCompose(false);})}
-                    </View>
-                    {!account.externalMailSubmission&&paragraph('You can send to X-Center mailboxes.')}
-                    {field(accountMessage('recipient','Recipient'),recipient,setRecipient,{keyboardType:'email-address',autoCapitalize:'none',editable:!busy})}
-                    {field(accountMessage('subject','Subject'),subject,setSubject,{maxLength:120,editable:!busy})}
-                    {field(accountMessage('message','Message'),mailText,setMailText,{multiline:true,maxLength:30_000,editable:!busy})}
-                    {button(formatted?'Use plain text':'Format message',()=>setFormatted(value=>!value))}
-                    {formatted&&paragraph('Use **bold** or _italics_ in your message.')}
-                    {attachment ? button('Remove '+attachment.name,()=>setAttachment(undefined))
-                      : button('Attach a file (up to 256 KB)',()=>run(async()=>{
-                        const file=await pickDocumentAsync(256*1024);
-                        if(file)setAttachment(file);
-                      }))}
-                    {button(accountMessage('sendEmail','Send email'),()=>run(async()=>{
-                      await api('mail/send',{to:recipient,subject,text:mailText,formatted,attachment});
-                      setRecipient('');setSubject('');setMailText('');setFormatted(false);setAttachment(undefined);
-                      setCompose(false);
-                    },'Mail accepted for delivery.'),busy||!recipient.trim()||!subject.trim()||!mailText.trim())}
-                    {status&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}
-                  </Animated.View>
-                </ScrollView>
-              </KeyboardAvoidingView>
-            </SafeAreaView>
-          </SafeAreaProvider>
-        </Modal>}
+        {compose&&<MailScreen colors={colors} close={()=>{if(!busy)setCompose(false);}}>
+          <View style={styles.composeHeader}>
+            <Text accessibilityRole="header" style={[styles.overviewTitle,{color:colors.ink,flex:1}]}>{accountMessage('newEmail','New email')}</Text>
+            {button(accountMessage('cancel','Cancel'),()=>{setStatus('');setCompose(false);})}
+          </View>
+          {!account.externalMailSubmission&&paragraph('You can send to X-Center mailboxes.')}
+          {field(accountMessage('recipient','Recipient'),recipient,setRecipient,{keyboardType:'email-address',autoCapitalize:'none',editable:!busy})}
+          {field(accountMessage('subject','Subject'),subject,setSubject,{maxLength:120,editable:!busy})}
+          {field(accountMessage('message','Message'),mailText,setMailText,{multiline:true,maxLength:30_000,editable:!busy})}
+          {button(formatted?'Use plain text':'Format message',()=>setFormatted(value=>!value))}
+          {formatted&&paragraph('Use **bold** or _italics_ in your message.')}
+          {attachment ? button('Remove '+attachment.name,()=>setAttachment(undefined))
+            : button('Attach a file (up to 256 KB)',()=>run(async()=>{
+              const file=await pickDocumentAsync(256*1024);
+              if(file)setAttachment(file);
+            }))}
+          {button(accountMessage('sendEmail','Send email'),()=>run(async()=>{
+            await api('mail/send',{to:recipient,subject,text:mailText,formatted,attachment});
+            setRecipient('');setSubject('');setMailText('');setFormatted(false);setAttachment(undefined);
+            setCompose(false);
+          },'Mail accepted for delivery.'),busy||!recipient.trim()||!subject.trim()||!mailText.trim())}
+          {status&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}
+        </MailScreen>}
       </>;
   }
   return <View style={[styles.card,{backgroundColor:colors.panel}]}>{content}
-    {status&&!compose&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}</View>;
+    {status&&!compose&&!openMail&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}</View>;
 }
 
 const styles=StyleSheet.create({
-  composeScreen:{flex:1},
-  composeContent:{width:'100%',maxWidth:680,alignSelf:'center'},
+  mailScreen:{flex:1},
+  mailContent:{width:'100%',maxWidth:680,alignSelf:'center'},
   composeHeader:{flexDirection:'row',alignItems:'center',gap:12},
   fileAction:{width:44,height:44,borderRadius:11,alignItems:'center',justifyContent:'center'},
   overviewHero:{gap:9,borderRadius:18,padding:16},

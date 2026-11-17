@@ -265,7 +265,8 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     return;
   }
   const webPages = new Set(['/','/signin','/signup','/native-session','/dashboard','/profile','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/friends','/mail','/admin']);
-  const relative = webPages.has(path)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(path) ? 'index.html' : path.slice(1);
+  const relative = webPages.has(path)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(path)||
+    /^\/mail\/[0-9a-f-]{36}$/.test(path) ? 'index.html' : path.slice(1);
   const valid = /^(?:index\.html|revision\.txt|manifest\.webmanifest|service-worker\.js|authnjs-[\w-]+\.(?:svg|png)|(?:_expo|assets)\/[\w@./-]+)$/.test(relative);
   if (!valid || relative.split('/').some((part) => part === '.' || part === '..') ||
       (req.method !== 'GET' && req.method !== 'HEAD')) {

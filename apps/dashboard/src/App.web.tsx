@@ -184,10 +184,11 @@ export default function WebApp(){
   const didShow=useRef(false);
   const path=window.location.pathname.replace(/^\//,'')||'dashboard';
   const permissionRoute=/^permissions\/([A-Za-z0-9_-]{1,100})$/.exec(path);
+  const mailRoute=/^mail\/[0-9a-f-]{36}$/.test(path);
   const next=path==='native-session'?window.location.pathname+window.location.search:
-    new URLSearchParams(window.location.search).get('continue')??(permissionRoute?'/'+path:'');
+    new URLSearchParams(window.location.search).get('continue')??(permissionRoute||mailRoute?'/'+path:'');
   const nativeReturn=/^\/native-session\?challenge=[A-Za-z0-9_-]{43}&state=[A-Za-z0-9_-]{43}$/;
-  const continuation=/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)||nativeReturn.test(next)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(next)?next:null;
+  const continuation=/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)||nativeReturn.test(next)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(next)||/^\/mail\/[0-9a-f-]{36}$/.test(next)?next:null;
   const authDestination=continuation??'/dashboard';
   const emailToken=new URLSearchParams(window.location.hash.slice(1)).get('verify-email');
   async function load(){setAccount((await api('me')).account);}
@@ -263,7 +264,7 @@ export default function WebApp(){
   const name=profile.givenName+' '+profile.surname;
   const picture=profile.hasPicture?'/account/avatar':null;
   const permissionClient=permissionRoute?.[1];
-  const page=path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':path;
+  const page=path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':mailRoute?'mail':path;
   const [title,summary]=titles[page]??['Account overview','Manage the details, devices, and apps connected to your X-Center ID.'];
   const shortcutIcons = {
     profile:[UserRound,'xc-sky'],security:[Fingerprint,'xc-mint'],

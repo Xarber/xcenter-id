@@ -120,11 +120,15 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
   </section>;
 }
 
+const mailLocation=()=>/^\/mail\/([0-9a-f-]{36})$/.exec(window.location.pathname)?.[1]??null;
+
 export function MailPage({ account }:{account:Account}) {
   const [messages,setMessages]=useState<{id:string;received:number;size:number}[]|null>(null);
   const [inboxCursor,setInboxCursor]=useState<string|null>(null);
   const [status,setStatus]=useState('');
-  const [open,setOpen]=useState<{id:string;message:MailMessage}|null>(null);
+  const [messageId,setMessageId]=useState(mailLocation);
+  const [loaded,setLoaded]=useState<{id:string;message:MailMessage}|null>(null);
+  const open=loaded?.id===messageId?loaded:null;
   const [confirmDelete,setConfirmDelete]=useState(false);
   const [aliases,setAliases]=useState<PrivateAddress[]>([]);
   const [confirmAlias,setConfirmAlias]=useState('');
@@ -142,13 +146,37 @@ export function MailPage({ account }:{account:Account}) {
     if(account.canReceiveMail)void api('mail/aliases').then(result=>setAliases(result.aliases)).catch(()=>{});
   },[account.canReceiveMail]);
   useEffect(()=>{if(compose&&!dialog.current?.open)dialog.current?.showModal();},[compose]);
+  useEffect(()=>{
+    const sync=()=>{setStatus('');setConfirmDelete(false);setMessageId(mailLocation());};
+    window.addEventListener('popstate',sync);
+    return ()=>window.removeEventListener('popstate',sync);
+  },[]);
+  useEffect(()=>{
+    if(!messageId)return;
+    let current=true;
+    void api('inbox/'+messageId+'/view').then(message=>{
+      if(current)setLoaded({id:messageId,message});
+    }).catch(error=>{if(current)setStatus(notice(error));});
+    return ()=>{current=false;};
+  },[messageId]);
+
+  function returnToInbox() {
+    if(window.history.state?.inboxNavigation) window.history.back();
+    else {
+      window.history.replaceState(null,'','/mail');
+      setMessageId(null);setConfirmDelete(false);
+    }
+  }
+
   return <section className={'xc-card xc-pad'+(account.canSendMail?' xc-inbox':'')}>
     <div className="xc-row-head"><span className="xc-symbol xc-sky"><Mail size={21}/></span><div><h2>{account.mailbox??'X-Center mailbox'}</h2>
     <p>{messages?'Your private mailbox.':'This address is reserved. Mailbox delivery is unavailable.'}</p></div></div>
     {messages&&!account.externalMail&&<p>This inbox can receive local X-Center mail. External delivery is unavailable.</p>}
-    {messages?.length===0 && <div className="xc-empty">{accountMessage('inboxEmpty','Your inbox is empty.')}</div>}
+    {!messageId&&messages?.length===0 && <div className="xc-empty">{accountMessage('inboxEmpty','Your inbox is empty.')}</div>}
+    {messageId&&<button className="xc-button xc-secondary xc-self-start" onClick={()=>{
+      setStatus('');returnToInbox();
+    }}>{accountMessage('backToInbox','Back to inbox')}</button>}
     {open ? <article className="xc-stack">
-      <button className="xc-button xc-secondary xc-self-start" onClick={()=>{setOpen(null);setConfirmDelete(false);}}>{accountMessage('backToInbox','Back to inbox')}</button>
       <h3>{open.message.subject || accountMessage('noSubject','(No subject)')}</h3>
       <p>{open.message.from}</p>
       <p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{open.message.text}</p>
@@ -161,26 +189,27 @@ export function MailPage({ account }:{account:Account}) {
           setBusy(true);
           void api('inbox/'+id,{},'DELETE').then(()=>{
             setMessages(previous=>previous?.filter(message=>message.id!==id)??null);
-            setOpen(null);setConfirmDelete(false);setStatus(accountMessage('emailDeleted','Email deleted.'));
+            window.history.replaceState(null,'','/mail');
+            setMessageId(null);setLoaded(null);setConfirmDelete(false);setStatus(accountMessage('emailDeleted','Email deleted.'));
           }).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
         }}><Trash2 size={18}/> {confirmDelete?accountMessage('confirmEmailDeletion','Confirm permanent deletion'):accountMessage('deleteEmail','Delete email')}</button>
         {confirmDelete&&<button className="xc-button xc-secondary" disabled={busy} onClick={()=>setConfirmDelete(false)}>{accountMessage('cancel','Cancel')}</button>}
       </div>
-    </article> : messages?.map(message=><div className="xc-list-row" key={message.id}>
+    </article> : !messageId&&messages?.map(message=><div className="xc-list-row" key={message.id}>
       <span>Received {date(message.received)} · {size(message.size)}</span>
       <button className="xc-button xc-secondary" disabled={busy} onClick={()=>{
-        setBusy(true);setStatus('');
-        void api('inbox/'+message.id+'/view').then(result=>setOpen({id:message.id,message:result}))
-          .catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
+        setStatus('');
+        window.history.pushState({inboxNavigation:true},'','/mail/'+message.id);
+        setMessageId(message.id);
       }}>{accountMessage('readEmail','Read email')}</button>
     </div>)}
-    {!open&&inboxCursor&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
+    {!messageId&&inboxCursor&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
       setBusy(true);setStatus('');
       void api('inbox?cursor='+encodeURIComponent(inboxCursor)).then(result=>{
         setMessages(previous=>[...(previous??[]),...result.messages]);setInboxCursor(result.nextCursor);
       }).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
     }}>{accountMessage('olderEmail','Load older email')}</button>}
-    {aliases.length>0&&<details>
+    {!messageId&&aliases.length>0&&<details>
       <summary>{accountMessage('privateAddresses','Hide My Email addresses')}</summary>
       {aliases.map(item=><div className="xc-list-row" key={item.address}>
         <div><strong>{item.address}</strong><p>{item.active?(item.premium?'Premium address':'Private address'):'Disabled'}</p></div>
