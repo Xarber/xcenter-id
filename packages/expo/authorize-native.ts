@@ -32,7 +32,8 @@ export async function authorizeNative({ issuer, clientId, redirectUri }: NativeA
   const discovery = await fetchDiscoveryAsync(issuer);
   if (discovery.discoveryDocument?.issuer !== issuer ||
     !discovery.authorizationEndpoint || !https(discovery.authorizationEndpoint) ||
-    !discovery.tokenEndpoint || !https(discovery.tokenEndpoint)) {
+    !discovery.tokenEndpoint || !https(discovery.tokenEndpoint) ||
+    [discovery.authorizationEndpoint,discovery.tokenEndpoint].some(endpoint=>new URL(endpoint).origin!==new URL(issuer).origin)) {
     throw new Error('Invalid issuer discovery');
   }
   const nonce = randomUUID();
@@ -40,7 +41,7 @@ export async function authorizeNative({ issuer, clientId, redirectUri }: NativeA
     clientId, redirectUri, responseType: ResponseType.Code, scopes: ['openid'],
     usePKCE: true, codeChallengeMethod: CodeChallengeMethod.S256, extraParams: { nonce },
   });
-  const result = await request.promptAsync(discovery);
+  const result = await request.promptAsync(discovery,{preferUniversalLinks:true});
   if (result.type === 'cancel' || result.type === 'dismiss') return null;
   if (result.type !== 'success' || result.params.state !== request.state ||
     !result.params.code || !request.codeVerifier) {

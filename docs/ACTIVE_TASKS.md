@@ -62,3 +62,15 @@ Next external prerequisite for mail is verified ingress for port 25 to the appli
 | 27 AUTHN-027 | Improve third-party sign-in, consent, permissions and sample apps | Implemented | Staged Chrome verified delegated signup and consent, durable app data access, structured notes, own record deletion and sample sign-out. Native library rendering remains unverified. |
 
 Native preview for deployed revision 9745b7f was queued in [run 43934382712](https://github.com/Xarber/AuthNJS/actions/runs/43934382712). Verify each artifact and exercise the installed app after the run. The previous run produced an iOS Simulator artifact, canceled its device job, and failed both Android variants because release signing was missing.
+
+### Native account controls and registered app linking
+
+| Order and ID | Request | State | Dependencies and next action |
+| --- | --- | --- | --- |
+| 28 AUTHN-028 | Replace browser links with native account controls and secure sign-in | Implemented | Native account controls use a device-confined session. Isolated Chrome and API QA verified fixed return, code exchange, profile, sessions, folders and logout. Device installation and actual app interactions remain pending. |
+| 29 AUTHN-029 | Show registered app and developer metadata at consent, auto-login linked apps, allow unlinking | Implemented | Isolated cross-site QA verified branding registration, linked-app SSO, sharing, unlink and consent on relink. Native client callback and relying-party in-app email sign-in remain pending. |
+| 30 AUTHN-030 | Route username sign-in to verified-email code or passkey | Implemented | Username lookup, fallback and code lifecycle tested. External code delivery still requires working SMTP submission. |
+| 31 AUTHN-031 | Enable mailbox receiving and sending, show account storage categories | In Progress | Storage categories verified. Local SMTP certificate verified. Public TCP 25 timed out, as did outbound direct connections to Gmail and iCloud. Public MX ingress and upstream submission remain blocked. |
+| 32 AUTHN-032 | Publish two external test apps with distinct hostnames | Implemented | Distinct origins, callback URLs, access grants and unlinking verified using isolated accounts. Production cutover and smoke checks remain pending. |
+
+The earlier revision 9745b7f produced both iOS artifacts in run 43934382712. The Android jobs failed at the release signing configuration step. This is historical build evidence only.

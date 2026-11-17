@@ -52,10 +52,15 @@ function Intro({close}:{close:()=>void}){
   </dialog>;
 }
 
-function SignIn({signup,busy,notice,authenticate,create,continuation}:{
-  signup:boolean;busy:boolean;notice:string;authenticate:(username?:string)=>void;create:()=>void;continuation:string|null;
+function SignIn({signup,busy,notice,authenticate,beginUsername,submitCode,create,continuation}:{
+  signup:boolean;busy:boolean;notice:string;authenticate:(username?:string)=>void;
+  beginUsername:(username:string)=>Promise<{method:string;ticket?:string}|undefined>;
+  submitCode:(ticket:string,code:string)=>void;create:()=>void;continuation:string|null;
 }){
   const [username,setUsername]=useState('');
+  const [ticket,setTicket]=useState('');
+  const [code,setCode]=useState('');
+  const [offerPasskey,setOfferPasskey]=useState(false);
   const [motionPaused,setMotionPaused]=useState(false);
   const suffix=continuation?'?continue='+encodeURIComponent(continuation):'';
   return <div className="xc-auth">
@@ -84,11 +89,25 @@ function SignIn({signup,busy,notice,authenticate,create,continuation}:{
         {signup ? <button type="button" className="xc-button xc-primary xc-full" onClick={create} disabled={busy}>
           <Fingerprint size={19}/>{busy?'Waiting for your passkey…':'Create passkey'}<ArrowRight size={17}/>
         </button> : <>
-          <form onSubmit={event=>{event.preventDefault();authenticate(username);}}>
+          {ticket?<form onSubmit={event=>{event.preventDefault();submitCode(ticket,code);}}>
+            <label>Email sign-in code<input name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6}
+              value={code} onChange={event=>setCode(event.target.value)} required/></label>
+            <p>Check your verified email for a six-digit code.</p>
+            <button className="xc-button xc-primary xc-full" disabled={busy||code.length!==6}>Verify code <ArrowRight size={17}/></button>
+            <button type="button" className="xc-button xc-secondary" onClick={()=>{setTicket('');setCode('');}}>Use a different username</button>
+          </form>:<form onSubmit={event=>{
+            event.preventDefault();
+            if(offerPasskey){authenticate(username);return;}
+            void beginUsername(username).then(result=>{
+              if(result?.ticket)setTicket(result.ticket);
+              else if(result?.method==='passkey')setOfferPasskey(true);
+            });
+          }}>
             <label>X-Center username<input autoComplete="username webauthn" name="username" spellCheck={false}
-              value={username} onChange={event=>setUsername(event.target.value)} placeholder="Your username" required/></label>
-            <button className="xc-button xc-primary xc-full" disabled={busy || !username.trim()}>Continue <ArrowRight size={17}/></button>
-          </form>
+              value={username} onChange={event=>{setUsername(event.target.value);setOfferPasskey(false);}} placeholder="Your username" required/></label>
+            {offerPasskey&&<p>Use a passkey to sign in to this account.</p>}
+            <button className="xc-button xc-primary xc-full" disabled={busy || !username.trim()}>{offerPasskey?'Use passkey':'Continue'} <ArrowRight size={17}/></button>
+          </form>}
           <div className="xc-divider"><span>or</span></div>
           <button type="button" className="xc-button xc-secondary xc-full" disabled={busy} onClick={()=>authenticate()}>
             <Fingerprint size={19}/>{busy?'Waiting for your passkey…':'Sign in with a passkey'}
@@ -156,8 +175,10 @@ export default function WebApp(){
   const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const didShow=useRef(false);
   const path=window.location.pathname.replace(/^\//,'')||'dashboard';
-  const next=new URLSearchParams(window.location.search).get('continue')??'';
-  const continuation=/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)?next:null;
+  const next=path==='native-session'?window.location.pathname+window.location.search:new URLSearchParams(window.location.search).get('continue')??'';
+  const nativeReturn=/^\/native-session\?challenge=[A-Za-z0-9_-]{43}&state=[A-Za-z0-9_-]{43}$/;
+  const continuation=/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)||nativeReturn.test(next)?next:null;
+  const authDestination=continuation??'/dashboard';
   const emailToken=new URLSearchParams(window.location.hash.slice(1)).get('verify-email');
   async function load(){setAccount((await api('me')).account);}
   useEffect(()=>{
@@ -171,6 +192,10 @@ export default function WebApp(){
       if(!localStorage.getItem(introKey)){localStorage.setItem(introKey,'complete');setIntro(true);}
     }catch{ /* Without storage, the introduction remains available in Settings. */ }
   },[account?.profile,path,continuation]);
+
+  useEffect(()=>{
+    if(account?.profile&&continuation&&['signin','signup','dashboard'].includes(path)) window.location.replace(authDestination);
+  },[account?.profile,continuation,path,authDestination]);
 
   async function passkey(mode:'signup'|'login'|'add',value?:string){
     const optionsJSON=await api(mode+'/options',mode==='login'?{username:value}:mode==='add'?{name:value}:{});
@@ -187,9 +212,36 @@ export default function WebApp(){
     }).catch(error=>setNotice(error?.name==='NotAllowedError'?'The passkey request was canceled. Try again when ready.':error?.message??'Sign-in could not be completed.'))
       .finally(()=>setBusy(false));
   }
+  async function beginUsername(username:string){
+    setBusy(true);setNotice('');
+    try {return await api('login/username',{username});}
+    catch(error){setNotice(error instanceof Error?error.message:'Could not find this account.');}
+    finally{setBusy(false);}
+  }
+  function submitCode(ticket:string,code:string){
+    setBusy(true);setNotice('');
+    void api('login/code',{ticket,code}).then(()=>window.location.replace(authDestination))
+      .catch(error=>setNotice(error.message)).finally(()=>setBusy(false));
+  }
   if(account===undefined)return <div className="xc-loading"><Logo href="/"/><p role="status">Opening your account…</p></div>;
-  if(!account)return <SignIn signup={path==='signup'} continuation={continuation} busy={busy} notice={notice} authenticate={username=>login('login',username)} create={()=>login('signup')}/>;
+  if(!account)return <SignIn signup={path==='signup'} continuation={continuation} busy={busy} notice={notice} authenticate={username=>login('login',username)} beginUsername={beginUsername} submitCode={submitCode} create={()=>login('signup')}/>;
 
+  if(path==='native-session'&&account.profile){
+    const params=new URLSearchParams(window.location.search);
+    const challenge=params.get('challenge');
+    const state=params.get('state');
+    const valid=!!challenge&&!!state&&nativeReturn.test('/native-session?challenge='+challenge+'&state='+state);
+    return <div className="xc-setup"><Logo href="/"/><section className="xc-card xc-pad xc-stack">
+      <h1>Sign in to X-Center ID on your device</h1>
+      <p>Continue as {account.profile.givenName} {account.profile.surname}.</p>
+      {valid?<button className="xc-button xc-primary" disabled={busy} onClick={()=>{
+        setBusy(true);
+        void api('native/authorize',{challenge,state}).then(({location})=>window.location.assign(location))
+          .catch(error=>setNotice(error.message)).finally(()=>setBusy(false));
+      }}>Return to the app <ArrowRight size={17}/></button>:<p>Start sign-in from the X-Center ID app.</p>}
+      {notice&&<p role="alert">{notice}</p>}
+    </section></div>;
+  }
   const profile=account.profile;
   if(!profile) return <div className="xc-setup"><Logo href="/"/><div className="xc-page-title">
     <span className="xc-pill"><Fingerprint size={15}/> Passkey saved</span><h1>Set up your profile</h1>
@@ -272,7 +324,6 @@ export default function WebApp(){
     </aside>
     <main className="xc-main">
       <div className="xc-page-title"><h1>{title}</h1><p>{summary}</p></div>
-      {continuation&&<a className="xc-button xc-primary" href={continuation}>Continue to the app <ArrowRight size={17}/></a>}
       {notice&&<p className="xc-notice" role="status">{notice}</p>}
       {content}
     </main>

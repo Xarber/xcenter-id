@@ -1,6 +1,6 @@
 export type Identity = { username:string; givenName:string; surname:string; birthday?:string; ageRange?:string; hasPicture:boolean };
 export type Account = { name:string; profile:Identity|null; passkeys:{id:string;label:string;created:number}[];
-  emails:{address:string;verified:number}[]; canSendMail?:boolean; mailbox?:string; admin?:boolean };
+  emails:{address:string;verified:number}[]; canSendMail?:boolean; canReceiveMail?:boolean; externalMail?:boolean; externalMailSubmission?:boolean; mailbox?:string; admin?:boolean };
 
 export async function api(path:string, payload?:object, method = payload ? 'POST' : 'GET') {
   const response = await fetch('/account/'+path,{ method, cache:'no-store', ...(payload ? {

@@ -50,3 +50,8 @@ body{overflow-y:auto}
 .xc-file-path{margin:18px 0;overflow-wrap:anywhere}
 .xc-file-path a+a::before{content:'›';display:inline-block;margin-right:8px;color:var(--muted)}
 .xc-file-path [aria-current=page]{color:var(--ink);font-weight:700}
+.xc-storage-meter{display:flex;overflow:hidden;border-radius:10px;background:var(--soft);height:17px;margin-top:10px}
+.xc-storage-legend{display:grid;gap:5px;padding:0;margin:14px 0;list-style:none}
+.xc-storage-legend li{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:.88rem}
+.xc-storage-legend li span{width:10px;height:10px;flex:none;border-radius:3px}
+.xc-storage-legend li strong{margin-inline-start:auto;color:var(--ink)}

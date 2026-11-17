@@ -9,3 +9,9 @@ A developer registration describes the app and verifies control of its callback 
 The two sample sites use independent confidential clients and separate datasets. They demonstrate actual OIDC signin, pairwise subjects, app-local notes, owner-controlled read grants, and a shared folder scoped to the user's sample data. Use fictional values in both apps.
 
 The account manager supports timed data access and access until explicitly revoked. This applies to data-sharing permissions. OIDC tokens retain their short expiration. The sample clients can sign out independently of X-Center ID and save notes with a title, text, date and tags. They can delete their own records and their own new shared notes. Notes received from the other app are read-only.
+
+## Linking and developer branding
+
+The developer dashboard manages registration branding and revocation. App icons are uploaded as PNG or JPEG and re-encoded by X-Center ID. The link screen displays the originating account, the registered callback hostname, app icon, developer name and requested permissions. SSO can reuse a linked app grant while an X-Center ID session is active. Unlinking removes app sharing grants and disallows tokens from previous links. Data previously retained by the relying party remains governed by that app's retention policy.
+
+Native registrations accept verified HTTPS App Links or Universal Links. These are public clients using PKCE. Confidential website clients still receive backend-only credentials. The Expo component can render username and email-code inputs for an authorized adapter, or use the system authentication browser. Native relying-party email sign-in needs its own client-bound authorization exchange before it can use email directly.

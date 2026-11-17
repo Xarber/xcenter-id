@@ -1,6 +1,6 @@
 # X-Center ID dashboard
 
-The Expo app in `apps/dashboard` supports iOS, Android and web. The web account manager is the authoritative interface for sign-in, account changes and permission decisions. Native tabs open the corresponding canonical `https://id.xcenter.it` pages in the system browser. Those pages use the browser's account session and WebAuthn support.
+The Expo app in `apps/dashboard` supports iOS, Android and web. Both the web and native dashboards use the X-Center ID account service for account changes and permission decisions. Native tabs contain in-app controls. The system authentication browser handles WebAuthn.
 
 ## Account navigation
 
@@ -25,3 +25,9 @@ From `apps/dashboard`, run `npm ci`, `npm run typecheck`, `npm test` and `npx ex
 After passkey enrollment, Security opens a name editor with the suggested provider name. The server uses the AAGUID from the verified registration result and caches the community authenticator catalog. Catalog entries are display hints. Anonymous or unknown authenticators receive a generic name. A user can rename or remove a passkey after recent authentication. The last credential remains protected.
 
 The file browser supports nested folders, breadcrumb navigation and uploads into the open folder. It supports eight levels and 100 folders per account. Empty folders can be removed. Existing files remain accessible at the root, and files and folder names are encrypted.
+
+## Native account manager
+
+The mobile app keeps its session in Expo SecureStore. Account controls call the account APIs from the native app. Passkey authentication opens the system authentication browser and returns a one-time code bound to the app's verifier and state. Account management credentials never appear in the return URL. Passkey enrollment uses the secure browser. Username sign-in checks the account and offers an email code when a verified address and configured mail transport are available. The app itself accepts the code. Sign-in without email uses a passkey.
+
+Data Usage separates files, account information, security metadata, app data, and mail. It counts account-owned logical bytes and excludes shared SQLite page overhead. The reported storage limit gates file uploads. Mail retains its separate mailbox quota.

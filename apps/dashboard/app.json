@@ -16,7 +16,9 @@
       "bundler": "metro"
     },
     "plugins": [
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-secure-store",
+      "expo-sharing"
     ],
     "icon": "./public/authnjs-512.png"
   }

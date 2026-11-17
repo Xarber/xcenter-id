@@ -90,6 +90,7 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
         return true;
       } catch (error) { db.exec('ROLLBACK'); throw error; }
     },
+    usage: (owner) => count.get(owner).bytes,
     list: (owner) => list.all(owner),
     retrieve(owner,id) {
       const row = get.get(owner,id);

@@ -18,9 +18,14 @@ import { createIdentityProvider } from './oidc.mjs';
 const root = resolve(process.env.AUTHNJS_WEB_ROOT ?? '/web');
 const mailConfig = process.env.AUTHNJS_MAIL_CONFIG
   ? JSON.parse(readFileSync(process.env.AUTHNJS_MAIL_CONFIG,'utf8')) : null;
+if(mailConfig&&process.env.AUTHNJS_LOCAL_SMTP_HOST){
+  mailConfig.localDelivery={host:process.env.AUTHNJS_LOCAL_SMTP_HOST};
+}
 const configuration = process.env.AUTHNJS_OIDC_CONFIG ? JSON.parse(readFileSync(process.env.AUTHNJS_OIDC_CONFIG, 'utf8')) : null;
 const accounts = createAccounts({
   outboundMail:createOutboundMail(mailConfig),
+  canReceiveMail:!!mailConfig?.inboundDomains?.length,
+  externalMail:!!mailConfig?.publicDelivery,
   profileKey: configuration ? Buffer.from(configuration.profileKey,'hex') : null,
   sendVerification: createVerificationMailer(mailConfig?.submission),
   origin: process.env.AUTHNJS_ACCOUNT_ORIGIN,
@@ -28,7 +33,12 @@ const accounts = createAccounts({
 });
 const origin = process.env.AUTHNJS_ACCOUNT_ORIGIN;
 const state = process.env.AUTHNJS_DATA_DIR;
+const otherStorage=(owner)=>{
+  const data=accounts.usage(owner);
+  return {...data,apps:data.apps+(store?.usage(owner)??0),mail:mail?.usage(owner)??0};
+};
 const accountFiles = configuration ? createAccountFiles({
+  usage:otherStorage,
   database:join(state,'user-files.sqlite'),accounts,origin,
   key:Buffer.from(hkdfSync('sha256',Buffer.from(configuration.profileKey,'hex'),'','authnjs.files.v1',32)),
 }) : null;
@@ -36,11 +46,13 @@ const registry = openRegistry(join(state, 'apps.sqlite'));
 const mail = mailConfig?.inboundDomains?.length ? openMailStore({ configuration:mailConfig,
   accountsPath:join(state,'accounts.sqlite'), mailPath:join(state,'mail.sqlite') }) : null;
 const provider = configuration ? createIdentityProvider({
-  issuer: origin, database: join(state, 'oidc.sqlite'), accounts, configuration, mail, registry,
+  issuer: origin, database: join(state, 'oidc.sqlite'), accounts, configuration, mail:mailConfig?.publicDelivery?mail:null, registry,
 }) : null;
 const store = configuration ? openStore(join(state, 'sample-data.sqlite'), Buffer.from(configuration.sampleKey, 'hex')) : null;
+const sampleOrigins=new Set(configuration?.clients.filter(client=>['notes-external','trips-external'].includes(client.client_id))
+  .map(client=>new URL(client.redirect_uris[0]).origin)??[]);
 const samples = provider && store ? createSamples({ issuer: origin, configuration, provider, accounts, store }) : null;
-const samplePermissions = store ? createSamplePermissions({store,accounts,origin}) : null;
+const samplePermissions = store ? createSamplePermissions({store,accounts,origin,clients:configuration?.clients.map(client=>client.client_id)}) : null;
 const developerClient = 'account-developer-session';
 const developer = createApiHandler({
   registry, developerClient, apps: registry,
@@ -64,7 +76,7 @@ async function activateApplication(req,res,id) {
     res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});
     res.end(JSON.stringify(result));
   };
-  if (!provider || req.method !== 'POST' || req.headers.origin !== origin ||
+  if (!provider || req.method !== 'POST' || !accounts.allowsMutation(req) ||
       req.headers['x-authnjs-request'] !== 'developer-portal') return json(403,{error:'invalid_request'});
   const active = accounts.current(req);
   const app = active && registry.lookup(active.owner,id);
@@ -104,8 +116,11 @@ const types = new Map(Object.entries({
 createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   const target = new URL(req.url, 'http://localhost');
   const path = target.pathname;
-  if (samples && (path === '/samples' || path.startsWith('/samples/'))) {
-    void samples(req, res, target).catch(() => {
+  const forwardedOrigin='https://'+req.headers['x-forwarded-host'];
+  const externalSample=sampleOrigins.has(forwardedOrigin)&&req.headers['x-forwarded-proto']==='https';
+  if (samples && (externalSample || path === '/samples' || path.startsWith('/samples/'))) {
+    const sampleUrl=new URL(target.pathname+target.search,externalSample?forwardedOrigin:origin);
+    void samples(req, res, sampleUrl).catch(() => {
       if (!res.headersSent) res.writeHead(502, { 'Cache-Control': 'no-store' });
       res.end('The sample application could not complete the request.');
     });
@@ -127,12 +142,33 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     return;
   }
   if (consentApi && path === '/account/data-grants') {
-    if (req.method !== 'GET' && (req.headers.origin !== origin || req.headers['x-authnjs-request'] !== 'account-consent')) {
+    if (req.method !== 'GET' && (!accounts.allowsMutation(req) || req.headers['x-authnjs-request'] !== 'account-consent')) {
       res.writeHead(403, {'Content-Type':'application/json','Cache-Control':'no-store'}).end('{"error":"invalid_origin"}');
       return;
     }
     req.url = '/v1/grants';
     void consentApi(req,res);
+    return;
+  }
+  if(provider && req.method==='POST' && path==='/account/connected-apps/unlink'){
+    const identity=accounts.current(req);
+    const answer=(status,result)=>res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(result));
+    if(!identity||!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent'){
+      answer(403,{error:'Sign in to X-Center ID to unlink an app.'});
+      return;
+    }
+    void (async()=>{
+      let text='';
+      for await(const chunk of req.iterator({destroyOnReturn:false})){
+        text+=chunk.toString();
+        if(text.length>1024){req.resume();return answer(413,{error:'Request too large.'});}
+      }
+      const {client}=JSON.parse(text);
+      if(typeof client!=='string'||client.length>100)return answer(422,{error:'Choose a connected app.'});
+      if(!await provider.unlink(identity.owner,client))return answer(404,{error:'App is already unlinked.'});
+      store?.revokeApp(identity.owner,client);
+      return answer(200,{ok:true});
+    })().catch(()=>answer(400,{error:'Could not unlink the app.'}));
     return;
   }
   if (provider && req.method === 'GET' && path === '/account/apps') {
@@ -144,7 +180,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   const revocationId = /^\/account\/developer\/apps\/([0-9a-f-]{36})\/revoke$/.exec(path)?.[1];
   if (revocationId && provider && req.method === 'POST') {
     const owner = accounts.current(req)?.owner;
-    const ok = req.headers.origin === origin && req.headers['x-authnjs-request'] === 'developer-portal' &&
+    const ok = accounts.allowsMutation(req) && req.headers['x-authnjs-request'] === 'developer-portal' &&
       owner && registry.revokeOwned(owner,revocationId);
     res.writeHead(ok ? 200 : 403, {'Content-Type':'application/json','Cache-Control':'no-store'});
     res.end(JSON.stringify({ok:!!ok}));
@@ -158,13 +194,13 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     });
     return;
   }
-  if (path === '/account/developer/apps') {
-    if (req.method === 'POST' && (req.headers.origin !== origin || req.headers['x-authnjs-request'] !== 'developer-portal')) {
+  if (path === '/account/developer/apps' || /^\/account\/developer\/apps\/[0-9a-f-]{36}\/brand$/.test(path)) {
+    if (req.method !== 'GET' && (!accounts.allowsMutation(req) || req.headers['x-authnjs-request'] !== 'developer-portal')) {
       res.writeHead(403, { 'Cache-Control': 'no-store', 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'invalid_origin' }));
       return;
     }
-    req.url = '/v1/developer/apps';
+    req.url = '/v1'+path.slice('/account'.length);
     void developer(req, res);
     return;
   }
@@ -200,7 +236,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void accounts.handle(req, res, path);
     return;
   }
-  const webPages = new Set(['/','/signin','/signup','/dashboard','/profile','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/mail','/admin']);
+  const webPages = new Set(['/','/signin','/signup','/native-session','/dashboard','/profile','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/mail','/admin']);
   const relative = webPages.has(path) ? 'index.html' : path.slice(1);
   const valid = /^(?:index\.html|revision\.txt|manifest\.webmanifest|service-worker\.js|authnjs-[\w-]+\.(?:svg|png)|(?:_expo|assets)\/[\w@./-]+)$/.test(relative);
   if (!valid || relative.split('/').some((part) => part === '.' || part === '..') ||

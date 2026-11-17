@@ -1,8 +1,7 @@
 import * as oidc from 'openid-client';
 import { randomBytes } from 'node:crypto';
 
-const sampleIds = ['places-demo', 'trips-demo'];
-import { sampleNotes as noteDataset, sampleFolder as sharedDataset, sampleShared as shared } from './sample-permissions.mjs';
+import { sampleApps, samplePartner, sampleNotes as noteDataset, sampleSharedDataset, sampleShared as shared } from './sample-permissions.mjs';
 const escape = (value) => String(value).replace(/[&<>"']/g,(c) => ({
   '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;',
 })[c]);
@@ -64,7 +63,10 @@ function notes(page, folder, canDelete = () => false) {
 }
 
 export function createSamples({ issuer, configuration, provider, store }) {
-  const clients = configuration.clients.filter(({client_id}) => sampleIds.includes(client_id));
+  const clients = configuration.clients.filter(({client_id}) => sampleApps.has(client_id));
+  const external = new Map(clients.filter(client=>new URL(client.redirect_uris[0]).origin!==issuer)
+    .map(client=>[new URL(client.redirect_uris[0]).origin,client]));
+  const locals = clients.filter(client=>new URL(client.redirect_uris[0]).origin===issuer);
   const sessions = new Map();
   const flows = new Map();
   const discovered = new Map();
@@ -90,19 +92,29 @@ export function createSamples({ issuer, configuration, provider, store }) {
   }
 
   return async (req,res,url) => {
-    if (url.pathname === '/samples') {
-      return respond(res,'X-Center ID sample apps', '<p>Use fictional data. Sample app records are separate from other datasets.</p><ul>' +
-        clients.map((client) => `<li><a href="/samples/${client.client_id}">${escape(client.client_name)}</a></li>`).join('') + '</ul>');
+    const externalClient=external.get(url.origin);
+    const appOrigin=externalClient?url.origin:issuer;
+    if (!externalClient&&url.pathname === '/samples') {
+      const localLinks=locals.map(client=>`<li><a href="/samples/${client.client_id}">${escape(client.client_name)}</a></li>`);
+      const externalLinks=[...external].map(([host,client])=>`<li><a href="${escape(host)}">${escape(client.client_name)}</a> · external app</li>`);
+      return respond(res,'X-Center ID sample apps','<p>Use fictional data. Sample app records are separate from other datasets.</p><ul>'+
+        [...localLinks,...externalLinks].join('')+'</ul>');
     }
-    if (url.pathname === '/samples/permissions') {
+    if (!externalClient&&url.pathname === '/samples/permissions') {
       if (req.method !== 'GET') return respond(res,'Permission management moved','<a href="/permissions">Open X-Center ID permissions</a>',405);
       return redirect(res,'/permissions');
     }
 
-    const [,id,action] = url.pathname.match(/^\/samples\/(places-demo|trips-demo)(?:\/(start|callback))?$/) ?? [];
-    const client = clients.find(({client_id}) => client_id === id);
-    if (!client) return respond(res,'Sample app unavailable','',404);
-    const base = '/samples/' + id;
+    const path=externalClient?url.pathname.match(/^\/(start|callback)?$/):url.pathname.match(/^\/samples\/([a-z-]+)(?:\/(start|callback))?$/);
+    const id=externalClient?.client_id??path?.[1];
+    const action=externalClient?path?.[1]:path?.[2];
+    const client=externalClient??locals.find(({client_id})=>client_id===id);
+    if(!path||!client)return respond(res,'Sample app unavailable','',404);
+    const base=externalClient?'':'/samples/'+id;
+    const home=base||'/';
+    const permissions=issuer+'/permissions';
+    const sharedDataset=sampleSharedDataset(id);
+    const callback=client.redirect_uris[0];
     const username = 'sample-' + id;
     const flowCookie = username + '-flow';
     if (req.method === 'GET' && action === 'start') {
@@ -113,19 +125,20 @@ export function createSamples({ issuer, configuration, provider, store }) {
       const state = oidc.randomState();
       flows.set(ticket,{ id, pkce, nonce, state, expires:Date.now()+120_000 });
       const auth = oidc.buildAuthorizationUrl(await discovery(client),{
-        scope:'openid profile email age_range', redirect_uri:issuer+base+'/callback', state, nonce, prompt:'consent',
+        scope:'openid profile email age_range', redirect_uri:callback, state, nonce,
         code_challenge:await oidc.calculatePKCECodeChallenge(pkce), code_challenge_method:'S256',
       });
-      res.setHeader('Set-Cookie',`${flowCookie}=${ticket}; Path=${base}; Secure; HttpOnly; SameSite=Lax; Max-Age=120`);
+      res.setHeader('Set-Cookie',`${flowCookie}=${ticket}; Path=${home}; Secure; HttpOnly; SameSite=Lax; Max-Age=120`);
       return redirect(res,auth);
     }
     if (req.method === 'GET' && action === 'callback') {
+      if(url.searchParams.has('error'))return respond(res,'Linking canceled',`<a href="${home}">Return to the app</a>`);
       const ticket = cookie(req,flowCookie);
       const flow = flows.get(ticket);
       flows.delete(ticket);
       if (!flow || flow.id !== id || flow.expires < Date.now()) return respond(res,'Sign-in expired','<a href="/samples">Start again</a>',400);
       const config = await discovery(client);
-      const tokens = await oidc.authorizationCodeGrant(config,new URL(url.pathname+url.search,issuer),{
+      const tokens = await oidc.authorizationCodeGrant(config,new URL(url.pathname+url.search,appOrigin),{
         pkceCodeVerifier:flow.pkce, expectedState:flow.state, expectedNonce:flow.nonce, idTokenExpected:true,
       });
       const claims = tokens.claims();
@@ -133,24 +146,24 @@ export function createSamples({ issuer, configuration, provider, store }) {
       prune(sessions);
       const session = random();
       sessions.set(session,{ id, access:tokens.access_token, identity, expires:Date.now()+Math.min(tokens.expires_in ?? 900,900)*1000 });
-      res.setHeader('Set-Cookie',`${username}=${session}; Path=${base}; Secure; HttpOnly; SameSite=Lax; Max-Age=900`);
-      return redirect(res,base);
+      res.setHeader('Set-Cookie',`${username}=${session}; Path=${home}; Secure; HttpOnly; SameSite=Lax; Max-Age=900`);
+      return redirect(res,home);
     }
     if (action) return respond(res,'Method unavailable','',405);
     const sessionId = cookie(req,username);
     const state = sessions.get(sessionId);
     if (req.method === 'POST' && url.searchParams.get('action') === 'signout') {
-      if (req.headers.origin !== issuer) return respond(res,'Invalid origin','',403);
+      if (req.headers.origin !== appOrigin) return respond(res,'Invalid origin','',403);
       if (state?.id === id) sessions.delete(sessionId);
-      res.setHeader('Set-Cookie',`${username}=; Path=${base}; Secure; HttpOnly; SameSite=Lax; Max-Age=0`);
-      return redirect(res,base);
+      res.setHeader('Set-Cookie',`${username}=; Path=${home}; Secure; HttpOnly; SameSite=Lax; Max-Age=0`);
+      return redirect(res,home);
     }
     const active = state?.id === id && state.expires > Date.now() ? await provider.delegatedAccess(state.access,id) : null;
     if (!active) return respond(res,client.client_name,`<p>Sign in with your X-Center ID.</p><a class="button primary" href="${base}/start">Sign in</a>`);
     const {owner} = active;
-    const other = sampleIds.find((candidate) => candidate !== id);
+    const other=samplePartner.get(id);
     if (req.method === 'POST') {
-      if (req.headers.origin !== issuer) return respond(res,'Invalid origin','',403);
+      if (req.headers.origin !== appOrigin) return respond(res,'Invalid origin','',403);
       const input = await form(req);
       const folder = input.get('folder');
       if (!['own','shared'].includes(folder)) return respond(res,'Invalid folder','',422);
@@ -163,7 +176,7 @@ export function createSamples({ issuer, configuration, provider, store }) {
         if (!record || (sharedPage && !sharedPage.records.some(item=>item.id===record && item.value.author===id))) {
           return respond(res,'Note unavailable','',404);
         }
-        return store.remove(owner,source,dataset,record) ? redirect(res,base) : respond(res,'Note unavailable','',404);
+        return store.remove(owner,source,dataset,record) ? redirect(res,home) : respond(res,'Note unavailable','',404);
       }
       const note = input.get('note')?.trim();
       const title = input.get('title')?.trim() ?? '';
@@ -172,7 +185,7 @@ export function createSamples({ issuer, configuration, provider, store }) {
       if (!note || note.length > 500 || title.length > 100 || tags.length > 8 || tags.some(tag=>tag.length > 30)
         || (date && !/^\d{4}-\d{2}-\d{2}$/.test(date))) return respond(res,'Invalid note','',422);
       const created = store.create(owner,source,dataset,{ title,text:note,details:{date,tags},author:id });
-      return created ? redirect(res,base) : respond(res,'Sample storage is full','',409);
+      return created ? redirect(res,home) : respond(res,'Sample storage is full','',409);
     }
     if (req.method !== 'GET') return respond(res,'Method unavailable','',405);
     const otherPage = store.read(owner,other,id,noteDataset);
@@ -185,7 +198,7 @@ export function createSamples({ issuer, configuration, provider, store }) {
       <label>Tags<input name="tags" maxlength="200" placeholder="Separate tags with commas"></label>
       <button class="primary">Save note</button></form></details>`;
     return respond(res,client.client_name,`<section><p>Signed in as ${escape(state.identity.name ?? 'X-Center ID user')}.</p>
-      <a class="button" href="/permissions">Manage permissions</a>
+      <a class="button" href="${permissions}">Manage permissions</a>
       <form method="post" action="${base}?action=signout"><button>Sign out</button></form>
       <details><summary>Shared identity details</summary><p>App-specific ID <code>${escape(state.identity.sub)}</code></p>
       ${state.identity.age_range ? `<p>Shared age range ${escape(state.identity.age_range)}</p>` : ''}
@@ -193,6 +206,6 @@ export function createSamples({ issuer, configuration, provider, store }) {
       <section><h2>Your notes</h2>${notes(store.read(owner,id,id,noteDataset),'own',()=>true)}${noteForm('own')}</section>
       <section><h2>Other app’s notes</h2>${otherPage ? notes(otherPage) : '<p>Access has not been granted.</p>'}</section>
       <section><h2>Shared folder</h2>${sharedPage ? notes(sharedPage,'shared',value=>value.author===id)+noteForm('shared') : '<p>Access has not been granted.</p>'}</section>
-      <p><a href="/samples">Other sample apps</a></p>`);
+      <p><a href="${issuer}/samples">Other sample apps</a></p>`);
   };
 }

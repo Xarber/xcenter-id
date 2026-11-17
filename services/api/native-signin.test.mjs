@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import { createHash, randomBytes } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
+import { test } from 'node:test';
+import { openNativeSession } from './native-session.mjs';
+import { openEmailSignIn } from './email-signin.mjs';
+
+const key=()=>randomBytes(32).toString('base64url');
+const challenge=(value)=>createHash('sha256').update(value).digest('base64url');
+function database(){
+  const db=new DatabaseSync(':memory:');
+  db.exec("PRAGMA foreign_keys=ON; CREATE TABLE accounts(id TEXT PRIMARY KEY); INSERT INTO accounts VALUES ('account'); CREATE TABLE account_sessions(hash TEXT PRIMARY KEY); INSERT INTO account_sessions VALUES ('browser');");
+  return db;
+}
+
+test('app handoff requires the exact verifier and state, and can only be redeemed once',()=>{
+  const db=database();
+  const sessions=openNativeSession(db);
+  const verifier=key(), state=key();
+  const redirect=new URL(sessions.issue('browser',challenge(verifier),state));
+  const code=redirect.searchParams.get('code');
+  assert.equal(redirect.protocol,'authnjs-dashboard:');
+  assert.equal(sessions.exchange({code,verifier:key(),state}),null);
+  assert.equal(sessions.exchange({code,verifier,state:key()}),null);
+  assert.equal(sessions.exchange({code,verifier,state}),'browser');
+  assert.equal(sessions.exchange({code,verifier,state}),null);
+  assert.equal(sessions.accepts('browser'),false);
+  sessions.bind('browser');
+  assert.equal(sessions.accepts('browser'),true);
+  db.close();
+});
+
+test('email sign-in is delivery-dependent, rate-limited, channel-bound and single-use',async()=>{
+  const db=database();
+  const sent=[];
+  const email=openEmailSignIn(db,{send:async item=>sent.push(item),secret:randomBytes(32)});
+  const {ticket}=await email.start('account','qa@example.test','native');
+  assert.equal((await email.start('account','qa@example.test','native')).status,429);
+  const {code}=sent[0];
+  assert.match(code,/^\d{6}$/);
+  assert.equal(email.finish(ticket,code,'web'),null);
+  assert.equal(email.finish(ticket,code,'native'),'account');
+  assert.equal(email.finish(ticket,code,'native'),null);
+  assert.equal((await openEmailSignIn(db,{secret:randomBytes(32)}).start('account','qa@example.test','web')).status,503);
+  db.close();
+});

@@ -5,7 +5,7 @@ const fileLimit = 2 * 1024 * 1024;
 const storageLimit = 10 * 1024 * 1024;
 const fileId = /^[0-9a-f]{8}-[0-9a-f-]{27}$/;
 
-export function createAccountFiles({ database, key, accounts, origin }) {
+export function createAccountFiles({ database, key, accounts, origin, usage = () => ({}) }) {
   if (!key || key.length !== 32) return null;
   const db = new DatabaseSync(database);
   db.exec(`PRAGMA busy_timeout = 3000; PRAGMA foreign_keys = ON;
@@ -85,11 +85,12 @@ export function createAccountFiles({ database, key, accounts, origin }) {
         const location=new URL(req.url,origin).searchParams.get('folder');
         const breadcrumbs=trail(owner,location);
         if(!breadcrumbs)return json(res,404,{error:'Folder unavailable.'});
-        const usage=count.get(owner);
+        const stats=count.get(owner);
+        const categories={files:stats.bytes,...usage(owner)};
         const folder=location||null;
         return json(res,200,{files:forFolder.all(owner,folder).map(row=>unpack(row,false)),
           folders:children.all(owner,folder).map(({id,envelope,size,created})=>unpack({id,owner,envelope,size,created},false)),
-          breadcrumbs,used:usage.bytes,total:usage.total,limit:storageLimit});
+          breadcrumbs,categories,used:Object.values(categories).reduce((total,value)=>total+value,0),total:stats.total,limit:storageLimit});
       }
       const row=individual&&select.get(owner,id);
       if(!row)return json(res,404,{error:'File unavailable.'});
@@ -99,7 +100,7 @@ export function createAccountFiles({ database, key, accounts, origin }) {
         'Content-Disposition':"attachment; filename*=UTF-8''"+name});
       res.end(file.data);return;
     }
-    if(req.headers.origin!==origin||req.headers['x-authnjs-request']!=='account-consent'){
+    if(!(accounts.allowsMutation?.(req) ?? req.headers.origin===origin)||req.headers['x-authnjs-request']!=='account-consent'){
       return json(res,403,{error:'Only the account manager can change your files.'});
     }
     if(req.method==='DELETE'&&individual&&folderItem){
@@ -151,7 +152,7 @@ export function createAccountFiles({ database, key, accounts, origin }) {
         folderInsert.run(next,owner,folder,Date.now(),pack(owner,next,name,bytes));
       } else {
         const used=count.get(owner);
-        if(used.bytes+bytes.length>storageLimit||used.total>=100){
+        if(used.bytes+bytes.length+Object.values(usage(owner)).reduce((sum,value)=>sum+value,0)>storageLimit||used.total>=100){
           db.exec('ROLLBACK');return json(res,409,{error:'Account file storage is full.'});
         }
         insert.run(next,owner,Date.now(),bytes.length,pack(owner,next,name,bytes));

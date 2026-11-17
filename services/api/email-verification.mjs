@@ -18,10 +18,10 @@ export function createVerificationMailer(config) {
     connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 12000,
     disableFileAccess: true, disableUrlAccess: true,
   });
-  return ({ address, link }) => transport.sendMail({
+  return ({ address, link, code }) => transport.sendMail({
     from: { name: 'X-Center ID', address: from }, to: address,
-    subject: 'Verify your email for X-Center ID',
-    text: 'Verify ownership of this address by opening the link and signing in to your X-Center ID account. The link expires in 20 minutes.\n\n' + link,
+    subject: code?'Your X-Center ID sign-in code':'Verify your email for X-Center ID',
+    text: code?'Use this code to sign in to X-Center ID: '+code+'\nIt expires in 5 minutes.': 'Verify ownership of this address by opening the link and signing in to your X-Center ID account. The link expires in 20 minutes.\n\n' + link,
   });
 }
 

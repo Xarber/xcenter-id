@@ -1,3 +1,4 @@
+import { formatBytes, storageCategories } from './storage-summary';
 import { File, FileUp, Folder, FolderPlus, HardDrive, Laptop, Mail, Monitor, ShieldCheck, Trash2 } from 'lucide-react';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { api, fileAsBase64, type Account } from './web-account';
@@ -9,7 +10,7 @@ const size = (value:number)=>value>1024*1024 ? (value/(1024*1024)).toFixed(1)+' 
 type Session = { id:string;label:string;created:number;current:boolean };
 type StoredFile = { id:string;name:string;size:number;created:number };
 type FolderItem = {id:string;name:string};
-type Files = { files:StoredFile[]; folders:FolderItem[]; breadcrumbs:FolderItem[]; used:number; total:number; limit:number };
+type Files = { files:StoredFile[]; folders:FolderItem[]; breadcrumbs:FolderItem[]; categories:Record<string,number>; used:number; total:number; limit:number };
 
 export function DevicesPage() {
   const [devices,setDevices]=useState<Session[]>([]);
@@ -57,8 +58,14 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
   return <section className="xc-card xc-pad">
     <div className="xc-row-head"><span className="xc-symbol xc-lavender">{summary?<HardDrive size={21}/>:<File size={21}/>}</span>
       <div><h2>{summary?'Account file storage':'Your private files'}</h2><p>{summary?'Storage used by files in this account.':'Uploads are available only in your X-Center ID account.'}</p></div></div>
-    {state && summary && <><div className="xc-storage"><strong>{size(state.used)}</strong><span> of {size(state.limit)} used</span></div>
-      <progress aria-label="Account file storage" value={state.used} max={state.limit}/><p>{state.total} {state.total===1?'file':'files'}</p><a href="/files">Open file browser →</a></>}
+    {state && summary && <><div className="xc-storage"><strong>{formatBytes(state.used)}</strong><span> of {formatBytes(state.limit)} used</span></div>
+      <div className="xc-storage-meter" role="meter" aria-label="Account storage" aria-valuemin={0} aria-valuemax={state.limit} aria-valuenow={Math.min(state.limit,state.used)}>
+        {storageCategories.map(([id,,color])=><span aria-hidden="true" key={id} style={{backgroundColor:color,flex:state.categories[id]??0}}/>)}
+        {state.limit>state.used&&<span style={{flex:state.limit-state.used}}/>}
+      </div>
+      <ul className="xc-storage-legend">{storageCategories.map(([id,label,color])=><li key={id}><span style={{backgroundColor:color}}/>{label}<strong>{formatBytes(state.categories[id]??0)}</strong></li>)}</ul>
+      <a href="/files">Open file browser →</a></>}
+
     {!summary && <>
       <nav className="xc-actions xc-file-path" aria-label="Current folder">
         <a href={folderPath(null)} aria-current={folder?undefined:'page'}>Your files</a>
@@ -102,7 +109,8 @@ export function MailPage({ account }:{account:Account}) {
   useEffect(()=>{void api('inbox').then(result=>setMessages(result.messages)).catch(()=>{});},[]);
   return <section className="xc-card xc-pad">
     <div className="xc-row-head"><span className="xc-symbol xc-sky"><Mail size={21}/></span><div><h2>{account.mailbox??'X-Center mailbox'}</h2>
-    <p>{messages?'Your private mailbox.':'This address is reserved. External mail delivery is not connected yet.'}</p></div></div>
+    <p>{messages?'Your private mailbox.':'This address is reserved. Mailbox delivery is unavailable.'}</p></div></div>
+    {messages&&!account.externalMail&&<p>This inbox can receive local X-Center mail. External delivery is unavailable.</p>}
     {messages?.length===0 && <div className="xc-empty">Your inbox is empty.</div>}
     {messages?.map(message=><div className="xc-list-row" key={message.id}><span>Received {date(message.received)} · {size(message.size)}</span>
       <a href={'/account/inbox/'+message.id}>Download email</a></div>)}
@@ -110,7 +118,7 @@ export function MailPage({ account }:{account:Account}) {
       event.preventDefault(); const values=Object.fromEntries(new FormData(event.currentTarget));setBusy(true);
       void api('mail/send',values).then(()=>setStatus('The mail provider accepted your message.')).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
     }}>
-      <h3>Compose email</h3><label>Recipient<input type="email" required name="to"/></label><label>Subject<input required name="subject"/></label>
+      <h3>Compose email</h3>{!account.externalMailSubmission&&<p>You can send to X-Center mailboxes.</p>}<label>Recipient<input type="email" required name="to"/></label><label>Subject<input required name="subject"/></label>
       <label>Message<textarea required name="text" rows={4}/></label><button className="xc-button xc-primary" disabled={busy}>Send email</button>
     </form>}
     {status && <p role="status">{status}</p>}
@@ -135,12 +143,23 @@ export function AdminPage() {
 export function ConnectedApps() {
   const [apps,setApps]=useState<{client:string;label:string;updated:number}[]|null>(null);
   const [status,setStatus]=useState('');
+  const [confirm,setConfirm]=useState('');
+  const [busy,setBusy]=useState(false);
   useEffect(()=>{void api('connected-apps').then(data=>setApps(data.apps)).catch(error=>setStatus(notice(error)));},[]);
   return <div className="xc-pad">
     <h2>Authorized apps</h2>
     {apps?.length===0 && <div className="xc-empty">No apps have been authorized yet.</div>}
     {apps?.map(item=><div className="xc-list-row" key={item.client}><div><strong>{item.label}</strong><p>Last authorized {date(item.updated)}</p></div>
-      <a href="/permissions">Manage data access</a></div>)}
+      <div className="xc-actions"><a href="/permissions">Manage data access</a>
+        {confirm===item.client?<><span>This ends the app’s access.</span><button className="xc-button xc-secondary" disabled={busy} onClick={()=>{
+          setBusy(true);
+          void api('connected-apps/unlink',{client:item.client}).then(()=>{
+            setApps(previous=>previous?.filter(app=>app.client!==item.client)??null);
+            setConfirm('');setStatus('App unlinked.');
+          }).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
+        }}>Confirm unlink</button><button className="xc-button xc-secondary" disabled={busy} onClick={()=>setConfirm('')}>Cancel</button></>
+          :<button className="xc-button xc-secondary" disabled={busy} onClick={()=>setConfirm(item.client)}>Unlink app</button>}
+      </div></div>)}
     {status&&<p role="status">{status}</p>}
   </div>;
 }

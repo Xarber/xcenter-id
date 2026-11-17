@@ -1,3 +1,5 @@
+import { openEmailSignIn } from './email-signin.mjs';
+import { openNativeSession } from './native-session.mjs';
 import { createPasskeyLabelResolver, passkeyLabel } from './passkey-label.mjs';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import { openEmailVerification } from './email-verification.mjs';
@@ -51,7 +53,7 @@ async function body(req) {
   throw new AccountError(400, 'Invalid request.');
 }
 
-export function createAccounts({ database, origin, sendVerification, profileKey, outboundMail }) {
+export function createAccounts({ database, origin, sendVerification, profileKey, outboundMail, canReceiveMail = false, externalMail = false }) {
   const url = new URL(origin);
   if (url.origin !== origin || url.protocol !== 'https:') throw new Error('Set the exact HTTPS account origin');
   const rpID = url.hostname;
@@ -74,6 +76,14 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       owner TEXT NOT NULL REFERENCES accounts(id), client TEXT NOT NULL, label TEXT NOT NULL,
       updated INTEGER NOT NULL, PRIMARY KEY(owner,client)
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS app_link_grants (
+      owner TEXT NOT NULL, client TEXT NOT NULL, grant_id TEXT NOT NULL UNIQUE,
+      PRIMARY KEY(owner,client,grant_id),
+      FOREIGN KEY(owner,client) REFERENCES connected_apps(owner,client) ON DELETE CASCADE
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS app_disconnects (
+      owner TEXT NOT NULL REFERENCES accounts(id), client TEXT NOT NULL, PRIMARY KEY(owner,client)
+    ) STRICT;
     CREATE TABLE IF NOT EXISTS account_entitlements (owner TEXT PRIMARY KEY REFERENCES accounts(id), premium_mail INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS identity_profiles (
       owner TEXT PRIMARY KEY REFERENCES accounts(id), username TEXT UNIQUE NOT NULL,
@@ -82,6 +92,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     CREATE TABLE IF NOT EXISTS verified_emails (owner TEXT NOT NULL REFERENCES accounts(id),
       address TEXT PRIMARY KEY, verified INTEGER NOT NULL) STRICT;
   `);
+  const native = openNativeSession(db);
+  const emailSignIn=openEmailSignIn(db,{send:sendVerification,secret:profileKey??randomBytes(32)});
   const verification = openEmailVerification(db,{ send:sendVerification, origin });
   const adminIds = new Set((process.env.AUTHNJS_ADMIN_ACCOUNT_IDS ?? '').split(',').map(item=>item.trim()).filter(Boolean));
   const isAdmin = (active) => !!(active && adminIds.has(active.owner));
@@ -141,9 +153,21 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   let windowStart = 0;
   let attempts = 0;
 
+  function nativeRequest(req) {
+    return !req.headers.origin && !req.headers.cookie && req.headers['x-authnjs-native']==='account-manager';
+  }
   function session(req) {
+    const bearer = nativeRequest(req) && /^Bearer ([A-Za-z0-9_-]{43})$/.exec(req.headers.authorization ?? '')?.[1];
+    if (bearer) {
+      const hash=digest(bearer);
+      return native.accepts(hash) ? lookupSession.get(hash,now()) : undefined;
+    }
     const value = cookie(req, '__Host-authnjs');
     return value ? lookupSession.get(digest(value), now()) : undefined;
+  }
+
+  function allowsMutation(req) {
+    return req.headers.origin === origin || (nativeRequest(req) && !!session(req));
   }
 
   function deviceLabel(req) {
@@ -152,13 +176,16 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     const browser=/Edg\//.test(header)?'Edge':/Chrome|CriOS/.test(header)?'Chrome':/Firefox/.test(header)?'Firefox':/Safari/.test(header)?'Safari':'Browser';
     return browser+' on '+os;
   }
-  function login(req,res, owner) {
+  function login(req,res, owner, nativeSource) {
     const value = token();
     q('DELETE FROM account_sessions WHERE expires<=?').run(now());
     const hash=digest(value);
-    insertSession.run(hash, owner, now(), now() + sessionAge);
-    q('INSERT INTO account_devices VALUES (?,?,?)').run(randomUUID(),hash,deviceLabel(req));
-    setCookie(res, '__Host-authnjs', value, sessionAge / 1000);
+    const created=nativeSource?.created ?? now();
+    insertSession.run(hash,owner,created,nativeSource?.expires ?? created+sessionAge);
+    if(nativeSource) native.bind(hash);
+    q('INSERT INTO account_devices VALUES (?,?,?)').run(randomUUID(),hash,nativeSource?'X-Center ID app':deviceLabel(req));
+    if(!nativeSource) setCookie(res, '__Host-authnjs', value, sessionAge / 1000);
+    return value;
   }
 
   function prepare(res, challenge) {
@@ -199,6 +226,9 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         passkeys: keys.all(active.owner).map(({ id, label, created }) => ({ id, label, created })),
         emails: emails.all(active.owner),
         canSendMail: !!outboundMail,
+        canReceiveMail,
+        externalMail,
+        externalMailSubmission:!!outboundMail?.external,
         mailbox:saved ? saved.username+'@mail.xcenter.it' : null,
         admin:isAdmin(active),
       } };
@@ -230,11 +260,50 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       return Buffer.from(picture,'base64');
     }
     requireCondition(req.method === 'POST', 405, 'Method unavailable.');
-    requireCondition(req.headers.origin === origin, 403, 'Invalid origin.');
+    if (pathname === '/account/login/username' || pathname === '/account/login/code') {
+      requireCondition(req.headers.origin===origin||nativeRequest(req),403,'Invalid origin.');
+      requireCondition(!active,409,'Sign out before signing in again.');
+      limitChallenges();
+      const input=await body(req);
+      const channel=nativeRequest(req)?'native':'web';
+      if(pathname.endsWith('/username')){
+        const username=typeof input.username==='string'?input.username.trim().toLowerCase():'';
+        requireCondition(/^[a-z][a-z0-9]{2,23}$/.test(username),422,'Enter a valid X-Center username.');
+        const owner=usernameOwner.get(username)?.owner;
+        requireCondition(owner,404,'No X-Center ID uses this username.');
+        const email=emails.all(owner)[0]?.address;
+        if(!email||!emailSignIn.enabled)return {method:'passkey'};
+        const result=await emailSignIn.start(owner,email,channel);
+        if(result.error)throw new AccountError(result.status,result.error);
+        return result;
+      }
+      const owner=emailSignIn.finish(input.ticket,input.code,channel);
+      requireCondition(owner,401,'The code is incorrect or expired.');
+      const timestamp=now();
+      const value=login(req,res,owner,channel==='native'?{created:timestamp,expires:timestamp+sessionAge}:undefined);
+      return channel==='native'?{token:value}:{ok:true};
+    }
+    if (pathname === '/account/native/exchange') {
+      requireCondition(nativeRequest(req),403,'Use the X-Center ID app.');
+      limitChallenges();
+      const input=await body(req);
+      const source=native.exchange(input);
+      const browser=source && lookupSession.get(source,now());
+      requireCondition(browser,401,'The app sign-in expired. Start again.');
+      return {token:login(req,res,browser.owner,browser)};
+    }
+    requireCondition(allowsMutation(req),403,'Invalid origin.');
     const input = await body(req);
+    if(pathname==='/account/native/authorize'){
+      requireCondition(active && req.headers.origin===origin,401,'Sign in to X-Center ID first.');
+      limitChallenges();
+      const location=native.issue(active.hash,input.challenge,input.state);
+      requireCondition(location,422,'Invalid app sign-in request.');
+      return {location};
+    }
     if (pathname === '/account/logout') {
       if (active) removeSession.run(active.hash);
-      setCookie(res, '__Host-authnjs', '', 0);
+      if(!nativeRequest(req)) setCookie(res, '__Host-authnjs', '', 0);
       return { ok: true };
     }
     if (pathname === '/account/devices/revoke') {
@@ -395,15 +464,48 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   return {
     handle,
     current: (req) => session(req),
-    rememberApp(owner,client,label) {
-      q(`INSERT INTO connected_apps VALUES(?,?,?,?) ON CONFLICT(owner,client)
-        DO UPDATE SET label=excluded.label,updated=excluded.updated`).run(owner,client,label,Date.now());
+    allowsMutation,
+    rememberApp(owner,client,label,grant) {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        q(`INSERT INTO connected_apps VALUES(?,?,?,?) ON CONFLICT(owner,client)
+          DO UPDATE SET label=excluded.label,updated=excluded.updated`).run(owner,client,label,Date.now());
+        q('INSERT OR IGNORE INTO app_link_grants VALUES(?,?,?)').run(owner,client,grant);
+        db.exec('COMMIT');
+      } catch(error) { db.exec('ROLLBACK'); throw error; }
+    },
+    grantAllowed(owner,client,grant) {
+      if(!q('SELECT 1 FROM app_disconnects WHERE owner=? AND client=?').get(owner,client))return true;
+      return !!grant&&!!q('SELECT 1 FROM app_link_grants WHERE owner=? AND client=? AND grant_id=?').get(owner,client,grant);
+    },
+    linkedGrant(owner,client) {
+      return q(`SELECT g.grant_id AS id FROM app_link_grants g JOIN connected_apps c ON c.owner=g.owner AND c.client=g.client
+        WHERE g.owner=? AND g.client=? ORDER BY g.rowid DESC LIMIT 1`).get(owner,client)?.id;
+    },
+    disconnect(owner,client) {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const grants=q('SELECT grant_id AS id FROM app_link_grants WHERE owner=? AND client=?').all(owner,client);
+        const removed=q('DELETE FROM connected_apps WHERE owner=? AND client=?').run(owner,client);
+        if(removed.changes===1)q('INSERT OR IGNORE INTO app_disconnects VALUES(?,?)').run(owner,client);
+        db.exec('COMMIT');
+        return removed.changes===1?grants:null;
+      } catch(error) { db.exec('ROLLBACK'); throw error; }
+    },
+    usage(owner) {
+      const bytes=(query)=>q(query).get(owner).bytes;
+      return {
+        account:bytes(`SELECT total(length(CAST(username AS BLOB))+length(CAST(given_name AS BLOB))+length(CAST(surname AS BLOB))+length(CAST(age_range AS BLOB))) AS bytes FROM identity_profiles WHERE owner=?`)
+          +bytes('SELECT total(length(CAST(address AS BLOB))+8) AS bytes FROM verified_emails WHERE owner=?'),
+        security:bytes('SELECT total(length(id)+length(CAST(label AS BLOB))+length(publicKey)+length(transports)+16) AS bytes FROM passkeys WHERE owner=?'),
+        apps:bytes('SELECT total(length(client)+length(CAST(label AS BLOB))+8) AS bytes FROM connected_apps WHERE owner=?'),
+      };
     },
     premiumEligible: (owner) => q('SELECT premium_mail FROM account_entitlements WHERE owner=?').get(owner)?.premium_mail===1,
     identity(owner) {
       const found = profile(owner);
       return found ? { username:found.username, givenName:found.givenName,surname:found.surname,
-        ageRange:found.ageRange, emails:emails.all(owner) } : null;
+        ageRange:found.ageRange, hasPicture:!!found.picture, emails:emails.all(owner) } : null;
     },
   };
 }

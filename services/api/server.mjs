@@ -1,3 +1,4 @@
+import { validateApplicationBrand } from './application-brand.mjs';
 import { createServer } from 'node:http';
 import { closeSync, mkdirSync, openSync, constants } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -27,7 +28,7 @@ function json(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-async function readJson(req) {
+async function readJson(req,limit=jsonLimit) {
   if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] ?? '')) {
     throw new HttpError(415, 'expected_json');
   }
@@ -35,7 +36,7 @@ async function readJson(req) {
   const chunks = [];
   for await (const chunk of req.iterator({ destroyOnReturn: false })) {
     size += chunk.length;
-    if (size > jsonLimit) {
+    if (size > limit) {
       req.resume();
       throw new HttpError(413, 'payload_too_large');
     }
@@ -66,7 +67,8 @@ export function createApiHandler({ store, authenticate, apps, consoleClient, dev
       const url = new URL(req.url, 'http://localhost');
       const method = req.method;
       if (method === 'GET' && url.pathname === '/health') return json(res, 200, { status: 'ok' });
-      const developerRoute = url.pathname === '/v1/developer/apps';
+      const brandId=/^\/v1\/developer\/apps\/([0-9a-f-]{36})\/brand$/.exec(url.pathname)?.[1];
+      const developerRoute = url.pathname === '/v1/developer/apps' || !!brandId;
       const consoleRoute = url.pathname === '/v1/grants';
       const recordRoute = url.pathname === '/v1/records/saved-place';
       const recordId = url.pathname.match(/^\/v1\/records\/saved-place\/([^/]+)$/)?.[1];
@@ -76,16 +78,24 @@ export function createApiHandler({ store, authenticate, apps, consoleClient, dev
       const { owner, client } = principal;
       if (developerRoute) {
         if (!registry || client !== developerClient || principal.developer !== true) throw new HttpError(403, 'forbidden');
+        if (brandId) {
+          if(method!=='PUT')throw new HttpError(405,'method_not_allowed');
+          const brand=await validateApplicationBrand(await readJson(req,48_000)).catch(()=>{throw new HttpError(422,'invalid_app_brand');});
+          if(!registry.updateBrand(owner,brandId,brand))throw new HttpError(404,'registration_unavailable');
+          return json(res,200,brand);
+        }
         if (method === 'GET') return json(res, 200, { apps: registry.list(owner) });
         if (method !== 'POST') throw new HttpError(405, 'method_not_allowed');
-        const { name, callback } = await readJson(req);
+        const input=await readJson(req,48_000);
+        const {name,callback}=input;
+        const brand=await validateApplicationBrand(input).catch(()=>{throw new HttpError(422,'invalid_app_brand');});
         let target;
         try { if (typeof callback === 'string' && callback.length <= 512) target = httpsUrl(callback); } catch {}
         if (typeof name !== 'string' || !name.trim() || name.length > 80 || !target ||
             !target.pathname || target.pathname === '/' || target.pathname.includes('*')) {
           throw new HttpError(422, 'invalid_registration');
         }
-        const app = registry.submit(owner, name.trim(), target.href);
+        const app = registry.submit(owner, name.trim(), target.href,brand,input.native===true);
         if (!app) throw new HttpError(409, 'registration_quota_reached');
         return json(res, 201, app);
       }

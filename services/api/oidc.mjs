@@ -1,15 +1,15 @@
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
-import { Provider } from 'oidc-provider';
+import { interactionPolicy, Provider } from 'oidc-provider';
 import { openOidcStore } from './oidc-store.mjs';
 
 const escape = (value) => String(value).replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[c]);
 
-function html(res, content, status = 200) {
+function html(res, content, status = 200, callbackOrigin = '') {
   res.writeHead(status, {
     'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'same-origin',
-    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'",
+    'Content-Security-Policy': `default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'self' ${callbackOrigin}; base-uri 'none'`,
   });
   res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Continue with X-Center ID</title><style>
@@ -22,10 +22,26 @@ function html(res, content, status = 200) {
     label{display:flex;gap:.7em;align-items:baseline;padding:.5em 0;overflow-wrap:anywhere}input{accent-color:var(--action)}
     button,.action{display:inline-block;font:inherit;font-weight:700;padding:.6em 1em;margin:.45rem .4rem 0 0;border-radius:.65rem;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer}
     button[value=approve],.action{background:var(--action);color:#fff;text-decoration:none;border-color:transparent}
+    .connection{display:flex;align-items:center;gap:.9rem;margin:1.2rem 0}
+    .connection .avatar{width:56px;height:56px;display:grid;place-items:center;overflow:hidden;border-radius:.8rem;background:var(--soft);color:var(--text);font-weight:800}
+    .connection img{width:100%;height:100%;object-fit:cover}.permission-list{list-style:none;padding:0;display:grid;gap:.65rem}
+    .permission-list li{display:flex;align-items:center;gap:.7rem}.permission-list svg,.connection svg{width:20px;height:20px;flex:none}
     :focus-visible{outline:3px solid #6b94ff;outline-offset:3px}
     @media(prefers-color-scheme:dark){:root{--bg:#101522;--card:#192132;--text:#f3f6ff;--muted:#b1c1dc;--border:#35445e;--action:#375fce;--soft:#23355d}.brand{color:#adc5ff}}
     </style><main><span class="brand">X-Center ID</span>${content}</main></html>`);
 }
+
+const iconPaths={
+  link:'M10 13a5 5 0 0 0 7 .5l3-3a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7-.5l-3 3a5 5 0 0 0 7 7l2-2',
+  user:'M4 21v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2 M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
+  age:'M4 7h16v13H4z M4 11h16 M8 4v5m8-5v5',
+  mail:'M3 5h18v14H3z m0 1 9 7 9-7',
+  records:'M3 7h7l2 2h9v11H3z',
+  id:'M3 5h18v14H3z M7 9h4m-4 4h4m4-4h3m-3 4h3',
+  notes:'M5 3h10l4 4v14H5z M15 3v5h4 M8 12h8m-8 4h8',
+  trips:'M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z M9 3v15m6-12v15',
+};
+const glyph=(name)=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${iconPaths[name]}"/></svg>`;
 
 async function form(req) {
   if (!req.headers['content-type']?.startsWith('application/x-www-form-urlencoded')) throw new Error('Invalid form');
@@ -58,6 +74,13 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     response_types: ['code'], grant_types: ['authorization_code'],
     token_endpoint_auth_method: 'client_secret_basic', subject_type: 'pairwise',
   }));
+  const knownClient=(client)=>clients.some(item=>item.client_id===client)||!!registry?.has(client);
+  const policy=interactionPolicy.base();
+  policy.get('login').checks.add(new interactionPolicy.Check('account_session','Sign in to X-Center ID',ctx=>{
+    if(ctx.oidc.result?.login)return false;
+    const active=accounts.current(ctx.req);
+    return !active||ctx.oidc.session.accountId!==active.owner;
+  }));
   const provider = new Provider(issuer, {
     clients, adapter: Adapter, jwks: configuration.jwks,
     cookies: { keys: configuration.cookieKeys, short: { secure: true, httpOnly: true, sameSite: 'lax' },
@@ -66,15 +89,19 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     pkce: { required: () => true },
     ttl: { AccessToken:600, AuthorizationCode:90, Interaction:300 },
     async loadExistingGrant(ctx) {
-      const id = ctx.oidc.result?.consent?.grantId;
-      return id ? ctx.oidc.provider.Grant.find(id) : undefined;
+      const owner=ctx.oidc.session?.accountId;
+      const client=ctx.oidc.client?.clientId;
+      const id=ctx.oidc.result?.consent?.grantId ?? (owner&&client&&accounts.linkedGrant(owner,client));
+      return id&&knownClient(client)&&accounts.grantAllowed(owner,client,id)?ctx.oidc.provider.Grant.find(id):undefined;
     },
     features: { devInteractions: { enabled: false } },
-    interactions: { url: (_ctx, interaction) => '/interaction/' + interaction.uid },
+    interactions: { policy, url: (_ctx, interaction) => '/interaction/' + interaction.uid },
     async pairwiseIdentifier(_ctx, accountId, client) {
       return createHmac('sha256', subjectKey).update(JSON.stringify(['pairwise', client.clientId, accountId])).digest('base64url');
     },
-    async findAccount(_ctx, owner, source) {
+    async findAccount(ctx, owner, source) {
+      const client=source?.clientId??ctx.oidc.client?.clientId;
+      if(client&&(!knownClient(client)||(source?.grantId&&!accounts.grantAllowed(owner,client,source.grantId))))return undefined;
       const person = accounts.identity(owner);
       if (!person) return undefined;
       const selection = source?.grantId ? await selections.find(source.grantId) : undefined;
@@ -107,10 +134,15 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const { prompt, params } = details;
     const found = await provider.Client.find(params.client_id);
     const client = found && { client_id:found.clientId, client_name:found.clientName, host:new URL(found.redirectUris[0]).hostname };
+    const callbackOrigin=found?.redirectUris.includes(params.redirect_uri)?new URL(params.redirect_uri).origin:'';
     if (!client) return html(res, '<h1>This app is unavailable</h1>', 404);
     if (!person) {
       const location = '/signin?continue=' + encodeURIComponent(path);
       res.writeHead(303,{Location:location,'Cache-Control':'no-store'}).end();
+      return;
+    }
+    if(req.method==='GET'&&prompt.name==='login'&&params.prompt!=='login'&&params.max_age===undefined&&accounts.linkedGrant(active.owner,client.client_id)){
+      await provider.interactionFinished(req,res,{login:{accountId:active.owner,ts:Math.floor(active.created/1000)}},{mergeWithLastSubmission:false});
       return;
     }
     if (req.method === 'POST') {
@@ -139,41 +171,60 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       if (email && !alias && !premium && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
       const allowed = ['openid', ...['profile','age_range','app_data'].filter((scope) => requested.has(scope)),
         ...(email ? ['email'] : [])];
-      const grant = new provider.Grant({ accountId:active.owner, clientId:client.client_id });
+      const linked=accounts.linkedGrant(active.owner,client.client_id);
+      const grant=linked&&await provider.Grant.find(linked) || new provider.Grant({ accountId:active.owner, clientId:client.client_id });
       grant.addOIDCScope(allowed.join(' '));
       if (requested.has('email') && !email) grant.rejectOIDCScope('email');
       const grantId = await grant.save();
       if (email) await selections.upsert(grantId,premium ? { premium:true, client:client.client_id }
-        : alias ? { alias:true, client:client.client_id } : { email },3600);
-      accounts.rememberApp(active.owner,client.client_id,client.client_name ?? client.client_id);
+        : alias ? { alias:true, client:client.client_id } : { email });
+      accounts.rememberApp(active.owner,client.client_id,client.client_name ?? client.client_id,grantId);
       await provider.interactionFinished(req,res,{ consent:{ grantId } });
       return;
     }
     if (req.method !== 'GET') return html(res,'<h1>Method unavailable</h1>',405);
     const missing = new Set(prompt.details.missingOIDCScope ?? []);
-    return html(res,`<h1>Continue to ${escape(client.client_name ?? client.client_id)}</h1>
-      <div class="context"><strong>${escape(person.givenName)} ${escape(person.surname)}</strong><br>App domain <strong>${escape(client.host)}</strong></div><p>The app receives an ID scoped to this app.</p>
-      ${missing.has('profile') ? '<p>This app requests your given name and surname.</p>' : ''}
-      ${missing.has('age_range') ? '<p>This app requests your age range.</p>' : ''}
-      ${missing.has('app_data') ? '<p>This app can access its own records. Cross-app grants are managed separately.</p>' : ''}
+    const title=client.client_name??client.client_id;
+    const brand=registry?.brand(client.client_id);
+    const visual=client.client_id.startsWith('notes-')||client.client_id.startsWith('places-')?'notes':client.client_id.startsWith('trips-')?'trips':null;
+    const developer=brand?.owner&&accounts.identity(brand.owner);
+    const developerName=brand?.developerName||(developer?developer.givenName+' '+developer.surname:'X-Center');
+    if(prompt.name==='login'){
+      return html(res,`<h1>Choose your account</h1><p>Continue to ${escape(title)} as ${escape(person.givenName)} ${escape(person.surname)}.</p>
+        <form method="post"><button name="action" value="approve">Continue</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin);
+    }
+    const permissions=[
+      ['id','App-specific account ID',true], ['user','Given name and surname',missing.has('profile')],
+      ['age','Age range',missing.has('age_range')], ['mail','Email address, if you choose to share it',missing.has('email')],
+      ['records','Access to records belonging to this app',missing.has('app_data')],
+    ];
+    return html(res,`<div class="connection" aria-hidden="true">
+      <span class="avatar">${person.hasPicture?'<img alt="" src="/account/avatar">':glyph('user')}</span>${glyph('link')}
+      <span class="avatar">${brand?.icon?`<img alt="" src="data:image/png;base64,${escape(brand.icon)}">`:visual?glyph(visual):escape(title.slice(0,2).toUpperCase())}</span></div>
+      <h1>Link ${escape(title)} to X-Center ID</h1>
+      <div class="context"><strong>${escape(person.givenName)} ${escape(person.surname)}</strong><br>
+      Developed by ${escape(developerName)} at <strong>${escape(client.host)}</strong></div>
+      <h2>Permissions</h2><ul class="permission-list">${permissions.filter(item=>item[2]).map(([symbol,label])=>`<li>${glyph(symbol)}<span>${label}</span></li>`).join('')}</ul>
+      <p>You can review app access in X-Center ID.</p>
       <form method="post">${missing.has('email') ? `<fieldset><legend>Email address to share</legend>
       <label><input type="radio" name="email" value="" checked>Share only my user ID and the other agreed details</label>
       ${mail?.premiumAvailable && accounts.premiumEligible(active.owner) ? '<label><input type="radio" name="email" value="premium">Use a premium private address</label>' : ''}
       ${mail?.maskedAvailable ? '<label><input type="radio" name="email" value="masked">Hide my email</label>' : ''}
       ${person.emails.map(({address}) => `<label><input type="radio" name="email" value="${escape(address)}">${escape(address)}</label>`).join('')}
       </fieldset>` : ''}
-      <button name="action" value="approve">Continue</button><button name="action" value="deny">Cancel</button></form>`);
+      <button name="action" value="approve">Link app</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin);
   }
 
   return {
     oidc: provider.callback(), interaction,
     async provision(application) {
       const client_id = 'xid-' + randomUUID();
-      const client_secret = randomBytes(48).toString('base64url');
+      const client_secret = application.native?null:randomBytes(48).toString('base64url');
       const metadata = {
-        client_id, client_secret, client_name:application.name,
+        client_id, client_name:application.name,
+        ...(client_secret?{client_secret}:{}), application_type:application.native?'native':'web',
         redirect_uris:[application.callback], grant_types:['authorization_code'], response_types:['code'],
-        token_endpoint_auth_method:'client_secret_basic', subject_type:'pairwise',
+        token_endpoint_auth_method:application.native?'none':'client_secret_basic', subject_type:'pairwise',
       };
       await clientsStorage.upsert(client_id,metadata);
       return {
@@ -181,14 +232,20 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         discard: () => clientsStorage.destroy(client_id),
       };
     },
+    async unlink(owner,client) {
+      const grants=accounts.disconnect(owner,client);
+      if(!grants)return false;
+      await Promise.all(grants.flatMap(({id})=>[new Adapter('Grant').destroy(id),...['AccessToken','AuthorizationCode','RefreshToken'].map(model=>new Adapter(model).revokeByGrantId(id))]));
+      return true;
+    },
     async dataAccess(value) {
       const access = await provider.AccessToken.find(value);
-      if (!access?.accountId || !registry?.has(access.clientId) || !access.scope?.split(' ').includes('app_data')) return null;
+      if (!access?.accountId || !registry?.has(access.clientId) || (await provider.Client.find(access.clientId))?.tokenEndpointAuthMethod!=='client_secret_basic' || !accounts.grantAllowed(access.accountId,access.clientId,access.grantId) || !access.scope?.split(' ').includes('app_data')) return null;
       return { owner:access.accountId, client:access.clientId, confidential:true };
     },
     async delegatedAccess(token, expectedClient) {
       const access = await provider.AccessToken.find(token);
-      if (!access || access.clientId !== expectedClient || !access.accountId || !access.scope?.split(' ').includes('openid')) return null;
+      if (!access || access.clientId !== expectedClient || !access.accountId || !knownClient(access.clientId) || !accounts.grantAllowed(access.accountId,access.clientId,access.grantId) || !access.scope?.split(' ').includes('openid')) return null;
       return { owner: access.accountId, client: access.clientId };
     },
   };

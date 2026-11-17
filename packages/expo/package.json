@@ -9,7 +9,8 @@
     "index.tsx",
     "README.md",
     "LICENSE",
-    "authorize-native.ts"
+    "authorize-native.ts",
+    "assets"
   ],
   "peerDependencies": {
     "react": "^19.0.0",
