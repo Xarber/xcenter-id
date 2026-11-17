@@ -13,6 +13,7 @@ The 17 November continuation used an isolated HTTPS issuer and Chrome at 390 px.
 - **Signup and inbox.** Select an available username and create a virtual passkey, complete the profile, deliver synthetic MIME to the isolated store, then load the 101st message, read it, confirm deletion, and reload to verify it is gone.
 - **Authorization.** Link a sample client with selected scopes, exchange its authorization code with PKCE, request a new scope, and verify the expanded token. Unlink the client, verify that its existing token is denied and its entry disappears from Permissions, then link it again.
 - **Friends.** Create and accept an invitation across two separately authenticated accounts, share a seeded record from a configured publisher, verify it appears for the recipient, then revoke it and verify that it disappears on reload.
+- **Files.** Create a nested folder, upload a synthetic file, share it, and check the recipient receives the original bytes. The owner's session cannot use the recipient download URL. Revoking access makes that URL unavailable to the recipient. Confirm file deletion in the original folder.
 - **Italian locale and message URL.** Repeat signup and mailbox paging, reading and deletion with the browser locale set to `it-IT`. The birthday label and core mail controls appear in Italian. Open the 101st message, return to the loaded list, then open its URL while signed out. Sign-in and reload both return to the message. Confirm deletion and recheck the inbox.
 
 ## Open verification
