@@ -200,9 +200,10 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     return;
   }
   if (provider && req.method === 'GET' && path === '/account/apps') {
-    if (!accounts.current(req)) { res.writeHead(401, {'Cache-Control':'no-store'}).end(); return; }
+    const session = accounts.current(req);
+    if (!session) { res.writeHead(401, {'Cache-Control':'no-store'}).end(); return; }
     res.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store'});
-    res.end(JSON.stringify({apps:registry.published()}));
+    res.end(JSON.stringify({apps:registry.published().filter(({client})=>!accounts.isDisconnected(session.owner,client))}));
     return;
   }
   const revocationId = /^\/account\/developer\/apps\/([0-9a-f-]{36})\/revoke$/.exec(path)?.[1];
