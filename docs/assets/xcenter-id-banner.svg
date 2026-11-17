@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 440" role="img" aria-labelledby="title description">
+  <title id="title">X-Center ID</title>
+  <desc id="description">X-Center ID wordmark alongside an identity card.</desc>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1">
+      <stop stop-color="#192750"/><stop offset="1" stop-color="#081125"/>
+    </linearGradient>
+  </defs>
+  <g id="surface">
+    <rect width="1280" height="440" rx="32" fill="url(#background)"/>
+    <path d="M840 70h346v302H840z" fill="none" stroke="#405080" stroke-opacity=".55" stroke-width="2"/>
+  </g>
+  <g id="text" font-family="Inter,system-ui,sans-serif">
+    <text x="82" y="214" fill="#f1f5ff" font-size="92" font-weight="750">X-Center ID</text>
+    <text x="86" y="277" fill="#bfcbed" font-size="29">One account across your apps.</text>
+  </g>
+  <g id="cards">
+    <rect x="886" y="140" width="231" height="136" rx="24" fill="#526dff" transform="rotate(-12 1001 208)"/>
+    <rect x="910" y="163" width="231" height="136" rx="24" fill="#eef2ff"/>
+    <circle cx="964" cy="217" r="19" fill="#192750"/>
+    <path d="M931 270c0-35 66-35 66 0" fill="#192750"/>
+    <path d="M1017 222h90m-90 27h66" stroke="#526dff" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="1114" cy="188" r="13" fill="#5de9ca" stroke="#192750" stroke-width="5"/>
+  </g>
+</svg>

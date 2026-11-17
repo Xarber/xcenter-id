@@ -16,7 +16,7 @@ Assignment opened 16 November 2026. Legacy source baseline `e617758`.
 | 9 AUTHN-009 | Stage AuthNJS on X-Center for testing | Implemented | Private web preview served over HTTPS at 6882dae. Browser verified developer navigation and account entry. Live API and account preview need a validated issuer and gateway. See [preview runbook](XCENTER_PREVIEW.md). |
 | 10 AUTHN-010 | Developer registration and app identity enforcement | Implemented | Pending registry, operator approval and API checks pass synthetic tests. Expo page requires authenticated gateway, trusted issuance policy and live verification. |
 | 11 AUTHN-011 | Reusable React Native package and integration documentation | Implemented | Dashboard consumes the package. Native browser PKCE helper passes SDK 58 type checking. Live callback, backend token exchange, session storage and physical-device verification remain open. See [integration guide](INTEGRATION.md). |
-| 12 AUTHN-012 | Build native artifacts under §8 and §9 | Queued | [Run 43853292379](https://github.com/Xarber/AuthNJS/actions/runs/43853292379) submitted for 0762414. iOS jobs started. Both Android jobs stopped at signing validation before compiling. A subsequent SDK change needs its own verification when ready. Live identity remains an independent external dependency. |
+| 12 AUTHN-012 | Build native artifacts under §8 and §9 | Queued | [Run 43853292379](https://github.com/Xarber/xcenter-id/actions/runs/43853292379) submitted for 0762414. iOS jobs started. Both Android jobs stopped at signing validation before compiling. A subsequent SDK change needs its own verification when ready. Live identity remains an independent external dependency. |
 
 AUTHN-006 and the storage portion of AUTHN-007 moved ahead of live identity integration to address the requested security and data-integrity priority.
 
@@ -41,7 +41,7 @@ Five-hour window reached 9% remaining and resets 16 November at 16:05:56 CET. We
 | 18 AUTHN-018 | Provide inbound SMTP, outbound delivery, verified email and Hide My Email | In Progress | Local SMTP and STARTTLS verified. Public port 25 is refused and the root MX remains iCloud. Configure routing and authenticate an SMTP submission provider before enabling public receive, verification and outbound. |
 | 19 AUTHN-019 | Publish the production account platform at id.xcenter.it | Implemented | Live web/OIDC revision 1e940dd verified. Daily SQLite snapshots active. Public mail, off-device restore and native artifacts remain open. |
 
-The previous public identity deployment served revision 1e940dd. The latest source at daca54d adds the guarded mailbox-composition adapter. No SMTP submission provider has been configured. The [native artifact run](https://github.com/Xarber/AuthNJS/actions/runs/43899352702) was submitted for daca54d. Android signing secrets remain unavailable. Keep the older private account database and host available for its existing passkeys.
+The previous public identity deployment served revision 1e940dd. The latest source at daca54d adds the guarded mailbox-composition adapter. No SMTP submission provider has been configured. The [native artifact run](https://github.com/Xarber/xcenter-id/actions/runs/43899352702) was submitted for daca54d. Android signing secrets remain unavailable. Keep the older private account database and host available for its existing passkeys.
 
 Next external prerequisite for mail is verified ingress for port 25 to the appliance or a dedicated inbound provider. Use mail.xcenter.it and hme.xcenter.it first. Inventory managed iCloud addresses and approve an apex coexistence plan before changing xcenter.it MX. Send only after configuring an authorized SMTP submission sender and verifying delivery, SPF, DKIM and DMARC.
 
@@ -61,7 +61,7 @@ Next external prerequisite for mail is verified ingress for port 25 to the appli
 | 26 AUTHN-026 | Add private file folders | Verified | Staged Chrome verified folder creation and upload. API tests covered nesting, account isolation, root listing and denying non-empty removal. |
 | 27 AUTHN-027 | Improve third-party sign-in, consent, permissions and sample apps | Implemented | Staged Chrome verified delegated signup and consent, durable app data access, structured notes, own record deletion and sample sign-out. Native library rendering remains unverified. |
 
-Native preview for deployed revision 9745b7f was queued in [run 43934382712](https://github.com/Xarber/AuthNJS/actions/runs/43934382712). Verify each artifact and exercise the installed app after the run. The previous run produced an iOS Simulator artifact, canceled its device job, and failed both Android variants because release signing was missing.
+Native preview for deployed revision 9745b7f was queued in [run 43934382712](https://github.com/Xarber/xcenter-id/actions/runs/43934382712). Verify each artifact and exercise the installed app after the run. The previous run produced an iOS Simulator artifact, canceled its device job, and failed both Android variants because release signing was missing.
 
 ### Native account controls and registered app linking
 
@@ -75,7 +75,7 @@ Native preview for deployed revision 9745b7f was queued in [run 43934382712](htt
 
 The earlier revision 9745b7f produced both iOS artifacts in run 43934382712. The Android jobs failed at the release signing configuration step. This is historical build evidence only.
 
-Native account controls and the registered sign-in component were submitted in [run 44055741615](https://github.com/Xarber/AuthNJS/actions/runs/44055741615) from 72e60f8. Both Android jobs failed at the release signing gate. The iOS device and simulator jobs succeeded and both artifacts are present. Installed-device checks remain pending because no usable simulator runtime or physical test device was available.
+Native account controls and the registered sign-in component were submitted in [run 44055741615](https://github.com/Xarber/xcenter-id/actions/runs/44055741615) from 72e60f8. Both Android jobs failed at the release signing gate. The iOS device and simulator jobs succeeded and both artifacts are present. Installed-device checks remain pending because no usable simulator runtime or physical test device was available.
 
 | Order and ID | Request | State | Dependencies and next action |
 | --- | --- | --- | --- |
@@ -96,9 +96,9 @@ Mail confidentiality and mailbox transport move ahead of the compact navbar fix 
 | 38 AUTHN-038 | Read and clean up mail in web and native, with attachments and safe formatting | Implemented | Owner-scoped plaintext reader, downloads and confirmed permanent deletion. API regression tests and Expo typecheck passed. Next stage browser and native verification. Outgoing rich formatting and attachments remain open. |
 | 39 AUTHN-039 | External delivery, Hide My Email and mail-client interoperability | Blocked | Reopened deferred AUTHN-037. Public TCP 25 refused and mail subdomains have no own MX. Root MX remains iCloud. Configure an authorized upstream SMTP sender and external ingress, validate aliases, and add authenticated submission plus IMAP for other email clients. |
 | 40 AUTHN-040 | Mobile and web parity, device labels, signup/passkey naming, localized dates and Italian plus other main languages | Queued | Compare native and web account sections and share presentation and localization. Check platform control of credential names and username eligibility before registration. |
-| 41 AUTHN-041 | Permission toggles, incremental authorization and full unlink revocation | Queued | Trace existing OAuth consent and grant behavior, then verify unlink clears every grant projection. |
+| 41 AUTHN-041 | Permission toggles, incremental authorization and full unlink revocation | In Progress | Implemented unlink cleanup and permission filtering with regression coverage for sample grants. Verify registered grants and relink on staging. Toggle and incremental authorization UX remain queued. |
 | 42 AUTHN-042 | Friends, share files and app data, and polish web and native file browsers | Queued | Design explicit invitation, recipient and resource boundaries before implementing cross-account grants. |
 | 43 AUTHN-043 | Preserve horizontal scroll in the compact account navbar | Queued | User ordered after email. Tab anchors in Expo Web currently cause document navigation. |
-| 44 AUTHN-044 | Grant the production account xarberyt admin and rename it to xarber | Queued | Verify stable account identity and protected-name ownership. Prepare isolated backup, targeted change and live verification. |
-| 45 AUTHN-045 | Rename and brand the GitHub repository | In Progress | Verified repository admin permission. Update the existing repository and preserve history and access. |
+| 44 AUTHN-044 | Grant the production account xarberyt admin and rename it to xarber | In Progress | Production lookup found exactly one xarberyt and no xarber, and no admin allowlist. Username is authenticated metadata in the profile ciphertext. Added support for editing an already-assigned reserved name while preserving signup reservation. Next create and verify an atomic re-encryption migration, then stage the admin allowlist with rollback. |
+| 45 AUTHN-045 | Rename and brand the GitHub repository | Verified | GitHub confirmed Xarber/xcenter-id remains private. Updated topics, description, homepage, origin, README and banner. |
 | 46 AUTHN-046 | Fix Android signing and prepare AltSource and distribution | Blocked | Latest builds failed signing validation and GitHub Actions secret list was empty. Locate the established signing identity or obtain explicit confirmation for a new key if this package has never been distributed. Apply §8 before builds and use actual release artifacts for metadata. |
