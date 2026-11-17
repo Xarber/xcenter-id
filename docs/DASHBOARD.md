@@ -31,3 +31,5 @@ The file browser supports nested folders, breadcrumb navigation and uploads into
 The mobile app keeps its session in Expo SecureStore. Account controls call the account APIs from the native app. Passkey authentication opens the system authentication browser and returns a one-time code bound to the app's verifier and state. Account management credentials never appear in the return URL. Passkey enrollment uses the secure browser. Username sign-in checks the account and offers an email code when a verified address and configured mail transport are available. The app itself accepts the code. Sign-in without email uses a passkey.
 
 Data Usage separates files, account information, security metadata, app data, and mail. It counts account-owned logical bytes and excludes shared SQLite page overhead. The reported storage limit gates file uploads. Mail retains its separate mailbox quota.
+
+The native account dashboard refreshes account data when it comes back to the foreground, including after passkey enrollment.

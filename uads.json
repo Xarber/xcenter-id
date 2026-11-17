@@ -30,7 +30,12 @@
     "oidcConsent": "implemented",
     "sampleAppSharing": "implemented",
     "mailIngress": "implemented",
-    "outboundMail": "implemented"
+    "outboundMail": "implemented",
+    "nativeAccountManagement": "implemented",
+    "accountStorageBreakdown": "implemented",
+    "linkedAppRevocation": "implemented",
+    "externalSampleOrigins": "implemented",
+    "emailCodeSignIn": "implemented"
   },
   "distribution": {
     "githubReleases": "pending authorization and verification"

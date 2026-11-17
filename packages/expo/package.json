@@ -10,7 +10,8 @@
     "README.md",
     "LICENSE",
     "authorize-native.ts",
-    "assets"
+    "assets",
+    "registered-signin.tsx"
   ],
   "peerDependencies": {
     "react": "^19.0.0",
@@ -21,7 +22,8 @@
   },
   "exports": {
     ".": "./index.tsx",
-    "./authorize-native": "./authorize-native.ts"
+    "./authorize-native": "./authorize-native.ts",
+    "./registered-signin": "./registered-signin.tsx"
   },
   "peerDependenciesMeta": {
     "expo-auth-session": {

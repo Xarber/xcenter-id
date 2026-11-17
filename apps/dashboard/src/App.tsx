@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { openBrowserAsync } from 'expo-web-browser';
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AccountEntry } from '@authnjs/expo';
 import { sample } from './sample';
@@ -64,6 +64,13 @@ function NativeAccount() {
       .catch(()=>setError('Could not restore your session. Sign in to try again.'))
       .finally(()=>setLoading(false));
   },[]);
+  useEffect(()=>{
+    if(!token)return;
+    const listener=AppState.addEventListener('change',state=>{
+      if(state==='active')void load(token).catch(()=>{});
+    });
+    return ()=>listener.remove();
+  },[token]);
   async function useSession(value:string){
     await saveSession(value);
     await load(value);
