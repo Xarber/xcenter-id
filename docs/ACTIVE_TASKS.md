@@ -75,7 +75,7 @@ Native preview for deployed revision 9745b7f was queued in [run 43934382712](htt
 
 The earlier revision 9745b7f produced both iOS artifacts in run 43934382712. The Android jobs failed at the release signing configuration step. This is historical build evidence only.
 
-Native account controls and the registered sign-in component were submitted in [run 44055741615](https://github.com/Xarber/AuthNJS/actions/runs/44055741615) from 72e60f8. Both Android jobs failed at the release signing gate. The iOS builds and installed-device checks were still pending when the run was checked.
+Native account controls and the registered sign-in component were submitted in [run 44055741615](https://github.com/Xarber/AuthNJS/actions/runs/44055741615) from 72e60f8. Both Android jobs failed at the release signing gate. The iOS device and simulator jobs succeeded and both artifacts are present. Installed-device checks remain pending because no usable simulator runtime or physical test device was available.
 
 | Order and ID | Request | State | Dependencies and next action |
 | --- | --- | --- | --- |
@@ -84,3 +84,5 @@ Native account controls and the registered sign-in component were submitted in [
 | 35 AUTHN-035 | Create the Implement X-Center ID skill | Verified | Skill Creator validation passed after installing PyYAML in a temporary environment. |
 | 36 AUTHN-036 | Give mail composition a separate window and keep New email reachable | Verified | Isolated Chrome with an inbox fixture verified fixed launcher, separate dialog, Escape and draft retention. Local STARTTLS delivery was separately verified on X-Center. |
 | 37 AUTHN-037 | Evaluate external SMTP delivery | Queued | Deferred by user. Research completed. Retain the local SMTP path while external delivery is deferred. Activate only after a future request and verified network or relay prerequisites. |
+
+Public web revision bd6b402 is deployed on the account and sample origins. Both iOS artifacts are from the native preview source 72e60f8. The Admin dashboard awaits an authorized production account assignment. External SMTP delivery remains deferred by the user.
