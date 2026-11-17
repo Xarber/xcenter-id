@@ -1,8 +1,8 @@
-import type { ManagedAccount, SupportMessage, SupportRequest } from './support-model';
+import type { ManagedAccount, SupportMessage, SupportRequest, UsernameRequest } from './support-model';
 import { accountMessage } from './account-locale';
 import { placeLabel, type Friend, type SharedFile, type FriendRecordIndex, type ShareablePlace } from './friends-model';
 import { Ionicons } from '@expo/vector-icons';
-import { accountShortcuts, accountStatus } from './account-overview';
+import { accountGreeting, accountShortcuts, accountStatus } from './account-overview';
 import BirthdayPicker from './BirthdayPicker';
 import type { MailMessage, PrivateAddress } from './mail-message';
 import { pickDocumentAsync, pickProfilePhoto, shareDownload } from './native-files';
@@ -62,6 +62,9 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [supportText,setSupportText]=useState('');
   const [managed,setManaged]=useState<ManagedAccount[]>([]);
   const [accountFilter,setAccountFilter]=useState('');
+  const [newUsername,setNewUsername]=useState('');
+  const [usernameRequest,setUsernameRequest]=useState<UsernameRequest|null>(null);
+  const [usernameRequests,setUsernameRequests]=useState<UsernameRequest[]>([]);
   const [target,setTarget]=useState('');
   const [typedName,setTypedName]=useState('');
   const [requests,setRequests]=useState<SupportRequest[]>([]);
@@ -117,9 +120,11 @@ export default function NativeSections({ section,token,account,colors,reload,exp
     else setStatus(message(error));
   }
   async function load() {
+    if(section==='profile'&&account.profile)setUsernameRequest((await api('username-change')).request);
     if(section==='admin'&&account.admin){
       setManaged((await api('admin/accounts')).accounts);
       setRequests((await api('admin/support')).requests);
+      setUsernameRequests((await api('admin/username-changes')).requests);
     }
     if(section==='devices')setDevices((await api('devices')).devices);
     if(section==='apps')setApps((await api('connected-apps')).apps);
@@ -186,15 +191,15 @@ export default function NativeSections({ section,token,account,colors,reload,exp
     case 'dashboard':
       content=<>
         <View style={[styles.overviewHero,{backgroundColor:colors.soft}]}>
-          <Text accessibilityRole="header" style={[styles.overviewTitle,{color:colors.ink}]}>Hello, {account.profile?.givenName||account.name}</Text>
+          <Text accessibilityRole="header" style={[styles.overviewTitle,{color:colors.ink}]}>{accountGreeting(account.profile?.givenName||account.name)}</Text>
           {account.profile&&paragraph('@'+account.profile.username)}
-          {button('View profile',()=>navigate('profile'))}
+          {button(accountMessage('viewProfile','View profile'),()=>navigate('profile'))}
         </View>
-        {accountShortcuts.map(({id,label,description})=><Pressable key={id} accessibilityRole="button" onPress={()=>navigate(id)}
+        {accountShortcuts().map(({id,label,description})=><Pressable key={id} accessibilityRole="button" onPress={()=>navigate(id)}
           style={({pressed})=>[styles.overviewShortcut,{borderColor:colors.soft,opacity:pressed?0.7:1}]}>
           <Text style={[styles.label,{color:colors.ink}]}>{label}</Text>{paragraph(description)}
         </Pressable>)}
-        {row('account-status','Account status',accountStatus(account.passkeys.length,account.emails.length))}
+        {row('account-status',accountMessage('accountStatus','Account status'),accountStatus(account.passkeys.length,account.emails.length))}
       </>;
       break;
     case 'profile':
@@ -212,6 +217,18 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         {field('Surname',surname,setSurname,{maxLength:64,autoComplete:'family-name'})}
         {<BirthdayPicker value={birthday} onChange={setBirthday} ink={colors.ink} accent={colors.accent}/>}
         {button('Save profile',()=>run(()=>mutate('profile',{givenName,surname,birthday,picture}),'Profile saved.'))}
+        {account.profile&&<>
+          <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Username change</Text>
+          {paragraph('Confirm your request here. An administrator must approve the change, including your mailbox address.')}
+          {usernameRequest?<>
+            {paragraph('@'+usernameRequest.proposed+(usernameRequest.confirmed?' · Waiting for administrator approval':' · Waiting for your confirmation'))}
+            {!usernameRequest.confirmed&&button('Confirm request',()=>run(()=>mutate('username-change',{action:'confirm',id:usernameRequest.id})))}
+            {button('Cancel request',()=>run(()=>mutate('username-change',{action:'cancel',id:usernameRequest.id})))}
+          </>:<>
+            {field('New username',newUsername,setNewUsername,{autoCapitalize:'none',maxLength:24})}
+            {button('Request change',()=>run(()=>mutate('username-change',{action:'request',username:newUsername})),busy||!newUsername.trim())}
+          </>}
+        </>}
         {account.emails.map(item=>row(item.address,item.address,'Verified email'))}
         {field('New email address',email,setEmail,{keyboardType:'email-address',autoCapitalize:'none',autoComplete:'email'})}
         {button('Send verification email',()=>run(()=>mutate('email',{email}),'Check your email to verify this address.'))}</>;
@@ -362,6 +379,9 @@ export default function NativeSections({ section,token,account,colors,reload,exp
               {button(user.locked?'Unlock':'Lock account',()=>run(async()=>{
                 await api('admin/account-status',{username:user.username,action:user.locked?'unlock':'lock'});await load();
               },user.locked?'Account unlocked.':'Account locked.'))}
+              {button('Sign out all devices',()=>confirm('Sign out all devices?','The account can sign in again unless it is locked.',()=>run(async()=>{
+                await api('admin/account-status',{username:user.username,action:'revoke-sessions'});
+              },'All devices signed out.')))}
               {button('Delete account',()=>{setTarget(user.username);setTypedName('');})}
             </View>}
             {target===user.username&&<>
@@ -374,6 +394,14 @@ export default function NativeSections({ section,token,account,colors,reload,exp
               {button('Cancel deletion',()=>setTarget(''))}
             </>}
           </>))}
+        <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Username requests</Text>
+        {usernameRequests.length===0&&paragraph('No confirmed requests.')}
+        {usernameRequests.map(item=>row(item.id,'@'+item.previous+' → @'+item.proposed,'Confirmed by the account holder',
+          <View style={styles.actions}>{(['approve','reject'] as const).map(action=><View key={action}>
+            {button(action==='approve'?'Approve change':'Decline request',()=>run(async()=>{
+              await api('admin/username-changes',{id:item.id,action});await load();
+            },action==='approve'?'Username changed.':'Request declined.'))}
+          </View>)}</View>))}
         <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Support inbox</Text>
         {request?<>{button('All requests',()=>{setRequest(null);setSupportText('');})}
           {row(request.id,request.message.subject||'(No subject)',request.message.sender)}

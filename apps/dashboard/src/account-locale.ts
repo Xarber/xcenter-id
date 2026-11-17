@@ -8,6 +8,14 @@ const en = {
   privateAddresses:'Hide My Email addresses',disableAddress:'Disable address',sendEmail:'Send email',
   newEmail:'New email',recipient:'Recipient',subject:'Subject',
   message:'Message',
+  overviewTitle:'Account overview',overviewSummary:'Manage the details, devices, and apps connected to your X-Center ID.',
+  personalAccount:'Personal account',greeting:'Hello, {name}',
+  viewProfile:'View profile',accountStatus:'Account status',
+  profileShortcut:'Your profile',profileDescription:'Edit your photo and personal information',
+  securityDescription:'Manage the passkeys on your account',permissionsDescription:'Control what each app can access',
+  devicesDescription:'Review active sign-ins',enrolledOne:'{count} passkey enrolled',
+  enrolledOther:'{count} passkeys enrolled',verifiedOne:'{count} verified email',
+  verifiedOther:'{count} verified emails',
 };
 
 type Message = keyof typeof en;
@@ -20,7 +28,15 @@ const catalogs:Record<string,Partial<Record<Message,string>>> = {
     emailDeleted:'Email eliminata.',noSubject:'(Senza oggetto)',downloadEmail:'Scarica l’email originale',
     privateAddresses:'Indirizzi di Nascondi la mia email',disableAddress:'Disattiva indirizzo',sendEmail:'Invia email',
     newEmail:'Nuova email',recipient:'Destinatario',subject:'Oggetto',
-    message:'Messaggio'},
+    message:'Messaggio',
+    overviewTitle:'Panoramica dell’account',overviewSummary:'Gestisci i dati, i dispositivi e le app collegati al tuo X-Center ID.',
+    personalAccount:'Account personale',greeting:'Ciao, {name}',
+    viewProfile:'Visualizza profilo',accountStatus:'Stato dell’account',
+    profileShortcut:'Il tuo profilo',profileDescription:'Modifica la foto e i dati personali',
+    securityDescription:'Gestisci le passkey del tuo account',permissionsDescription:'Controlla a cosa può accedere ogni app',
+    devicesDescription:'Controlla gli accessi attivi',enrolledOne:'{count} passkey registrata',
+    enrolledOther:'{count} passkey registrate',verifiedOne:'{count} email verificata',
+    verifiedOther:'{count} email verificate'},
   es:{dashboard:'Resumen',profile:'Perfil',devices:'Dispositivos',security:'Acceso y seguridad',apps:'Aplicaciones',
     permissions:'Permisos',storage:'Uso de datos',files:'Archivos',friends:'Amigos',sharedAppData:'Datos de aplicaciones compartidos',mail:'Correo',settings:'Ajustes',
     birthday:'Fecha de nacimiento',chooseBirthday:'Elige tu fecha de nacimiento',useDate:'Usar esta fecha',cancel:'Cancelar',
@@ -29,7 +45,15 @@ const catalogs:Record<string,Partial<Record<Message,string>>> = {
     emailDeleted:'Correo eliminado.',noSubject:'(Sin asunto)',downloadEmail:'Descargar correo original',
     privateAddresses:'Direcciones de Ocultar mi correo',disableAddress:'Desactivar dirección',sendEmail:'Enviar correo',
     newEmail:'Nuevo correo',recipient:'Destinatario',subject:'Asunto',
-    message:'Mensaje'},
+    message:'Mensaje',
+    overviewTitle:'Resumen de la cuenta',overviewSummary:'Gestiona los datos, dispositivos y aplicaciones conectados a tu X-Center ID.',
+    personalAccount:'Cuenta personal',greeting:'Hola, {name}',
+    viewProfile:'Ver perfil',accountStatus:'Estado de la cuenta',
+    profileShortcut:'Tu perfil',profileDescription:'Edita tu foto y tus datos personales',
+    securityDescription:'Gestiona las llaves de acceso de tu cuenta',permissionsDescription:'Controla a qué puede acceder cada aplicación',
+    devicesDescription:'Revisa las sesiones activas',enrolledOne:'{count} llave de acceso registrada',
+    enrolledOther:'{count} llaves de acceso registradas',verifiedOne:'{count} correo verificado',
+    verifiedOther:'{count} correos verificados'},
   fr:{dashboard:'Vue d’ensemble',profile:'Profil',devices:'Appareils',security:'Connexion et sécurité',apps:'Applications',
     permissions:'Autorisations',storage:'Utilisation des données',files:'Fichiers',friends:'Amis',sharedAppData:'Données d’applications partagées',mail:'Messagerie',settings:'Réglages',
     birthday:'Date de naissance',chooseBirthday:'Choisir la date de naissance',useDate:'Utiliser cette date',cancel:'Annuler',
@@ -38,7 +62,15 @@ const catalogs:Record<string,Partial<Record<Message,string>>> = {
     emailDeleted:'Message supprimé.',noSubject:'(Sans objet)',downloadEmail:'Télécharger le message original',
     privateAddresses:'Adresses de Masquer mon adresse e-mail',disableAddress:'Désactiver l’adresse',sendEmail:'Envoyer le message',
     newEmail:'Nouveau message',recipient:'Destinataire',subject:'Objet',
-    message:'Message'},
+    message:'Message',
+    overviewTitle:'Vue d’ensemble du compte',overviewSummary:'Gérez les informations, appareils et applications liés à votre X-Center ID.',
+    personalAccount:'Compte personnel',greeting:'Bonjour, {name}',
+    viewProfile:'Voir le profil',accountStatus:'État du compte',
+    profileShortcut:'Votre profil',profileDescription:'Modifiez votre photo et vos informations personnelles',
+    securityDescription:'Gérez les clés d’accès de votre compte',permissionsDescription:'Contrôlez les accès de chaque application',
+    devicesDescription:'Vérifiez les connexions actives',enrolledOne:'{count} clé d’accès enregistrée',
+    enrolledOther:'{count} clés d’accès enregistrées',verifiedOne:'{count} adresse e-mail vérifiée',
+    verifiedOther:'{count} adresses e-mail vérifiées'},
   de:{dashboard:'Übersicht',profile:'Profil',devices:'Geräte',security:'Anmeldung und Sicherheit',apps:'Apps',
     permissions:'Berechtigungen',storage:'Datennutzung',files:'Dateien',friends:'Freunde',sharedAppData:'Geteilte App-Daten',mail:'E-Mail',settings:'Einstellungen',
     birthday:'Geburtsdatum',chooseBirthday:'Geburtsdatum auswählen',useDate:'Dieses Datum verwenden',cancel:'Abbrechen',
@@ -47,7 +79,15 @@ const catalogs:Record<string,Partial<Record<Message,string>>> = {
     emailDeleted:'E-Mail gelöscht.',noSubject:'(Kein Betreff)',downloadEmail:'Original-E-Mail herunterladen',
     privateAddresses:'Adressen von E-Mail-Adresse verbergen',disableAddress:'Adresse deaktivieren',sendEmail:'E-Mail senden',
     newEmail:'Neue E-Mail',recipient:'Empfänger',subject:'Betreff',
-    message:'Nachricht'},
+    message:'Nachricht',
+    overviewTitle:'Kontoübersicht',overviewSummary:'Verwalte Daten, Geräte und Apps, die mit deiner X-Center ID verbunden sind.',
+    personalAccount:'Persönliches Konto',greeting:'Hallo, {name}',
+    viewProfile:'Profil ansehen',accountStatus:'Kontostatus',
+    profileShortcut:'Dein Profil',profileDescription:'Bearbeite dein Foto und deine persönlichen Daten',
+    securityDescription:'Verwalte die Passkeys für dein Konto',permissionsDescription:'Lege den Zugriff für jede App fest',
+    devicesDescription:'Überprüfe aktive Anmeldungen',enrolledOne:'{count} registrierter Passkey',
+    enrolledOther:'{count} registrierte Passkeys',verifiedOne:'{count} bestätigte E-Mail-Adresse',
+    verifiedOther:'{count} bestätigte E-Mail-Adressen'},
   pt:{dashboard:'Visão geral',profile:'Perfil',devices:'Dispositivos',security:'Acesso e segurança',apps:'Apps',
     permissions:'Permissões',storage:'Uso de dados',files:'Arquivos',friends:'Amigos',sharedAppData:'Dados de aplicativos compartilhados',mail:'E-mail',settings:'Configurações',
     birthday:'Data de nascimento',chooseBirthday:'Escolher a data de nascimento',useDate:'Usar esta data',cancel:'Cancelar',
@@ -56,11 +96,24 @@ const catalogs:Record<string,Partial<Record<Message,string>>> = {
     emailDeleted:'E-mail excluído.',noSubject:'(Sem assunto)',downloadEmail:'Baixar e-mail original',
     privateAddresses:'Endereços de Ocultar Meu E-mail',disableAddress:'Desativar endereço',sendEmail:'Enviar e-mail',
     newEmail:'Novo e-mail',recipient:'Destinatário',subject:'Assunto',
-    message:'Mensagem'},
+    message:'Mensagem',
+    overviewTitle:'Visão geral da conta',overviewSummary:'Gerencie os dados, dispositivos e apps conectados à sua X-Center ID.',
+    personalAccount:'Conta pessoal',greeting:'Olá, {name}',
+    viewProfile:'Ver perfil',accountStatus:'Status da conta',
+    profileShortcut:'Seu perfil',profileDescription:'Edite sua foto e seus dados pessoais',
+    securityDescription:'Gerencie as chaves de acesso da sua conta',permissionsDescription:'Controle o que cada app pode acessar',
+    devicesDescription:'Veja os acessos ativos',enrolledOne:'{count} chave de acesso cadastrada',
+    enrolledOther:'{count} chaves de acesso cadastradas',verifiedOne:'{count} e-mail verificado',
+    verifiedOther:'{count} e-mails verificados'},
 };
 
 export function accountMessage(key:string, fallback:string, locale=Intl.DateTimeFormat().resolvedOptions().locale) {
   if (!Object.hasOwn(en,key)) return fallback;
   const message = key as Message;
-  return catalogs[locale.split('-')[0]]?.[message] ?? en[message];
+  return catalogs[accountLanguage(locale)]?.[message] ?? en[message];
+}
+
+export function accountLanguage(locale:string) {
+  const language=locale.split('-')[0].toLowerCase();
+  return Object.hasOwn(catalogs,language)?language:'en';
 }

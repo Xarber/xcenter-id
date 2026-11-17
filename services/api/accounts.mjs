@@ -101,6 +101,9 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     CREATE TABLE IF NOT EXISTS retired_usernames(username TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS account_admin_events(id TEXT PRIMARY KEY, actor TEXT NOT NULL,
       target TEXT NOT NULL, action TEXT NOT NULL, created INTEGER NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS username_change_requests(owner TEXT PRIMARY KEY REFERENCES accounts(id),
+      id TEXT UNIQUE NOT NULL, previous TEXT NOT NULL, proposed TEXT NOT NULL, expires INTEGER NOT NULL,
+      confirmed INTEGER NOT NULL DEFAULT 0) STRICT;
   `);
   const native = openNativeSession(db);
   const emailSignIn=openEmailSignIn(db,{send:sendVerification,secret:profileKey??randomBytes(32)});
@@ -168,6 +171,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   const emails = q('SELECT address,verified FROM verified_emails WHERE owner=? ORDER BY verified');
   const lookupSession = q(`SELECT * FROM account_sessions WHERE hash=? AND expires>?
     AND owner NOT IN (SELECT owner FROM account_restrictions)`);
+  const lookupPreservedSession=q(`SELECT * FROM account_sessions WHERE hash=? AND expires>? AND
+    owner NOT IN (SELECT owner FROM account_restrictions WHERE status='deleted')`);
   const insertSession = q('INSERT INTO account_sessions VALUES (?,?,?,?)');
   const removeSession = q('DELETE FROM account_sessions WHERE hash=?');
   const challenges = new Map();
@@ -177,14 +182,15 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   function nativeRequest(req) {
     return !req.headers.origin && !req.headers.cookie && req.headers['x-authnjs-native']==='account-manager';
   }
-  function session(req) {
+  function session(req,includeLocked=false) {
+    const lookup=includeLocked?lookupPreservedSession:lookupSession;
     const bearer = nativeRequest(req) && /^Bearer ([A-Za-z0-9_-]{43})$/.exec(req.headers.authorization ?? '')?.[1];
     if (bearer) {
       const hash=digest(bearer);
-      return native.accepts(hash) ? lookupSession.get(hash,now()) : undefined;
+      return native.accepts(hash) ? lookup.get(hash,now()) : undefined;
     }
     const value = cookie(req, '__Host-authnjs');
-    return value ? lookupSession.get(digest(value), now()) : undefined;
+    return value ? lookup.get(digest(value), now()) : undefined;
   }
 
   function allowsMutation(req) {
@@ -236,13 +242,16 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
 
   function recent(active) {
     requireCondition(active, 401, 'Sign in first.');
-    requireCondition(now() - active.created < recentAge, 403, 'Sign out and sign back in before changing your passkeys.');
+    requireCondition(now() - active.created < recentAge, 403, 'Sign out and sign back in before continuing.');
   }
 
   async function route(req, res, pathname) {
     const active = session(req);
     if (req.method === 'GET' && pathname === '/account/me') {
-      if (!active) return { account: null };
+      if (!active) {
+        const preserved=session(req,true);
+        return preserved&&restriction.get(preserved.owner)?.status==='locked'?{account:null,locked:true}:{account:null};
+      }
       const saved = profile(active.owner);
       const { picture, ...details } = saved ?? {};
       return { account: {
@@ -280,6 +289,17 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         LEFT JOIN account_entitlements e ON e.owner=p.owner ORDER BY p.username LIMIT 500`).all()
         .map(row=>({username:row.username,premium:!!row.premium,capacity:storageCapacity(row.owner),
           locked:restriction.get(row.owner)?.status==='locked',protected:adminIds.has(row.owner)}))};
+    }
+    if(req.method==='GET'&&pathname==='/account/username-change'){
+      requireCondition(active,401,'Sign in first.');
+      return {request:q('SELECT id,proposed,confirmed,expires FROM username_change_requests WHERE owner=? AND expires>?')
+        .get(active.owner,now())??null};
+    }
+    if(req.method==='GET'&&pathname==='/account/admin/username-changes'){
+      requireCondition(isAdmin(active),403,'Administrator access is required.');
+      return {requests:q(`SELECT id,previous,proposed,expires FROM username_change_requests
+        WHERE confirmed=1 AND expires>? AND owner NOT IN (SELECT owner FROM account_restrictions)
+        ORDER BY expires LIMIT 100`).all(now())};
     }
     const adminPhoto=/^\/account\/admin\/accounts\/([a-z][a-z0-9]{2,23})\/avatar$/.exec(pathname)?.[1];
     if(req.method==='GET'&&adminPhoto){
@@ -327,7 +347,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       requireCondition(browser,401,'The app sign-in expired. Start again.');
       return {token:login(req,res,browser.owner,browser)};
     }
-    requireCondition(allowsMutation(req),403,'Invalid origin.');
+    requireCondition(allowsMutation(req)||(pathname==='/account/logout'&&nativeRequest(req)&&session(req,true)),403,'Invalid origin.');
     if (pathname === '/account/mail/send') requireCondition(active,401,'Sign in first.');
     const input = await body(req,pathname==='/account/mail/send'?512*1024:undefined);
     if(active)requireCondition(session(req),401,'Sign in first.');
@@ -338,26 +358,71 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       const {username,action,confirmation}=input;
       const target=typeof username==='string'&&usernameOwner.get(username)?.owner;
       requireCondition(target&&!adminIds.has(target),422,'Choose an account that is not an administrator.');
-      requireCondition(['lock','unlock','delete'].includes(action),422,'Choose a valid account action.');
+      requireCondition(['lock','unlock','delete','revoke-sessions'].includes(action),422,'Choose a valid account action.');
       requireCondition(action!=='delete'||confirmation===username,422,'Enter the username to confirm deletion.');
       db.exec('BEGIN IMMEDIATE');
       try {
         if(action==='unlock') q("DELETE FROM account_restrictions WHERE owner=? AND status='locked'").run(target);
-        else {
+        if(action==='lock'||action==='delete'){
           q(`INSERT INTO account_restrictions VALUES(?,?) ON CONFLICT(owner)
             DO UPDATE SET status=excluded.status`).run(target,action==='delete'?'deleted':'locked');
+        }
+        if(action==='delete'||action==='revoke-sessions'){
           q('DELETE FROM account_sessions WHERE owner=?').run(target);
           q('DELETE FROM email_signins WHERE owner=?').run(target);
         }
         if(action==='delete'){
           q('INSERT INTO retired_usernames VALUES(?)').run(username);
           for(const table of ['passkeys','connected_apps','app_disconnects','account_entitlements','account_storage_caps',
-            'identity_profiles','signup_usernames','verified_emails','email_verifications']){
+            'identity_profiles','signup_usernames','verified_emails','email_verifications','username_change_requests']){
             q('DELETE FROM '+table+' WHERE owner=?').run(target);
           }
           q("UPDATE accounts SET name='Deleted account' WHERE id=?").run(target);
         }
         q('INSERT INTO account_admin_events VALUES(?,?,?,?,?)').run(randomUUID(),active.owner,target,action,now());
+        db.exec('COMMIT');
+      } catch(error){db.exec('ROLLBACK');throw error;}
+      return {ok:true};
+    }
+    if(pathname==='/account/username-change'||pathname==='/account/admin/username-changes'){
+      recent(active);
+      requireCondition(req.headers['x-authnjs-request']==='account-consent',403,'Invalid request.');
+      requireCondition(profileKey,503,'Username changes require encrypted account storage.');
+      const admin=pathname.includes('/admin/');
+      const {id,action}=input;
+      if(admin)requireCondition(isAdmin(active),403,'Administrator access is required.');
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const get=q('SELECT * FROM username_change_requests WHERE id=? AND expires>?');
+        if(!admin&&action==='request'){
+          const current=profile(active.owner);
+          requireCondition(current,422,'Finish setting up your profile.');
+          const candidate=validateUsername(input.username,reservedNames);
+          requireCondition(!candidate.error&&candidate.username!==current.username,422,candidate.error??'Choose a different username.');
+          ensureAvailable(candidate.username);
+          q(`INSERT INTO username_change_requests VALUES (?,?,?,?,?,0) ON CONFLICT(owner) DO UPDATE SET
+            id=excluded.id,previous=excluded.previous,proposed=excluded.proposed,expires=excluded.expires,confirmed=0`)
+            .run(active.owner,randomUUID(),current.username,candidate.username,now()+86400_000);
+        } else {
+          const request=typeof id==='string'&&get.get(id,now());
+          requireCondition(request&&(admin?request.confirmed&&available(request.owner):request.owner===active.owner),
+            404,'This username request is unavailable.');
+          if(!admin&&action==='confirm')q('UPDATE username_change_requests SET confirmed=1 WHERE id=?').run(id);
+          else if ((!admin&&action==='cancel')||(admin&&['approve','reject'].includes(action))){
+            if(action==='approve'){
+              const current=profile(request.owner);
+              requireCondition(current?.username===request.previous,409,'The current username changed. Create a new request.');
+              const candidate=validateUsername(request.proposed,reservedNames);
+              requireCondition(candidate.username,409,'This username is unavailable.');
+              ensureAvailable(request.proposed);
+              writeProfile(request.owner,{...current,username:request.proposed});
+              q('INSERT INTO retired_usernames VALUES(?)').run(request.previous);
+            }
+            q('DELETE FROM username_change_requests WHERE id=?').run(id);
+            if(admin)q('INSERT INTO account_admin_events VALUES(?,?,?,?,?)')
+              .run(randomUUID(),active.owner,request.owner,action+'-username',now());
+          } else throw new AccountError(422,'Choose a valid username request action.');
+        }
         db.exec('COMMIT');
       } catch(error){db.exec('ROLLBACK');throw error;}
       return {ok:true};
@@ -370,7 +435,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       return {location};
     }
     if (pathname === '/account/logout') {
-      if (active) removeSession.run(active.hash);
+      const signedIn = active??session(req,true);
+      if (signedIn) removeSession.run(signedIn.hash);
       if(!nativeRequest(req)) setCookie(res, '__Host-authnjs', '', 0);
       return { ok: true };
     }

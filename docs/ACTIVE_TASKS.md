@@ -145,3 +145,10 @@ Build gate reconciliation. Admin and in-app support implementation and source pr
 ### Remaining queue continuation
 
 AUTHN-038 gained confirmed bulk mail cleanup on web and native. API tests passed for ownership, cross-origin denial, malformed input, request bounds and retry safety. Isolated Chrome at 390 px verified cancel and persistent selected-only deletion. Native runtime remains open. The latest native run targets an earlier commit and remains separate from this batch. Public web still reports `bd6b402`, and the production storage mount still has 1.4 GiB free.
+
+| Order and ID | Request | State | Evidence and next action |
+| --- | --- | --- | --- |
+| 51 AUTHN-051 | Preserve sessions under account lock and add separate sign-out-all | Implemented | API tests and isolated Chrome verified the locked state, unlock restoring the same session, and separate revocation. Device and production checks pending. |
+| 52 AUTHN-052 | Account-holder-confirmed username request with admin approval | Implemented | API and Chrome verified request, dashboard confirmation, restricted admin approval and changed mailbox username. Email OTP is transport-dependent. |
+
+The user reaffirmed priority for external internet mail, followed by authenticated mail client access. Outbound TCP 25 from X-Center still timed out to Gmail and iCloud. Public support routing remains pending. The Italian shared overview, pluralized status, and revised admin controls passed 390 px isolated Chrome. The 22 API tests and dashboard typecheck passed. The prior native run built the AAB and both iOS variants. The universal APK job failed and is being diagnosed.

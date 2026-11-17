@@ -1,3 +1,4 @@
+import { AdminUsernameChanges } from './UsernameChange.web';
 import { AdminSupport } from './Support.web';
 import type { ManagedAccount } from './support-model';
 import { accountMessage } from './account-locale';
@@ -291,6 +292,7 @@ type AdminDeveloper={owner:string;name:string;status:string;repository?:string};
 export function AdminPage() {
   const [users,setUsers]=useState<ManagedAccount[]>([]);
   const [deleting,setDeleting]=useState('');
+  const [signingOut,setSigningOut]=useState('');
   const [confirmation,setConfirmation]=useState('');
   const [apps,setApps]=useState<AdminApp[]>([]);
   const [developers,setDevelopers]=useState<AdminDeveloper[]>([]);
@@ -332,6 +334,10 @@ export function AdminPage() {
           </button>
           {!user.protected&&<><button className="xc-button xc-secondary" disabled={busy} onClick={()=>save('admin/account-status',
             {username:user.username,action:user.locked?'unlock':'lock'},user.locked?'Account unlocked.':'Account locked.')}>{user.locked?'Unlock':'Lock account'}</button>
+            <button className="xc-button xc-secondary" disabled={busy} onClick={()=>{
+              if(signingOut!==user.username){setSigningOut(user.username);return;}
+              setSigningOut('');save('admin/account-status',{username:user.username,action:'revoke-sessions'},'All devices signed out.');
+            }}>{signingOut===user.username?'Confirm sign out':'Sign out all devices'}</button>
             <button className="xc-button xc-secondary" disabled={busy} onClick={()=>{setDeleting(user.username);setConfirmation('');}}>Delete account</button></>}
           </div>}
         {deleting===user.username&&<form className="xc-stack" onSubmit={event=>{
@@ -344,6 +350,7 @@ export function AdminPage() {
         </form>}
       </div>)}
     </section>
+    <AdminUsernameChanges refreshAccounts={refresh}/>
     <AdminSupport/>
     <section className="xc-card xc-pad"><div className="xc-row-head"><BadgeCheck size={21}/><h2>Developer verification</h2></div>
       {developers.length===0&&<p className="xc-empty">No developer reviews.</p>}

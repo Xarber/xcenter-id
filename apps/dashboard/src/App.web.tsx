@@ -1,7 +1,7 @@
 import { SupportPage } from './Support.web';
 import FriendsPage from './FriendsPage.web';
 import { accountMessage } from './account-locale';
-import { accountShortcuts, accountStatus } from './account-overview';
+import { accountGreeting, accountShortcuts, accountStatus } from './account-overview';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import {
   ArrowDownRight, ArrowLeft, ArrowRight, ChevronRight, CircleHelp, Code2, Fingerprint, FolderOpen,
@@ -176,6 +176,7 @@ function Security({account,update,addPasskey}:{account:Account;update:()=>Promis
 
 export default function WebApp(){
   const [account,setAccount]=useState<Account|null|undefined>(undefined);
+  const [locked,setLocked]=useState(false);
   const [notice,setNotice]=useState('');
   const [busy,setBusy]=useState(false);
   const [intro,setIntro]=useState(false);
@@ -193,7 +194,7 @@ export default function WebApp(){
   const continuation=/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)||nativeReturn.test(next)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(next)||/^\/mail\/[0-9a-f-]{36}$/.test(next)?next:null;
   const authDestination=continuation??'/dashboard';
   const emailToken=new URLSearchParams(window.location.hash.slice(1)).get('verify-email');
-  async function load(){setAccount((await api('me')).account);}
+  async function load(){const result=await api('me');setAccount(result.account);setLocked(!!result.locked);}
   useEffect(()=>{
     void load().catch(()=>{setNotice('The account service is temporarily unavailable.');setAccount(null);});
     return ()=>{if(timer.current)clearTimeout(timer.current);};
@@ -237,6 +238,10 @@ export default function WebApp(){
       .catch(error=>setNotice(error.message)).finally(()=>setBusy(false));
   }
   if(account===undefined)return <div className="xc-loading"><Logo href="/"/><p role="status">Opening your account…</p></div>;
+  if(locked)return <main className="xc-setup"><Logo href="/"/><h1>Account locked</h1><p>Contact support if you need help.</p>
+    <button className="xc-button xc-secondary" onClick={()=>window.location.reload()}>Check again</button>
+    <button className="xc-button xc-secondary" onClick={()=>void api('logout',{}).then(()=>window.location.assign('/signin')).catch(error=>setNotice(error.message))}>Sign out</button>
+    {notice&&<p role="alert">{notice}</p>}</main>;
   if(!account)return <SignIn signup={path==='signup'} continuation={continuation} busy={busy} notice={notice} authenticate={username=>login('login',username)} beginUsername={beginUsername} submitCode={submitCode} create={username=>login('signup',username)}/>;
 
   if(path==='native-session'&&account.profile){
@@ -267,7 +272,7 @@ export default function WebApp(){
   const picture=profile.hasPicture?'/account/avatar':null;
   const permissionClient=permissionRoute?.[1];
   const page=path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':mailRoute?'mail':path;
-  const [title,summary]=titles[page]??['Account overview','Manage the details, devices, and apps connected to your X-Center ID.'];
+  const [title,summary]=titles[page]??[accountMessage('overviewTitle','Account overview'),accountMessage('overviewSummary','Manage the details, devices, and apps connected to your X-Center ID.')];
   const shortcutIcons = {
     profile:[UserRound,'xc-sky'],security:[Fingerprint,'xc-mint'],
     permissions:[ShieldCheck,'xc-lavender'],devices:[Laptop,'xc-sky'],
@@ -312,12 +317,12 @@ export default function WebApp(){
   </section>;
   else content=<>
     <section className="xc-hero">
-      <div><p className="xc-kicker">Personal account</p><h2>Hello, {profile.givenName}</h2><p>@{profile.username}</p>
-        <a className="xc-button xc-hero-button" href="/profile">View profile <ArrowRight size={16}/></a></div>
+      <div><p className="xc-kicker">{accountMessage('personalAccount','Personal account')}</p><h2>{accountGreeting(profile.givenName)}</h2><p>@{profile.username}</p>
+        <a className="xc-button xc-hero-button" href="/profile">{accountMessage('viewProfile','View profile')} <ArrowRight size={16}/></a></div>
       <div className="xc-avatar xc-hero-avatar">{picture?<img src={picture} alt=""/>:<UserRound size={43}/>}</div>
     </section>
     <section className="xc-shortcuts" aria-label="Account shortcuts">
-      {accountShortcuts.map(({id,label,description})=>{
+      {accountShortcuts().map(({id,label,description})=>{
         const [Icon,tint]=shortcutIcons[id];
         return <a className="xc-card xc-shortcut" key={id} href={'/'+id}>
           <span className={'xc-symbol '+tint}><Icon size={22}/></span><div><h2>{label}</h2><p>{description}</p></div><ChevronRight className="xc-arrow" size={19}/>
@@ -325,7 +330,7 @@ export default function WebApp(){
       })}
     </section>
     <section className="xc-card xc-pad xc-account-status"><div className="xc-row-head"><span className="xc-symbol xc-mint"><ShieldCheck size={22}/></span>
-      <div><h2>Account status</h2><p>{accountStatus(account.passkeys.length,account.emails.length)}</p></div></div>
+      <div><h2>{accountMessage('accountStatus','Account status')}</h2><p>{accountStatus(account.passkeys.length,account.emails.length)}</p></div></div>
     </section>
   </>;
 

@@ -4,9 +4,13 @@
 
 The account manager lists profiles on the Admin screen. Photos are served as private, non-cacheable JPEGs through an administrator-only endpoint. The native screen limits each visible search to 40 results. The web screen keeps the existing storage, developer review and alias controls alongside moderation.
 
-Locking an account invalidates its device sessions and pending email sign-in codes. While locked it cannot sign in, use existing delegated access, or participate in file or record sharing. Unlocking requires a fresh account sign-in. Existing granted scopes and friendship associations remain available after unlock. Delegated tokens still within their lifetime can become valid again on unlock. The account holder can [unlink an app](IDENTITY.md) for lasting revocation.
+Locking restricts account sign-in and access while preserving device sessions. The web and native account managers show a locked state to holders of a preserved session. Unlocking restores sessions that have not expired, and delegated tokens still within their lifetime can become valid again. **Sign out all devices** is a separate administrative action that revokes the account's sessions and pending email sign-in codes. It does not change whether an account is locked. The account holder can [unlink an app](IDENTITY.md) for lasting revocation of delegated access.
 
 Deleting an account requires a recent administrator session and typing the exact username. The administrator roster is protected from both lock and deletion. The operation removes credentials, sessions, profile and photo, verified addresses, and account preferences from the identity database. A tombstone prevents old identities and usernames from being reassigned. Encrypted data in separate services and backup snapshots remains subject to retention and separately authorized erasure. The dashboard deletion is an identity and access operation. The audit records the operator, target ID, action and time, without copying profile content.
+
+## Username changes
+
+The account holder proposes a new username in Profile and explicitly confirms it in the dashboard with a recent session. Requests expire after 24 hours. An administrator with a recent session can approve or reject a confirmed request. Approval checks availability, preserves the stable account ID, re-encrypts the profile, and reserves the old username. The new mailbox address follows the new username. The old address stops receiving mail. The dashboard is the confirmation channel while external OTP delivery is unavailable.
 
 ## Feedback and email
 

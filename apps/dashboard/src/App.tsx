@@ -36,6 +36,7 @@ function NativeAccount() {
   const [tab,setTab]=useState<(typeof pages)[number]>(pages[0]);
   const [token,setToken]=useState<string|null>(null);
   const [account,setAccount]=useState<Account|null>(null);
+  const [locked,setLocked]=useState(false);
   const [loading,setLoading]=useState(true);
   const [pending,setPending]=useState(false);
   const [intro,setIntro]=useState(false);
@@ -53,13 +54,14 @@ function NativeAccount() {
     return ()=>{live=false;if(timer.current)clearTimeout(timer.current);};
   },[]);
   function expired(){
-    setAccount(null);setToken(null);setTab(pages[0]);
+    setAccount(null);setToken(null);setLocked(false);setTab(pages[0]);
     void clearSession().catch(()=>{});
   }
   const load=async (value:string)=>{
     const result=await nativeRequest('me',value);
+    if(result.locked){setToken(value);setAccount(null);setLocked(true);return;}
     if(!result.account){expired();return;}
-    setToken(value);setAccount(result.account);
+    setLocked(false);setToken(value);setAccount(result.account);
   };
   useEffect(()=>{
     void readSession().then(value=>value?load(value):undefined)
@@ -128,12 +130,17 @@ function NativeAccount() {
         {action('Open dashboard','arrow-forward-outline',()=>setIntro(false))}
         {action('Skip introduction','close-outline',()=>setIntro(false))}
       </View>:<>
-        {loading?<ActivityIndicator accessibilityLabel="Opening account"/>:!token||!account?
+        {loading?<ActivityIndicator accessibilityLabel="Opening account"/>:locked&&token?
+          <View style={[styles.card,{backgroundColor:colors.panel}]}>
+            <Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>Account locked</Text>
+            {action('Check again','refresh-outline',()=>void load(token).catch(()=>setError('Could not check your account.')))}
+            {action('Sign out','log-out-outline',()=>void signOut())}
+          </View>:!token||!account?
           <AccountEntry onSignIn={()=>void signIn()} onCreateAccount={()=>void signIn(true)} pending={pending} error={error}
             onUsernameSubmit={username=>nativeRequest('login/username',undefined,{username})}
             onCodeSubmit={async(ticket,code)=>{const session=await nativeRequest('login/code',undefined,{ticket,code});await useSession(session.token);}}/>:
           <><Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>{accountMessage(tab[0],tab[1])}</Text>
-          <Text style={{color:colors.muted}}>{copy[tab[0]]}</Text>
+          <Text style={{color:colors.muted}}>{tab[0]==='dashboard'?accountMessage('overviewSummary',copy.dashboard):copy[tab[0]]}</Text>
           {tab[0]==='settings'?<View style={[styles.card,{backgroundColor:colors.panel}]}>
           {action('View introduction','information-circle-outline',()=>setIntro(true))}
           {action('Version 0.1.0','code-slash-outline',()=>{
@@ -146,7 +153,7 @@ function NativeAccount() {
             {Object.values(sample).flat().map(item=><Text key={item.id} style={{color:colors.muted}}>{item.title}</Text>)}</View>}
           {action('Sign out','log-out-outline',()=>void signOut())}
         </View>:<NativeSections key={tab[0]} section={tab[0] as NativeSection} account={account} token={token} colors={colors}
-          expired={expired} reload={()=>load(token)} passkeys={()=>void openPasskeyEnrollment()}
+          expired={()=>void load(token).catch(()=>setError('Could not check your account.'))} reload={()=>load(token)} passkeys={()=>void openPasskeyEnrollment()}
           navigate={id=>{const next=pages.find(page=>page[0]===id);if(next)setTab(next);}}/>}
         {error&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{error}</Text>}</>}
       </>}
