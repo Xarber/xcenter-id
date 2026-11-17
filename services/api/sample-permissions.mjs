@@ -22,13 +22,14 @@ export function createSamplePermissions({ store, accounts, origin, clients = [..
   return async (req,res) => {
     const user = accounts.current(req);
     if (!user) return json(res,401,{error:'Sign in to X-Center ID first.'});
+    const disconnected = (client) => accounts.isDisconnected?.(user.owner,client) ?? false;
     if (req.method === 'GET') {
       const grants = store.listGrants(user.owner);
       const permissions = [];
       for (const [destination,app] of sampleApps) {
-        if(!registered.has(destination))continue;
+        if(!registered.has(destination)||disconnected(destination))continue;
         for (const source of [sampleShared,...sampleApps.keys()]) {
-          if (source !== sampleShared && (source !== samplePartner.get(destination)||!registered.has(source))) continue;
+          if (source !== sampleShared && (source !== samplePartner.get(destination)||!registered.has(source)||disconnected(source))) continue;
           const shared = source === sampleShared;
           const dataset = shared ? sampleSharedDataset(destination) : sampleNotes;
           const expires = grants.find((grant) => grant.dataset === dataset &&
@@ -54,6 +55,9 @@ export function createSamplePermissions({ store, accounts, origin, clients = [..
         return json(res,422,{error:'Invalid app or folder.'});
       }
       const dataset = source === sampleShared ? sampleSharedDataset(destination) : sampleNotes;
+      if (req.method === 'PUT' && (disconnected(destination) || (source !== sampleShared && disconnected(source)))) {
+        return json(res,409,{error:'Link the app again before granting access.'});
+      }
       if (req.method === 'PUT') store.grant(user.owner,source,destination,dataset,persistent===true?untilRevoked:Date.now()+3600_000);
       else store.revoke(user.owner,source,destination,dataset);
       return json(res,200,{ok:true});

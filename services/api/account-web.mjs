@@ -104,6 +104,7 @@ async function activateApplication(req,res,id) {
 
 const consentApi = provider && store ? createApiHandler({
   registry, store, apps:registry, consoleClient:'account-consent-session', allowPersistentGrants:true,
+  canGrant:(owner,source,destination)=>!accounts.isDisconnected(owner,source)&&!accounts.isDisconnected(owner,destination),
   authenticate(req) {
     const session = accounts.current(req);
     return session ? {owner:session.owner,client:'account-consent-session'} : null;
@@ -168,7 +169,8 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
       }
       const {client}=JSON.parse(text);
       if(typeof client!=='string'||client.length>100)return answer(422,{error:'Choose a connected app.'});
-      if(!await provider.unlink(identity.owner,client))return answer(404,{error:'App is already unlinked.'});
+      const unlinked = await provider.unlink(identity.owner,client);
+      if(!unlinked && !accounts.isDisconnected(identity.owner,client))return answer(404,{error:'App is already unlinked.'});
       store?.revokeApp(identity.owner,client);
       return answer(200,{ok:true});
     })().catch(()=>answer(400,{error:'Could not unlink the app.'}));

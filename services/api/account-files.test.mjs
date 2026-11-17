@@ -52,7 +52,10 @@ test('account file uploads and downloads are owner-scoped and use attachment hea
 
 test('sample grants require an account session, exact origin and permission intent',async()=>{
   const store=openStore(':memory:',randomBytes(32));
-  const handle=createSamplePermissions({store,origin,accounts});
+  let disconnected = false;
+  const handle=createSamplePermissions({store,origin,accounts:{...accounts,
+    isDisconnected:(owner,client)=>disconnected&&owner==='owner'&&client==='trips-demo',
+  }});
   const server=createServer((req,res)=>{void handle(req,res);}).listen(0,'127.0.0.1');
   await once(server,'listening');
   const endpoint='http://127.0.0.1:'+server.address().port;
@@ -65,5 +68,10 @@ test('sample grants require an account session, exact origin and permission inte
     assert.equal((await request({authorization:'owner',origin,'x-authnjs-request':'account-consent'})).status,200);
     assert.equal(store.listGrants('owner')[0].expires,Number.MAX_SAFE_INTEGER);
     assert.equal(store.listGrants('other').length,0);
+    disconnected = true;
+    assert.equal((await request({authorization:'owner',origin,'x-authnjs-request':'account-consent'})).status,409);
+    const {permissions} = await (await fetch(endpoint,{headers:{authorization:'owner'}})).json();
+    assert.ok(permissions.every(item=>item.source!=='trips-demo'&&item.destination!=='trips-demo'));
+
   }finally{await new Promise(resolve=>server.close(resolve));store.close();}
 });

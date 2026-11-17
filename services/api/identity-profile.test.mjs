@@ -18,5 +18,6 @@ test('reserves service and operator-owned usernames and ignores caller-supplied 
   for (const username of ['SUPPORT','xarber','schoolmanager','postmaster','pathway','echo','harmony','openrecode']) {
     assert.equal(validateProfile({...input,username}).error,'This username is unavailable.');
   }
+  assert.equal(validateProfile({...input,username:'xarber'},[],'xarber').username,'xarber');
   assert.equal(validateProfile(input,['theexample']).error,'This username is unavailable.');
 });

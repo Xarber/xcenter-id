@@ -130,7 +130,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     insertProfile.run(owner,username,'profile-v1:'+envelope,'','');
   }
   const insertProfile = q(`INSERT INTO identity_profiles VALUES (?,?,?,?,?) ON CONFLICT(owner)
-    DO UPDATE SET given_name=excluded.given_name,surname=excluded.surname,age_range=excluded.age_range`);
+    DO UPDATE SET username=excluded.username,given_name=excluded.given_name,surname=excluded.surname,age_range=excluded.age_range`);
   const usernameOwner = q('SELECT owner FROM identity_profiles WHERE username=?');
   async function normalizePicture(value) {
     requireCondition(profileKey,503,'Photo uploads are unavailable.');
@@ -356,11 +356,12 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       requireCondition(active,401,'Sign in first.');
       requireCondition(profileKey,503,'Profile editing requires encrypted account storage.');
       const existing = profile(active.owner);
-      const candidate = validateProfile({ ...input, username:existing?.username ?? input.username },reservedNames);
+      const candidate = validateProfile({ ...input, username:existing?.username ?? input.username },reservedNames,existing?.username);
       requireCondition(!candidate.error,422,candidate.error);
       let picture = existing?.picture;
       if (input.picture === null) picture = undefined;
       else if (input.picture !== undefined) picture = await normalizePicture(input.picture);
+      candidate.username = profile(active.owner)?.username ?? candidate.username;
       const owner = usernameOwner.get(candidate.username)?.owner;
       requireCondition(!owner || owner === active.owner,409,'This username is unavailable.');
       writeProfile(active.owner,{...candidate,picture});
@@ -483,6 +484,26 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       if(write&&(!allowsMutation(req)||Date.now()-active.created>=recentAge))return 403;
       return 200;
     },
+    renameStoredUsername(owner, from, to) {
+      if (!profileKey || !/^[a-z][a-z0-9]{2,23}$/.test(to) || from === to) {
+        throw new Error('Invalid operator rename configuration');
+      }
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const current = profile(owner);
+        if (current?.username !== from || usernameOwner.get(to)) {
+          db.exec('ROLLBACK');
+          return false;
+        }
+        writeProfile(owner,{...current,username:to});
+        if (profile(owner)?.username !== to) throw new Error('Could not verify the renamed profile');
+        db.exec('COMMIT');
+        return true;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
     rememberApp(owner,client,label,grant) {
       db.exec('BEGIN IMMEDIATE');
       try {
@@ -491,6 +512,10 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         q('INSERT OR IGNORE INTO app_link_grants VALUES(?,?,?)').run(owner,client,grant);
         db.exec('COMMIT');
       } catch(error) { db.exec('ROLLBACK'); throw error; }
+    },
+    isDisconnected(owner,client) {
+      return !!q(`SELECT 1 FROM app_disconnects d WHERE d.owner=? AND d.client=?
+        AND NOT EXISTS (SELECT 1 FROM connected_apps a WHERE a.owner=d.owner AND a.client=d.client)`).get(owner,client);
     },
     grantAllowed(owner,client,grant) {
       if(!q('SELECT 1 FROM app_disconnects WHERE owner=? AND client=?').get(owner,client))return true;
@@ -505,7 +530,10 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       try {
         const grants=q('SELECT grant_id AS id FROM app_link_grants WHERE owner=? AND client=?').all(owner,client);
         const removed=q('DELETE FROM connected_apps WHERE owner=? AND client=?').run(owner,client);
-        if(removed.changes===1)q('INSERT OR IGNORE INTO app_disconnects VALUES(?,?)').run(owner,client);
+        if(removed.changes===1){
+          q('INSERT OR IGNORE INTO app_disconnects VALUES(?,?)').run(owner,client);
+          q('DELETE FROM app_link_grants WHERE owner=? AND client=?').run(owner,client);
+        }
         db.exec('COMMIT');
         return removed.changes===1?grants:null;
       } catch(error) { db.exec('ROLLBACK'); throw error; }

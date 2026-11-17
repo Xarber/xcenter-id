@@ -62,7 +62,7 @@ function savedPlace(body) {
   return { label: label.trim(), latitude, longitude };
 }
 
-export function createApiHandler({ store, authenticate, apps, consoleClient, developerClient, registry, allowPersistentGrants = false }) {
+export function createApiHandler({ store, authenticate, apps, consoleClient, developerClient, registry, allowPersistentGrants = false, canGrant = () => true }) {
   return async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
@@ -113,7 +113,7 @@ export function createApiHandler({ store, authenticate, apps, consoleClient, dev
       }
       if (consoleRoute) {
         if (client !== consoleClient) throw new HttpError(403, 'forbidden');
-        if (method === 'GET') return json(res, 200, { grants: store.listGrants(owner) });
+        if (method === 'GET') return json(res, 200, { grants: store.listGrants(owner).filter(({source,destination})=>canGrant(owner,source,destination)) });
         if (method !== 'PUT' && method !== 'DELETE') throw new HttpError(405, 'method_not_allowed');
         const { source, destination, expires, persistent } = await readJson(req);
         if (!apps.has(source) || !apps.has(destination) || source === destination) {
@@ -123,6 +123,7 @@ export function createApiHandler({ store, authenticate, apps, consoleClient, dev
           store.revoke(owner, source, destination, dataset);
           return json(res, 200, { revoked: true });
         }
+        if (!canGrant(owner,source,destination)) throw new HttpError(409, 'app_unlinked');
         const now = Date.now();
         const permanent = persistent === true && allowPersistentGrants;
         if (!permanent && (!Number.isSafeInteger(expires) || expires <= now || expires > now + maxGrantMs)) {

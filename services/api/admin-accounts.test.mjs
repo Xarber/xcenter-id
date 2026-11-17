@@ -43,3 +43,24 @@ test('only a recently authenticated administrator can change a quota',async()=>{
     rmSync(dir,{recursive:true,force:true});
   }
 });
+
+test('operator rename preserves ownership and re-authenticates encrypted profile data', () => {
+  const dir=mkdtempSync(join(tmpdir(),'authnjs-rename-'));
+  const database=join(dir,'accounts.sqlite');
+  const service=createAccounts({database,origin:'https://id.example.test',profileKey:Buffer.alloc(32,37)});
+  const db=new DatabaseSync(database);
+  try {
+    db.exec("INSERT INTO accounts VALUES ('owner','Synthetic owner',0),('other','Another user',0); INSERT INTO identity_profiles VALUES ('owner','original','Ada','Rossi','adult'),('other','taken','Other','User','adult');");
+    assert.equal(service.renameStoredUsername('other','original','xarber'),false);
+    assert.equal(service.renameStoredUsername('owner','original','taken'),false);
+    assert.equal(service.renameStoredUsername('owner','original','xarber'),true);
+    const row=db.prepare("SELECT owner,username,given_name FROM identity_profiles WHERE owner='owner'").get();
+    assert.equal(row.owner,'owner');
+    assert.equal(row.username,'xarber');
+    assert.match(row.given_name,/^profile-v1:/);
+    assert.equal(service.renameStoredUsername('owner','xarber','original'),true);
+  } finally {
+    db.close();
+    rmSync(dir,{recursive:true,force:true});
+  }
+});
