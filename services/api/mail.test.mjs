@@ -49,6 +49,15 @@ test('SMTP accepts registered destinations and aliases, rejects relay and isolat
     assert.equal(store.remove('alex-owner',messages[0].id),false);
     assert.equal(store.retrieve('alex-owner',messages[0].id),null);
     assert.equal(store.list('alex-owner').length,2);
+    assert.equal(store.aliases('alex-owner').length,2);
+    assert.equal(store.aliases('different-owner').length,0);
+    assert.equal(store.revokeAlias('different-owner',alias),false);
+    assert.equal(store.resolveRecipient(alias),'alex-owner');
+    assert.equal(store.revokeAlias('alex-owner',alias),true);
+    assert.equal(store.resolveRecipient(alias),null);
+    assert.equal(store.alias('alex-owner','test-client'),null);
+    assert.equal(store.revokeAlias('alex-owner',premium),true);
+    assert.equal(store.resolveRecipient(premium),null);
     assert.ok(!readFileSync(mailPath).includes(Buffer.from('ciphertext check')));
   } finally {
     await new Promise((resolve) => server.close(resolve));

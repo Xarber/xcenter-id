@@ -1,3 +1,4 @@
+import FriendsPage from './FriendsPage.web';
 import { accountMessage } from './account-locale';
 import { accountShortcuts, accountStatus } from './account-overview';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
@@ -17,7 +18,7 @@ import './account-web.css';
 const sections = [
   ['dashboard','Overview',Grid2X2],['profile','Profile',UserRound],['devices','Devices',Laptop],
   ['security','Sign-in & security',KeyRound],['apps','Apps',LayersIcon],['permissions','Permissions',ShieldCheck],
-  ['storage','Data usage',HardDrive],['files','Files',FolderOpen],['mail','Mail',Mail],['settings','Settings',Settings],
+  ['storage','Data usage',HardDrive],['files','Files',FolderOpen],['friends','Friends',UserRound],['mail','Mail',Mail],['settings','Settings',Settings],
 ] as const;
 function LayersIcon(props:{size?:number}){return <Grid2X2 {...props}/>;}
 const titles:Record<string,[string,string]> = {
@@ -27,6 +28,7 @@ const titles:Record<string,[string,string]> = {
   apps:['Apps','Find the apps and integrations available with X-Center ID.'],
   permissions:['Permissions','Choose what your apps can access.'],
   storage:['Data usage','Review storage used by your account files.'],
+  friends:['Friends','Manage invitations and shared files.'],
   files:['File browser','Upload, download and manage files stored in your account.'],
   mail:['Mail','Manage your X-Center mailbox.'],
   settings:['Settings','Manage your X-Center ID experience.'],
@@ -278,6 +280,7 @@ export default function WebApp(){
   </>;
   else if(page==='permissions')content=<PermissionsPage client={permissionClient}/>;
   else if(page==='devices')content=<DevicesPage/>;
+  else if(page==='friends')content=<FriendsPage/>;
   else if(page==='files'||page==='storage')content=<FilesPage key={page} summary={page==='storage'}/>;
   else if(page==='mail')content=<MailPage account={account}/>;
   else if(page==='security')content=<Security account={account} update={load} addPasskey={()=>passkey('add')}/>;

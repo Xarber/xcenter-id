@@ -5,7 +5,7 @@ const fileLimit = 2 * 1024 * 1024;
 const storageLimit = 10 * 1024 * 1024;
 const fileId = /^[0-9a-f]{8}-[0-9a-f-]{27}$/;
 
-export function createAccountFiles({ database, key, accounts, origin, usage = () => ({}) }) {
+export function createAccountFiles({ database, key, accounts, origin, friends, usage = () => ({}) }) {
   if (!key || key.length !== 32) return null;
   const db = new DatabaseSync(database);
   db.exec(`PRAGMA busy_timeout = 3000; PRAGMA foreign_keys = ON;
@@ -21,6 +21,12 @@ export function createAccountFiles({ database, key, accounts, origin, usage = ()
       file TEXT PRIMARY KEY REFERENCES user_files(id) ON DELETE CASCADE,
       folder TEXT NOT NULL REFERENCES user_folders(id)
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS user_file_shares (
+      id TEXT PRIMARY KEY, file TEXT NOT NULL REFERENCES user_files(id) ON DELETE CASCADE,
+      owner TEXT NOT NULL, recipient TEXT NOT NULL, friendship TEXT NOT NULL,
+      UNIQUE(file,recipient,friendship)
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS file_shares_recipient ON user_file_shares(recipient);
   `);
   const forFolder = db.prepare('SELECT f.* FROM user_files f LEFT JOIN user_file_folders link ON link.file=f.id WHERE f.owner=? AND link.folder IS ? ORDER BY f.created DESC,f.id');
   const children = db.prepare('SELECT * FROM user_folders WHERE owner=? AND parent IS ? ORDER BY created,id');
@@ -35,6 +41,12 @@ export function createAccountFiles({ database, key, accounts, origin, usage = ()
   const count = db.prepare('SELECT total(size) AS bytes,count(*) AS total FROM user_files WHERE owner=?');
   const insert = db.prepare('INSERT INTO user_files VALUES (?,?,?,?,?)');
   const remove = db.prepare('DELETE FROM user_files WHERE owner=? AND id=?');
+  const incomingShares=db.prepare('SELECT * FROM user_file_shares WHERE recipient=?');
+  const outgoingShares=db.prepare('SELECT * FROM user_file_shares WHERE owner=?');
+  const shareById=db.prepare('SELECT * FROM user_file_shares WHERE recipient=? AND id=?');
+  const saveShare=db.prepare('INSERT OR IGNORE INTO user_file_shares VALUES(?,?,?,?,?)');
+  const removeShare=db.prepare('DELETE FROM user_file_shares WHERE owner=? AND id=?');
+  const activeShare=share=>friends?.linked(share.owner,share.recipient)===share.friendship;
   const aad = (owner,id,size) => Buffer.from(JSON.stringify(['authnjs.file.v1',owner,id,size]));
   function unpack(row, includeFile) {
     const envelope = Buffer.from(row.envelope);
@@ -72,10 +84,66 @@ export function createAccountFiles({ database, key, accounts, origin, usage = ()
     res.end(JSON.stringify(result));
   }
 
+  function download(res,file) {
+    const name=encodeURIComponent(file.name).replace(/[!'()*]/g,char=>'%'+char.charCodeAt(0).toString(16));
+    res.writeHead(200,{'Content-Type':'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
+      'Content-Disposition':"attachment; filename*=UTF-8''"+name});
+    res.end(file.data);
+  }
+
   return async (req,res,path)=>{
     const identity=accounts.current(req);
     if(!identity) return json(res,401,{error:'Sign in to manage your files.'});
     const owner=identity.owner;
+    const shareId=/^\/account\/files\/shared\/([0-9a-f-]{36})$/.exec(path)?.[1];
+    if (friends && (path==='/account/files/shared'||shareId)) {
+      if (req.method==='GET'&&!shareId) {
+        const incoming=incomingShares.all(owner).filter(activeShare).flatMap(share=>{
+          const row=select.get(share.owner,share.file);
+          return row?[{...unpack(row,false),id:share.id,from:accounts.username(share.owner)}]:[];
+        });
+        const outgoing=outgoingShares.all(owner).filter(activeShare).flatMap(share=>{
+          const row=select.get(owner,share.file);
+          return row?[{...unpack(row,false),id:share.id,to:accounts.username(share.recipient)}]:[];
+        });
+        return json(res,200,{incoming,outgoing});
+      }
+      if (req.method==='GET'&&shareId) {
+        const share=shareById.get(owner,shareId);
+        const row=share&&activeShare(share)&&select.get(share.owner,share.file);
+        return row?download(res,unpack(row,true)):json(res,404,{error:'Shared file unavailable.'});
+      }
+      if (!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent') {
+        return json(res,403,{error:'Only the account manager can change file access.'});
+      }
+      if (req.method==='DELETE'&&shareId) {
+        removeShare.run(owner,shareId);
+        return json(res,200,{ok:true});
+      }
+      if (req.method!=='POST'||shareId) return json(res,405,{error:'Method unavailable.'});
+      if (!req.headers['content-type']?.startsWith('application/json')) return json(res,415,{error:'JSON required.'});
+      const chunks=[];
+      let size=0;
+      for await (const chunk of req.iterator({destroyOnReturn:false})) {
+        size+=chunk.length;
+        if (size>1024) {req.resume();return json(res,413,{error:'Request too large.'});}
+        chunks.push(chunk);
+      }
+      let input;
+      try { input=JSON.parse(Buffer.concat(chunks).toString()); }
+      catch { return json(res,422,{error:'Invalid share.'}); }
+      const friend=friends.list(owner).find(({id})=>id===input?.friend);
+      if (!friend||typeof input.file!=='string'||!fileId.test(input.file)||!select.get(owner,input.file)) {
+        return json(res,404,{error:'File or friend unavailable.'});
+      }
+      const previous=outgoingShares.all(owner);
+      if (previous.length>=1000) {
+        for (const share of previous) if (!activeShare(share)) removeShare.run(owner,share.id);
+        if (outgoingShares.all(owner).length>=1000) return json(res,409,{error:'Sharing limit reached.'});
+      }
+      saveShare.run(randomUUID(),input.file,owner,friend.owner,friend.id);
+      return json(res,200,{ok:true});
+    }
     const capacity=accounts.storageCapacity?.(owner)??storageLimit;
     const foldersRoute=path==='/account/files/folders';
     const folderItem=path.startsWith('/account/files/folders/');
@@ -95,11 +163,7 @@ export function createAccountFiles({ database, key, accounts, origin, usage = ()
       }
       const row=individual&&select.get(owner,id);
       if(!row)return json(res,404,{error:'File unavailable.'});
-      const file=unpack(row,true);
-      const name=encodeURIComponent(file.name).replace(/[!'()*]/g,char=>'%'+char.charCodeAt(0).toString(16));
-      res.writeHead(200,{'Content-Type':'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
-        'Content-Disposition':"attachment; filename*=UTF-8''"+name});
-      res.end(file.data);return;
+      return download(res,unpack(row,true));
     }
     if(!(accounts.allowsMutation?.(req) ?? req.headers.origin===origin)||req.headers['x-authnjs-request']!=='account-consent'){
       return json(res,403,{error:'Only the account manager can change your files.'});

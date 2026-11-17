@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
 import { createAccountFiles } from './account-files.mjs';
+import { openFriends } from "./account-friends.mjs";
 import { createSamplePermissions } from './sample-permissions.mjs';
 import { openStore } from './store.mjs';
 
@@ -74,4 +75,38 @@ test('sample grants require an account session, exact origin and permission inte
     assert.ok(permissions.every(item=>item.source!=='trips-demo'&&item.destination!=='trips-demo'));
 
   }finally{await new Promise(resolve=>server.close(resolve));store.close();}
+});
+
+test('friend invitations and file shares isolate recipients and do not revive on relink',async t=>{
+  const friends=openFriends(':memory:');
+  const identity={...accounts,username:owner=>owner,allowsMutation:req=>req.headers.origin===origin};
+  const files=createAccountFiles({database:':memory:',key:randomBytes(32),accounts:identity,origin,friends});
+  const server=createServer((req,res)=>void files(req,res,new URL(req.url,origin).pathname)).listen(0,'127.0.0.1');
+  await once(server,'listening');
+  t.after(async()=>{await new Promise(resolve=>server.close(resolve));friends.close();});
+  const endpoint='http://127.0.0.1:'+server.address().port+'/account/files';
+  const call=(owner,path='',method='GET',data,from=origin)=>fetch(endpoint+path,{
+    method,body:data&&JSON.stringify(data),headers:{
+      authorization:owner,origin:from,'content-type':'application/json','x-authnjs-request':'account-consent',
+    },
+  });
+  const invite=friends.invite('owner');
+  assert.equal(friends.accept('owner',invite.code),false);
+  assert.equal(friends.accept('recipient',invite.code),true);
+  assert.equal(friends.accept('another',invite.code),false);
+  const [{id:friend}]=friends.list('owner');
+  const {id:file}=await (await call('owner','','POST',{name:'letter.txt',content:'c2hhcmVk'})).json();
+  assert.equal((await call('recipient','/shared','POST',{file,friend})).status,404);
+  assert.equal((await call('owner','/shared','POST',{file,friend},'https://app.example.test')).status,403);
+  assert.equal((await call('owner','/shared','POST',{file,friend})).status,200);
+  const {incoming:[share]}=await (await call('recipient','/shared')).json();
+  assert.equal(share.name,'letter.txt');
+  assert.equal((await call('another','/shared/'+share.id)).status,404);
+  assert.equal((await call('recipient','/'+file)).status,404);
+  assert.equal(await (await call('recipient','/shared/'+share.id)).text(),'shared');
+  assert.equal(friends.remove('another',friend),false);
+  assert.equal(friends.remove('recipient',friend),true);
+  assert.equal((await call('recipient','/shared/'+share.id)).status,404);
+  assert.equal(friends.accept('recipient',friends.invite('owner').code),true);
+  assert.equal((await call('recipient','/shared/'+share.id)).status,404);
 });

@@ -1,7 +1,8 @@
+import type { Friend, SharedFile } from './friends-model';
 import { Ionicons } from '@expo/vector-icons';
 import { accountShortcuts, accountStatus } from './account-overview';
 import BirthdayPicker from './BirthdayPicker';
-import type { MailMessage } from './mail-message';
+import type { MailMessage, PrivateAddress } from './mail-message';
 import { pickDocumentAsync, pickProfilePhoto, shareDownload } from './native-files';
 import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -19,7 +20,7 @@ type Grant = {source:string;destination:string;expires:number};
 type SampleGrant = {source:string;destination:string;sourceName:string;app:string;shared:boolean;expires:number|null};
 type App = {client:string;name:string};
 type Theme = {background:string;panel:string;ink:string;muted:string;accent:string;soft:string};
-export type NativeSection = 'dashboard'|'profile'|'devices'|'security'|'apps'|'developer'|'permissions'|'storage'|'files'|'mail';
+export type NativeSection = 'dashboard'|'profile'|'devices'|'security'|'apps'|'developer'|'permissions'|'storage'|'files'|'friends'|'mail';
 
 type Props = {
   section:NativeSection;
@@ -44,8 +45,15 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [source,setSource]=useState('');
   const [destination,setDestination]=useState('');
   const [messages,setMessages]=useState<Mail[]>([]);
+  const [aliases,setAliases]=useState<PrivateAddress[]>([]);
   const [openMail,setOpenMail]=useState<{id:string;message:MailMessage}|null>(null);
   const [confirmMailDeletion,setConfirmMailDeletion]=useState(false);
+  const [friends,setFriends]=useState<Friend[]>([]);
+  const [incoming,setIncoming]=useState<SharedFile[]>([]);
+  const [outgoing,setOutgoing]=useState<SharedFile[]>([]);
+  const [invite,setInvite]=useState('');
+  const [friendCode,setFriendCode]=useState('');
+  const [sharing,setSharing]=useState('');
   const [files,setFiles]=useState<Files|null>(null);
   const [folder,setFolder]=useState<string|null>(null);
   const [folderName,setFolderName]=useState('');
@@ -80,7 +88,15 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       setPublished(registered.apps);
     }
     if(section==='files'||section==='storage')setFiles(await api(filesPath));
-    if(section==='mail'&&account.canReceiveMail)setMessages((await api('inbox')).messages);
+    if(section==='friends'||section==='files')setFriends((await api('friends')).friends);
+    if(section==='friends'){
+      const shares=await api('files/shared');
+      setIncoming(shares.incoming);setOutgoing(shares.outgoing);
+    }
+    if(section==='mail'&&account.canReceiveMail){
+      const [inbox,addresses]=await Promise.all([api('inbox'),api('mail/aliases')]);
+      setMessages(inbox.messages);setAliases(addresses.aliases);
+    }
   }
   useEffect(()=>{void load().catch(report);},[section,folder,token]);
 
@@ -229,12 +245,34 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         </View>))}
         {files?.files.map(item=>row(item.id,item.name,formatBytes(item.size),<View style={styles.actions}>
           {fileAction('Download '+item.name,'download-outline',()=>run(()=>shareDownload('files/'+item.id,item.name,token)))}
+          {button('Share',()=>setSharing(value=>value===item.id?'':item.id))}
+          {sharing===item.id&&(friends.length?friends.map(friend=><View key={friend.id}>{button('Share with @'+friend.username,
+            ()=>run(async()=>{await api('files/shared',{file:item.id,friend:friend.id});setSharing('');},'Access granted.'))}</View>):paragraph('Invite a friend from Friends.'))}
           {fileAction('Remove '+item.name,'trash-outline',()=>confirm('Remove file?','This permanently removes the file.',
             ()=>run(()=>mutate('files/'+item.id,{},'DELETE'),'File removed.')))}
         </View>))}
         {button('Upload file',()=>run(async()=>{const file=await pickDocumentAsync();if(file)await mutate('files',{...file,folder});}))}
         {field('New folder name',folderName,setFolderName,{maxLength:160})}
         {button('Create folder',()=>run(async()=>{await mutate('files/folders',{name:folderName,folder});setFolderName('');},'Folder created.'))}
+      </>;
+      break;
+    case 'friends':
+      content=<>
+        {paragraph('Create a one-time code and share it privately. It expires after 15 minutes.')}
+        {button('Create invitation',()=>run(async()=>setInvite((await api('friends/invite',{})).code)))}
+        {!!invite&&<Text selectable style={{color:colors.ink}}>{invite}</Text>}
+        {field('Invitation from a friend',friendCode,setFriendCode,{maxLength:32,autoCapitalize:'none'})}
+        {button('Accept invitation',()=>run(async()=>{await api('friends/accept',{code:friendCode.trim()});setFriendCode('');await load();},'Invitation accepted.'),busy||friendCode.trim().length!==32)}
+        {friends.map(friend=>row(friend.id,'@'+friend.username,'',button('Remove friend',()=>confirm(
+          'Remove friend?','Both accounts will lose access to files shared through this friendship.',
+          ()=>run(()=>mutate('friends/'+friend.id,{},'DELETE'),'Friend removed.'),
+        ))))}
+        <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Shared with you</Text>
+        {incoming.map(file=>row(file.id,file.name,'From @'+file.from,fileAction('Download '+file.name,'download-outline',
+          ()=>run(()=>shareDownload('files/shared/'+file.id,file.name,token)))))}
+        <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Files you shared</Text>
+        {outgoing.map(file=>row(file.id,file.name,'With @'+file.to,button('Revoke access',
+          ()=>run(()=>mutate('files/shared/'+file.id,{},'DELETE'),'Access revoked.'))))}
       </>;
       break;
     case 'mail':
@@ -261,6 +299,11 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           {confirmMailDeletion&&button('Cancel deletion',()=>setConfirmMailDeletion(false))}
         </> : messages.map(item=>row(item.id,'Received '+date(item.received),formatBytes(item.size),
           button('Read email',()=>run(async()=>setOpenMail({id:item.id,message:await api('inbox/'+item.id+'/view')})))))}
+        {!openMail&&aliases.length>0&&<Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Hide My Email addresses</Text>}
+        {!openMail&&aliases.map(item=>row(item.address,item.address,item.active?(item.premium?'Premium address':'Private address'):'Disabled',
+          item.active&&button('Disable address',()=>confirm('Disable this address?','Future messages to this address will be rejected.',
+            ()=>run(async()=>{await api('mail/aliases/'+item.address,{},'DELETE');await load();},'Private address disabled.'),
+          ))))}
         {account.canSendMail&&<>{!account.externalMailSubmission&&paragraph('You can send to X-Center mailboxes.')} {field('Recipient',recipient,setRecipient,{keyboardType:'email-address',autoCapitalize:'none'})}
           {field('Subject',subject,setSubject,{maxLength:120})}{field('Message',mailText,setMailText,{multiline:true})}
           {button(formatted?'Use plain text':'Format message',()=>setFormatted(value=>!value))}

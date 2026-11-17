@@ -507,6 +507,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   return {
     handle,
     current: (req) => session(req),
+    username: (owner) => q('SELECT username FROM identity_profiles WHERE owner=?').get(owner)?.username,
     allowsMutation,
     storageCapacity,
     adminStatus(req,write=false){

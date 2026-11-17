@@ -17,6 +17,25 @@ function download(res, filename, content) {
   }).end(content);
 }
 
+export function handleMailAliases(req,res,path,accounts,mail) {
+  if (!mail || !path.startsWith('/account/mail/aliases')) return false;
+  const session = accounts.current(req);
+  if (!session) { json(res,{error:'Sign in to manage your private addresses.'},401); return true; }
+  if (req.method==='GET' && path==='/account/mail/aliases') {
+    json(res,{aliases:mail.aliases(session.owner)});
+    return true;
+  }
+  const address=/^\/account\/mail\/aliases\/([a-z0-9.-]+@(?:hme\.|mail\.)xcenter\.it)$/.exec(path)?.[1];
+  if (!address || req.method!=='DELETE') json(res,{error:'Method not allowed.'},405);
+  else if (!accounts.allowsMutation(req) || req.headers['x-authnjs-request']!=='account-consent') {
+    json(res,{error:'Invalid origin.'},403);
+  } else {
+    mail.revokeAlias(session.owner,address);
+    json(res,{ok:true});
+  }
+  return true;
+}
+
 export async function handleInbox(req, res, path, accounts, mail) {
   const match = itemPath.exec(path);
   if (!mail || (path !== inbox && !match)) return false;

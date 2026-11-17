@@ -10,6 +10,7 @@ AuthNJS is an account and consent service concept. The legacy Node application c
 - [Integration guide](INTEGRATION.md) covers registering apps, trust, and integrating web and Expo clients.
 - [X-Center preview](XCENTER_PREVIEW.md) records how to access and roll back the deployed web shell.
 - [X-Center ID integration](IDENTITY.md) covers production OIDC, developer activation and sample apps.
+- [Friends and file sharing](FRIENDS.md) covers invitations, grants and revocation.
 - [Mail delivery](MAIL.md) records SMTP, verification and address reservations.
 - [Branding](BRANDING.md) describes the original identity-card icon.
 - [Active tasks](ACTIVE_TASKS.md) records current work and pending verification.

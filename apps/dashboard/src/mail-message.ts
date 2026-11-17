@@ -4,3 +4,5 @@ export type MailMessage = {
   text: string;
   attachments: { index: number; name: string; size: number }[];
 };
+
+export type PrivateAddress = {address:string;client:string;active:boolean;premium:boolean};

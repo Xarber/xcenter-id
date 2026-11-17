@@ -16,7 +16,7 @@ const pages = [
   ['dashboard','Overview','person-circle-outline'],['profile','Profile','id-card-outline'],
   ['devices','Devices','phone-portrait-outline'],['security','Sign-in & security','key-outline'],
   ['apps','Apps','apps-outline'],['permissions','Permissions','shield-checkmark-outline'],
-  ['storage','Data usage','server-outline'],['files','Files','folder-open-outline'],['mail','Mail','mail-outline'],
+  ['storage','Data usage','server-outline'],['files','Files','folder-open-outline'],['friends','Friends','people-outline'],['mail','Mail','mail-outline'],
   ['settings','Settings','settings-outline'],['developer','Developer apps','code-slash-outline'],
 ] as const satisfies ReadonlyArray<readonly [string,string,Icon]>;
 const copy:Record<string,string> = {
@@ -24,6 +24,7 @@ const copy:Record<string,string> = {
   devices:'Review active sessions and sign out other devices.', security:'Manage enrolled passkeys and security keys.',
   apps:'Review connected apps and open the developer portal.', permissions:'Choose what each app can access.',
   storage:'Review file storage used by your account.', files:'Upload, download, and manage private files.',
+  friends:'Manage invitations and shared files.',
   mail:'Read and send mail from your mailbox.', settings:'Manage your X-Center ID experience.',developer:'Register and manage your integrations.',
 };
 const pref = 'authnjs.dashboard.onboarding.v1';

@@ -16,6 +16,7 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
       active INTEGER NOT NULL DEFAULT 1, UNIQUE(owner,client)) STRICT;
     CREATE TABLE IF NOT EXISTS premium_aliases (id TEXT PRIMARY KEY, owner TEXT NOT NULL, client TEXT NOT NULL,
       UNIQUE(owner,client)) STRICT;
+    CREATE TABLE IF NOT EXISTS revoked_premium_aliases (id TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS inbox (id TEXT PRIMARY KEY, owner TEXT NOT NULL, received INTEGER NOT NULL,
       size INTEGER NOT NULL, envelope BLOB NOT NULL) STRICT;
     CREATE INDEX IF NOT EXISTS inbox_owner ON inbox(owner,received);
@@ -24,8 +25,14 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
   const insertAlias = db.prepare('INSERT INTO aliases (id,owner,client) VALUES (?,?,?) ON CONFLICT(owner,client) DO NOTHING');
   const resolveAlias = db.prepare('SELECT owner FROM aliases WHERE id=? AND active=1');
   const premiumAlias = db.prepare('SELECT id FROM premium_aliases WHERE owner=? AND client=?');
+  const standardForOwner = db.prepare('SELECT id,client,active FROM aliases WHERE owner=? ORDER BY id');
+  const premiumForOwner = db.prepare(`SELECT id,client,id NOT IN (SELECT id FROM revoked_premium_aliases) AS active
+    FROM premium_aliases WHERE owner=? ORDER BY id`);
+  const revokeStandard = db.prepare('UPDATE aliases SET active=0 WHERE id=? AND owner=?');
+  const revokePremium = db.prepare('INSERT OR IGNORE INTO revoked_premium_aliases SELECT id FROM premium_aliases WHERE id=? AND owner=?');
+  const premiumRevoked = db.prepare('SELECT 1 FROM revoked_premium_aliases WHERE id=?');
   const insertPremium = db.prepare('INSERT OR IGNORE INTO premium_aliases VALUES (?,?,?)');
-  const resolvePremium = db.prepare('SELECT owner FROM premium_aliases WHERE id=?');
+  const resolvePremium = db.prepare('SELECT owner FROM premium_aliases WHERE id=? AND id NOT IN (SELECT id FROM revoked_premium_aliases)');
   const given = ['mira','nova','leo','luca','thea','noa','iris','elio','aya','max'];
   const surnames = ['reed','hale','woods','mason','stone','lane','cove','park','hart','brooks'];
   const lookup = accounts.prepare('SELECT owner FROM identity_profiles WHERE username=?');
@@ -63,11 +70,23 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
       if (!domains.has('mail.xcenter.it')) return null;
       for (let retry=0;retry<4;retry++) {
         const current=premiumAlias.get(owner,client);
-        if(current) return current.id+'@mail.xcenter.it';
+        if(current) return premiumRevoked.get(current.id)?null:current.id+'@mail.xcenter.it';
         const id=given[randomInt(given.length)]+'.'+surnames[randomInt(surnames.length)]+'.'+randomBytes(3).toString('hex');
         if(insertPremium.run(id,owner,client).changes===1) return id+'@mail.xcenter.it';
       }
       return null;
+    },
+    aliases(owner) {
+      const entries=(rows,domain,premium)=>rows.map(({id,client,active})=>({
+        address:id+'@'+domain,client,active:!!active,premium,
+      }));
+      return [...entries(standardForOwner.all(owner),'hme.xcenter.it',false),...entries(premiumForOwner.all(owner),'mail.xcenter.it',true)];
+    },
+    revokeAlias(owner,address) {
+      const parts=/^([a-z0-9.-]{1,63})@(hme\.xcenter\.it|mail\.xcenter\.it)$/.exec(address);
+      if (!parts) return false;
+      const result=(parts[2]==='hme.xcenter.it'?revokeStandard:revokePremium).run(parts[1],owner);
+      return result.changes===1;
     },
     receive(recipients, content) {
       const unique = [...new Set(recipients.map(resolveRecipient))];

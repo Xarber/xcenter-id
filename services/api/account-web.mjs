@@ -1,4 +1,5 @@
-import { handleInbox } from './mail-routes.mjs';
+import { createFriendRoutes, openFriends } from './account-friends.mjs';
+import { handleInbox, handleMailAliases } from './mail-routes.mjs';
 import { createAdminAppRoutes } from './admin-apps.mjs';
 import { hkdfSync } from 'node:crypto';
 import { Resolver } from 'node:dns/promises';
@@ -35,12 +36,14 @@ const accounts = createAccounts({
 });
 const origin = process.env.AUTHNJS_ACCOUNT_ORIGIN;
 const state = process.env.AUTHNJS_DATA_DIR;
+const friends = configuration ? openFriends(join(state,'accounts.sqlite')) : null;
+const friendRoutes = friends && createFriendRoutes({accounts,friends});
 const otherStorage=(owner)=>{
   const data=accounts.usage(owner);
   return {...data,apps:data.apps+(store?.usage(owner)??0),mail:mail?.usage(owner)??0};
 };
 const accountFiles = configuration ? createAccountFiles({
-  usage:otherStorage,
+  usage:otherStorage,friends,
   database:join(state,'user-files.sqlite'),accounts,origin,
   key:Buffer.from(hkdfSync('sha256',Buffer.from(configuration.profileKey,'hex'),'','authnjs.files.v1',32)),
 }) : null;
@@ -134,7 +137,14 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void dataApi(req,res);
     return;
   }
-  if (accountFiles && (path === '/account/files' || path === '/account/files/folders' || /^\/account\/files\/(?:folders\/)?[0-9a-f-]{36}$/.test(path))) {
+  if (friendRoutes && (path === '/account/friends' || path.startsWith('/account/friends/'))) {
+    void friendRoutes(req,res,path).catch(()=>{
+      if(!res.headersSent) res.writeHead(500,{'Cache-Control':'no-store'});
+      res.end();
+    });
+    return;
+  }
+  if (accountFiles && (path === '/account/files' || path === '/account/files/folders' || /^\/account\/files\/shared(?:\/[0-9a-f-]{36})?$/.test(path) || /^\/account\/files\/(?:folders\/)?[0-9a-f-]{36}$/.test(path))) {
     void accountFiles(req,res,path).catch(()=>{
       if(!res.headersSent) res.writeHead(500,{'Cache-Control':'no-store'});
       res.end();
@@ -220,6 +230,12 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void provider.oidc(req, res);
     return;
   }
+  if (path === '/account/mail/aliases' || path.startsWith('/account/mail/aliases/')) {
+    try {
+      if (!handleMailAliases(req,res,path,accounts,mail)) res.writeHead(404,{'Cache-Control':'no-store'}).end();
+    } catch { if (!res.headersSent) res.writeHead(500); res.end(); }
+    return;
+  }
   if (path === '/account/inbox' || path.startsWith('/account/inbox/')) {
     void handleInbox(req,res,path,accounts,mail).then(handled=>{
       if (!handled) res.writeHead(404,{'Cache-Control':'no-store'}).end();
@@ -234,7 +250,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void accounts.handle(req, res, path);
     return;
   }
-  const webPages = new Set(['/','/signin','/signup','/native-session','/dashboard','/profile','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/mail','/admin']);
+  const webPages = new Set(['/','/signin','/signup','/native-session','/dashboard','/profile','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/friends','/mail','/admin']);
   const relative = webPages.has(path)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(path) ? 'index.html' : path.slice(1);
   const valid = /^(?:index\.html|revision\.txt|manifest\.webmanifest|service-worker\.js|authnjs-[\w-]+\.(?:svg|png)|(?:_expo|assets)\/[\w@./-]+)$/.test(relative);
   if (!valid || relative.split('/').some((part) => part === '.' || part === '..') ||

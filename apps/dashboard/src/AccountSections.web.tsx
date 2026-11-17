@@ -1,4 +1,5 @@
-import type { MailMessage } from './mail-message';
+import type { Friend } from './friends-model';
+import type { MailMessage, PrivateAddress } from './mail-message';
 import { formatBytes, storageCategories } from './storage-summary';
 import { BadgeCheck, Download, File, FileUp, Folder, FolderPlus, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
@@ -39,6 +40,8 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
   const [busy,setBusy]=useState(false);
   const [confirm,setConfirm]=useState('');
   const [creating,setCreating]=useState(false);
+  const [sharing,setSharing]=useState('');
+  const [friends,setFriends]=useState<Friend[]>([]);
   const folder=summary?null:new URLSearchParams(window.location.search).get('folder');
   const folderPath=(id:string|null)=>id?'/files?folder='+encodeURIComponent(id):'/files';
   async function load(){setState(await api('files'+(folder?'?folder='+encodeURIComponent(folder):'')));}
@@ -93,11 +96,22 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
       {state?.files.map(file=><div className="xc-list-row" key={file.id}>
         <div className="xc-file-meta"><a href={'/account/files/'+file.id}><strong>{file.name}</strong></a><p>{size(file.size)} · {date(file.created)}</p></div>
         <div className="xc-actions">
+        <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
+          if(sharing===file.id){setSharing('');return;}
+          setSharing(file.id);setFriends([]);
+          void api('friends').then(result=>setFriends(result.friends)).catch(error=>setStatus(notice(error)));
+        }}>Share</button>
         <a className="xc-button xc-secondary" href={'/account/files/'+file.id} aria-label={'Download '+file.name}><Download size={16}/></a>
         <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
           if(confirm!==file.id){setConfirm(file.id);return;}
           change(()=>api('files/'+file.id,{},'DELETE'),'File removed.');
         }} aria-label={confirm===file.id?'Confirm permanently removing '+file.name:'Remove '+file.name}><Trash2 size={16}/>{confirm===file.id?'Confirm removal':null}</button></div>
+        {sharing===file.id&&<div className="xc-stack">
+          {!friends.length&&<p>Find or invite a friend from Friends.</p>}
+          {friends.map(friend=><button type="button" className="xc-button xc-secondary" key={friend.id} disabled={busy}
+            onClick={()=>change(async()=>{await api('files/shared',{file:file.id,friend:friend.id});setSharing('');},'Access granted.')}>Share with @{friend.username}</button>)}
+        </div>}
+
       </div>)}
       {state?.files.length===0 && state.folders.length===0 && <div className="xc-empty">This folder is empty.</div>}
     </>}
@@ -110,6 +124,8 @@ export function MailPage({ account }:{account:Account}) {
   const [status,setStatus]=useState('');
   const [open,setOpen]=useState<{id:string;message:MailMessage}|null>(null);
   const [confirmDelete,setConfirmDelete]=useState(false);
+  const [aliases,setAliases]=useState<PrivateAddress[]>([]);
+  const [confirmAlias,setConfirmAlias]=useState('');
   const [compose,setCompose]=useState(false);
   const [draft,setDraft]=useState({to:'',subject:'',text:''});
   const [busy,setBusy]=useState(false);
@@ -118,6 +134,9 @@ export function MailPage({ account }:{account:Account}) {
   const [deliveryError,setDeliveryError]=useState('');
   const dialog=useRef<HTMLDialogElement>(null);
   useEffect(()=>{void api('inbox').then(result=>setMessages(result.messages)).catch(error=>setStatus(notice(error)));},[]);
+  useEffect(()=>{
+    if(account.canReceiveMail)void api('mail/aliases').then(result=>setAliases(result.aliases)).catch(()=>{});
+  },[account.canReceiveMail]);
   useEffect(()=>{if(compose&&!dialog.current?.open)dialog.current?.showModal();},[compose]);
   return <section className={'xc-card xc-pad'+(account.canSendMail?' xc-inbox':'')}>
     <div className="xc-row-head"><span className="xc-symbol xc-sky"><Mail size={21}/></span><div><h2>{account.mailbox??'X-Center mailbox'}</h2>
@@ -151,6 +170,20 @@ export function MailPage({ account }:{account:Account}) {
           .catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
       }}>Read email</button>
     </div>)}
+    {aliases.length>0&&<details>
+      <summary>Hide My Email addresses</summary>
+      {aliases.map(item=><div className="xc-list-row" key={item.address}>
+        <div><strong>{item.address}</strong><p>{item.active?(item.premium?'Premium address':'Private address'):'Disabled'}</p></div>
+        {item.active&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
+          if(confirmAlias!==item.address){setConfirmAlias(item.address);return;}
+          setBusy(true);
+          void api('mail/aliases/'+item.address,{},'DELETE').then(()=>api('mail/aliases'))
+            .then(result=>{setAliases(result.aliases);setConfirmAlias('');setStatus('Private address disabled.');})
+            .catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
+        }}>{confirmAlias===item.address?'Confirm stopping delivery':'Disable address'}</button>}
+        {confirmAlias===item.address&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>setConfirmAlias('')}>Cancel</button>}
+      </div>)}
+    </details>}
     {account.canSendMail&&<div className="xc-mail-compose-action">
       <button type="button" className="xc-button xc-primary" onClick={()=>{setDeliveryError('');setCompose(true);}}><MailPlus size={18}/> New email</button>
     </div>}
