@@ -154,3 +154,9 @@ AUTHN-038 gained confirmed bulk mail cleanup on web and native. API tests passed
 The user reaffirmed priority for external internet mail, followed by authenticated mail client access. Outbound TCP 25 from X-Center still timed out to Gmail and iCloud. Public support routing remains pending. The Italian shared overview, pluralized status, and revised admin controls passed 390 px isolated Chrome. The 22 API tests and dashboard typecheck passed. The prior native run built the AAB and both iOS variants. The universal APK job failed and is being diagnosed.
 
 AUTHN-046 build diagnosis. Run 44138528022 completed three artifact jobs. Gradle assembled the APK, then its final certificate assertion failed. The workflow now explicitly signs the final APK and retains its independent fingerprint and architecture checks. Next validate a fresh run on the new source revision. The previous artifacts omit the bulk-inbox, lock and username changes.
+
+### Five-hour checkpoint
+
+The five-hour window reached 8% remaining and resets on 17 November at 22:45:39 CET. UADS §0 pauses new work. The user's weekly override remains in effect. [Native retry 44145142129](https://github.com/Xarber/xcenter-id/actions/runs/44145142129) was confirmed queued for `31891c3`. The earlier AAB and both iOS artifacts passed their SHA-256 checks and the AAB signer matched the expected Android certificate. Physical devices, release publication and AltSource remain unverified.
+
+Resume the user's priority order with AUTHN-039. Establish and verify an external inbound delivery path and a usable outbound route, then finish authenticated SMTP submission and mailbox access for external clients. Continue support address routing with the existing iCloud apex route preserved. Recheck the production snapshot guard and verify the retry's Android APK, AAB and iOS artifacts before any release. AUTHN-043 remains sequenced after mail.
