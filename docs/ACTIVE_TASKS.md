@@ -122,3 +122,9 @@ The subsequent isolated issuer run verified persisted friend sharing and revocat
 Italian Chrome passed the isolated birthday and mailbox flow. Added a dedicated native composer with isolated status, draft retention and keyboard-aware layout. Android workflow now rejects APKs and AABs signed by a different certificate. Verified workflow syntax and comparable signatures with a synthetic signed JAR. No Android or iOS device was available for the new UI, and no native build was dispatched.
 
 Dedicated mailbox readers now use individual web URLs and native modal screens. Isolated Chrome verified passkey return, direct reload, return to a paged inbox and persistent deletion. File sharing and recipient-only downloads also passed in isolated Chrome. The dashboard dependency audit identified a moderate transitive advisory in Expo fingerprint tooling. A scoped override resolved it and the clean-install audit passed.
+
+### 17 November weekly usage checkpoint
+
+The weekly window reached 34% remaining with no reset credits and a reset scheduled for 23 November at 11:05:56 CET. UADS §0 applies a 35% minimum with five to six days until reset. The five-hour window had 49% remaining and resets 17 November at 22:45:39 CET. Implementation and verification commits through `7821843` were confirmed on `origin/testing`. No native release workflow was dispatched.
+
+When usage permits, resume AUTHN-039 first. Verify public delivery with an independent sender, confirm outbound TCP 25 availability with the line provider, and validate outbound delivery before enabling verification mail. Recheck production snapshot readiness on the low-space mount before staging a cutover. Continue independent localization and native release preparation, then apply the UADS §8 build gate and verify the Android certificate and both iOS artifact formats. AUTHN-043 remains ordered after email. Generate distribution metadata from validated release receipts.
