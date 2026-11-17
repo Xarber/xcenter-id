@@ -1,4 +1,5 @@
-import type { Friend, SharedFile } from './friends-model';
+import { accountMessage } from './account-locale';
+import { placeLabel, type Friend, type SharedFile, type FriendRecordIndex, type ShareablePlace } from './friends-model';
 import { Ionicons } from '@expo/vector-icons';
 import { accountShortcuts, accountStatus } from './account-overview';
 import BirthdayPicker from './BirthdayPicker';
@@ -51,6 +52,11 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [friends,setFriends]=useState<Friend[]>([]);
   const [incoming,setIncoming]=useState<SharedFile[]>([]);
   const [outgoing,setOutgoing]=useState<SharedFile[]>([]);
+  const [recordIndex,setRecordIndex]=useState<FriendRecordIndex>();
+  const [places,setPlaces]=useState<ShareablePlace[]>([]);
+  const [publisher,setPublisher]=useState('');
+  const [placeCursor,setPlaceCursor]=useState<string|null>(null);
+  const [placeSelection,setPlaceSelection]=useState('');
   const [invite,setInvite]=useState('');
   const [friendCode,setFriendCode]=useState('');
   const [sharing,setSharing]=useState('');
@@ -90,7 +96,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
     if(section==='files'||section==='storage')setFiles(await api(filesPath));
     if(section==='friends'||section==='files')setFriends((await api('friends')).friends);
     if(section==='friends'){
-      const shares=await api('files/shared');
+      const [shares,index]=await Promise.all([api('files/shared'),api('friends/records')]);
+      setRecordIndex(index);
       setIncoming(shares.incoming);setOutgoing(shares.outgoing);
     }
     if(section==='mail'&&account.canReceiveMail){
@@ -273,6 +280,26 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Files you shared</Text>
         {outgoing.map(file=>row(file.id,file.name,'With @'+file.to,button('Revoke access',
           ()=>run(()=>mutate('files/shared/'+file.id,{},'DELETE'),'Access revoked.'))))}
+        {recordIndex&&(recordIndex.sources.length>0||recordIndex.incoming.length>0||recordIndex.outgoing.length>0)&&<>
+          <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>{accountMessage('sharedAppData','Shared app data')}</Text>
+          {recordIndex.sources.map(app=><View key={app.id}>{button(app.name,()=>run(async()=>{
+            const page=await api('friends/records?source='+encodeURIComponent(app.id));
+            setPublisher(app.id);setPlaces(page.records);setPlaceCursor(page.nextCursor);setPlaceSelection('');
+          }))}</View>)}
+          {places.map(place=>row(place.id,placeLabel(place.value),'',button(
+            placeSelection===place.id?'Cancel selection':'Select place',()=>setPlaceSelection(previous=>previous===place.id?'':place.id),
+          )))}
+          {placeCursor&&button('Load more places',()=>run(async()=>{
+            const page=await api('friends/records?source='+encodeURIComponent(publisher)+'&cursor='+encodeURIComponent(placeCursor));
+            setPlaces(previous=>[...previous,...page.records]);setPlaceCursor(page.nextCursor);
+          }))}
+          {!!placeSelection&&friends.map(friend=><View key={friend.id}>{button('Share this place with @'+friend.username,()=>run(async()=>{
+            await api('friends/records',{friend:friend.id,source:publisher,id:placeSelection});setPlaceSelection('');await load();
+          },'Place shared.'))}</View>)}
+          {recordIndex.incoming.map(item=>row(item.id,placeLabel(item.value),'From @'+item.username))}
+          {recordIndex.outgoing.map(item=>row(item.id,placeLabel(item.value),'To @'+item.username,button('Revoke access',
+            ()=>run(()=>mutate('friends/records/'+item.id,{},'DELETE'),'Access revoked.'))))}
+        </>}
       </>;
       break;
     case 'mail':

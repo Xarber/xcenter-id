@@ -7,3 +7,7 @@ Share an individual file from Files to a specific friend. The friend receives re
 The secure boundaries are the authenticated account, active friendship identity, resource ownership and explicit grant. Creation and deletion require the existing account mutation controls. Per-account limits bound friendships and file grants. API tests exercised single use, self-acceptance denial, unauthorized mutation, cross-account access denial, successful download, unfriend, and no access after relink. Browser and device interaction remain to verify.
 
 Sharing app data is a separate pending extension. It requires a source app opt-in for a versioned dataset, explicit recipient approval of the requested data, and server checks for both the publisher and the recipient. App access tokens keep their existing account scope.
+
+## App data
+
+The first supported dataset is `saved-place.v1`. The operator registers publishers that have opted in under `friendRecordPublishers` in the protected issuer configuration. Entries use the publisher's registered client `id` and display `name`. The capability defaults off. Reported records include the place label and coordinates, visible to the owner before sharing. A recipient sees the current version of the selected place through Friends. Removing the grant, disconnecting the friendship, deleting the record, disabling its publisher or removing that publisher's approval removes access. App access tokens cannot authorize this route. Automated coverage uses synthetic owners and publishers. No production publisher was enabled.

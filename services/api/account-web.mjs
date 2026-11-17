@@ -1,3 +1,4 @@
+import { createFriendRecordRoutes, openFriendRecords } from './friend-records.mjs';
 import { createFriendRoutes, openFriends } from './account-friends.mjs';
 import { handleInbox, handleMailAliases } from './mail-routes.mjs';
 import { createAdminAppRoutes } from './admin-apps.mjs';
@@ -55,6 +56,11 @@ const provider = configuration ? createIdentityProvider({
   issuer: origin, database: join(state, 'oidc.sqlite'), accounts, configuration, mail:mailConfig?.publicDelivery?mail:null, registry,
 }) : null;
 const store = configuration ? openStore(join(state, 'sample-data.sqlite'), Buffer.from(configuration.sampleKey, 'hex')) : null;
+const friendRecordRoutes = friends && store && createFriendRecordRoutes({ accounts, records:openFriendRecords({
+  database:join(state,'sample-data.sqlite'),store,friends,
+  publishers:new Map((configuration.friendRecordPublishers??[]).map(({id,name})=>[id,name])),
+  allowed:(owner,source)=>registry.has(source)&&!accounts.isDisconnected(owner,source),
+}) });
 const sampleOrigins=new Set(configuration?.clients.filter(client=>['notes-external','trips-external'].includes(client.client_id))
   .map(client=>new URL(client.redirect_uris[0]).origin)??[]);
 const samples = provider && store ? createSamples({ issuer: origin, configuration, provider, accounts, store }) : null;
@@ -135,6 +141,13 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   }
   if (dataApi && /^\/v1\/records\/saved-place(?:\/[0-9a-f-]{36})?$/.test(path)) {
     void dataApi(req,res);
+    return;
+  }
+  if (friendRecordRoutes && /^\/account\/friends\/records(?:\/[0-9a-f-]{36})?$/.test(path)) {
+    void friendRecordRoutes(req,res,path,target).catch(()=>{
+      if(!res.headersSent) res.writeHead(500,{'Cache-Control':'no-store'});
+      res.end();
+    });
     return;
   }
   if (friendRoutes && (path === '/account/friends' || path.startsWith('/account/friends/'))) {

@@ -44,6 +44,7 @@ export function openStore(path, key) {
 
   const insert = db.prepare('INSERT INTO records VALUES (?, ?, ?, ?, ?, ?)');
   const list = db.prepare('SELECT id, revision, envelope FROM records WHERE owner = ? AND source = ? AND dataset = ? AND id > ? ORDER BY id LIMIT 101');
+  const one = db.prepare('SELECT revision,envelope FROM records WHERE owner=? AND source=? AND dataset=? AND id=?');
   const update = db.prepare('UPDATE records SET revision = ?, envelope = ? WHERE owner = ? AND source = ? AND dataset = ? AND id = ? AND revision = ?');
   const count = db.prepare('SELECT count(*) AS total FROM records WHERE owner = ? AND source = ? AND dataset = ?');
   const erase = db.prepare('DELETE FROM records WHERE owner = ? AND source = ? AND dataset = ? AND id = ?');
@@ -90,6 +91,10 @@ export function openStore(path, key) {
       } finally {
         db.exec('ROLLBACK');
       }
+    },
+    readOne(owner,source,dataset,id) {
+      const row=one.get(owner,source,dataset,id);
+      return row ? unseal(row.envelope,bindings(owner,source,dataset,id,row.revision)) : null;
     },
     remove: (owner, source, dataset, id) => Number(erase.run(owner, source, dataset, id).changes) === 1,
     grant: (...parameters) => grant.run(...parameters),
