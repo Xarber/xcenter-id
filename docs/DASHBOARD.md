@@ -33,3 +33,11 @@ The mobile app keeps its session in Expo SecureStore. Account controls call the 
 Data Usage separates files, account information, security metadata, app data, and mail. It counts account-owned logical bytes and excludes shared SQLite page overhead. The reported storage limit gates file uploads. Mail retains its separate mailbox quota.
 
 The native account dashboard refreshes account data when it comes back to the foreground, including after passkey enrollment.
+
+### Website permissions and profile feedback
+
+Permissions opens a directory of registered, linked and test apps. A URL under `/permissions/<client>` shows the app's incoming and outgoing grants. Access is still changed by the same account-scoped APIs. Connected app entries link directly to the corresponding page.
+
+Profile save feedback reads Saving while a write is pending and Saved after the service accepts the write. Editing a field or changing the photo restores the Save changes action. The confirmation check animates briefly and stays still with Reduced Motion.
+
+The web design review covered app navigation, grant disclosures, form state, touch and keyboard targets, and animation costs. Permission rows wrap at narrow widths. Hover feedback applies to fine pointers. Text inputs stay at least 16 px at phone widths to avoid browser zoom on focus. Physical mobile browser review remains pending.

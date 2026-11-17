@@ -76,6 +76,7 @@ export function createAccountFiles({ database, key, accounts, origin, usage = ()
     const identity=accounts.current(req);
     if(!identity) return json(res,401,{error:'Sign in to manage your files.'});
     const owner=identity.owner;
+    const capacity=accounts.storageCapacity?.(owner)??storageLimit;
     const foldersRoute=path==='/account/files/folders';
     const folderItem=path.startsWith('/account/files/folders/');
     const id=path.slice(folderItem?'/account/files/folders/'.length:'/account/files/'.length);
@@ -90,7 +91,7 @@ export function createAccountFiles({ database, key, accounts, origin, usage = ()
         const folder=location||null;
         return json(res,200,{files:forFolder.all(owner,folder).map(row=>unpack(row,false)),
           folders:children.all(owner,folder).map(({id,envelope,size,created})=>unpack({id,owner,envelope,size,created},false)),
-          breadcrumbs,categories,used:Object.values(categories).reduce((total,value)=>total+value,0),total:stats.total,limit:storageLimit});
+          breadcrumbs,categories,used:Object.values(categories).reduce((total,value)=>total+value,0),total:stats.total,limit:capacity});
       }
       const row=individual&&select.get(owner,id);
       if(!row)return json(res,404,{error:'File unavailable.'});
@@ -152,7 +153,7 @@ export function createAccountFiles({ database, key, accounts, origin, usage = ()
         folderInsert.run(next,owner,folder,Date.now(),pack(owner,next,name,bytes));
       } else {
         const used=count.get(owner);
-        if(used.bytes+bytes.length+Object.values(usage(owner)).reduce((sum,value)=>sum+value,0)>storageLimit||used.total>=100){
+        if(used.bytes+bytes.length+Object.values(usage(owner)).reduce((sum,value)=>sum+value,0)>capacity||used.total>=100){
           db.exec('ROLLBACK');return json(res,409,{error:'Account file storage is full.'});
         }
         insert.run(next,owner,Date.now(),bytes.length,pack(owner,next,name,bytes));

@@ -1,3 +1,4 @@
+import { validateApplicationProfile } from './application-profile.mjs';
 import { validateApplicationBrand } from './application-brand.mjs';
 import { createServer } from 'node:http';
 import { closeSync, mkdirSync, openSync, constants } from 'node:fs';
@@ -67,8 +68,8 @@ export function createApiHandler({ store, authenticate, apps, consoleClient, dev
       const url = new URL(req.url, 'http://localhost');
       const method = req.method;
       if (method === 'GET' && url.pathname === '/health') return json(res, 200, { status: 'ok' });
-      const brandId=/^\/v1\/developer\/apps\/([0-9a-f-]{36})\/brand$/.exec(url.pathname)?.[1];
-      const developerRoute = url.pathname === '/v1/developer/apps' || !!brandId;
+      const brandId=/^\/v1\/developer\/apps\/([0-9a-f-]{36})\/(brand|profile)$/.exec(url.pathname);
+      const developerRoute = url.pathname === '/v1/developer/apps' || !!brandId || url.pathname==='/v1/developer/profile';
       const consoleRoute = url.pathname === '/v1/grants';
       const recordRoute = url.pathname === '/v1/records/saved-place';
       const recordId = url.pathname.match(/^\/v1\/records\/saved-place\/([^/]+)$/)?.[1];
@@ -78,24 +79,35 @@ export function createApiHandler({ store, authenticate, apps, consoleClient, dev
       const { owner, client } = principal;
       if (developerRoute) {
         if (!registry || client !== developerClient || principal.developer !== true) throw new HttpError(403, 'forbidden');
+        if(url.pathname==='/v1/developer/profile'){
+          if(method==='GET')return json(res,200,registry.developer(owner));
+          if(method!=='POST')throw new HttpError(405,'method_not_allowed');
+          const input=await readJson(req);
+          const name=typeof input.name==='string'?input.name.trim():'';
+          if(!name||name.length>80||/[\p{Cc}\p{Cf}]/u.test(name))throw new HttpError(422,'Enter a developer display name.');
+          const developer=registry.saveDeveloper(owner,name,input.requestVerification===true);
+          if(!developer)throw new HttpError(422,'Add a public GitHub repository to an active app before requesting review.');
+          return json(res,200,developer);
+        }
         if (brandId) {
           if(method!=='PUT')throw new HttpError(405,'method_not_allowed');
-          const brand=await validateApplicationBrand(await readJson(req,48_000)).catch(()=>{throw new HttpError(422,'invalid_app_brand');});
-          if(!registry.updateBrand(owner,brandId,brand))throw new HttpError(404,'registration_unavailable');
+          const input=await readJson(req,64_000);
+          const [ ,id,kind]=brandId;
+          if(kind==='profile'){
+            const profile=await validateApplicationProfile(input).catch(error=>{throw new HttpError(422,error.message);});
+            const item=registry.saveApp(owner,id,profile);
+            if(!item)throw new HttpError(422,'Keep the verified callback origin or register a new app.');
+            return json(res,200,item);
+          }
+          const brand=await validateApplicationBrand(input).catch(()=>{throw new HttpError(422,'invalid_app_brand');});
+          if(!registry.updateBrand(owner,id,brand))throw new HttpError(404,'registration_unavailable');
           return json(res,200,brand);
         }
         if (method === 'GET') return json(res, 200, { apps: registry.list(owner) });
         if (method !== 'POST') throw new HttpError(405, 'method_not_allowed');
-        const input=await readJson(req,48_000);
-        const {name,callback}=input;
-        const brand=await validateApplicationBrand(input).catch(()=>{throw new HttpError(422,'invalid_app_brand');});
-        let target;
-        try { if (typeof callback === 'string' && callback.length <= 512) target = httpsUrl(callback); } catch {}
-        if (typeof name !== 'string' || !name.trim() || name.length > 80 || !target ||
-            !target.pathname || target.pathname === '/' || target.pathname.includes('*')) {
-          throw new HttpError(422, 'invalid_registration');
-        }
-        const app = registry.submit(owner, name.trim(), target.href,brand,input.native===true);
+        const input=await readJson(req,64_000);
+        const profile=await validateApplicationProfile(input).catch(error=>{throw new HttpError(422,error.message);});
+        const app=registry.submit(owner,profile.name,profile.callbacks[0],{icon:profile.icon,developerName:profile.developerName},input.native===true,profile);
         if (!app) throw new HttpError(409, 'registration_quota_reached');
         return json(res, 201, app);
       }

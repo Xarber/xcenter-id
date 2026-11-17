@@ -12,39 +12,99 @@ export function openRegistry(path) {
     CREATE TABLE IF NOT EXISTS client_brand(id TEXT PRIMARY KEY,developer_name TEXT NOT NULL,icon TEXT)
       STRICT;
     CREATE TABLE IF NOT EXISTS client_native(id TEXT PRIMARY KEY) STRICT;
+    CREATE TABLE IF NOT EXISTS app_profiles(id TEXT PRIMARY KEY, description TEXT NOT NULL, repository TEXT NOT NULL, callbacks TEXT NOT NULL, verified INTEGER NOT NULL DEFAULT 0) STRICT;
+    CREATE TABLE IF NOT EXISTS developer_profiles(owner TEXT PRIMARY KEY,name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unverified') STRICT;
   `);
   const add = db.prepare('INSERT INTO clients (id, developer, name, callback) SELECT ?, ?, ?, ? WHERE (SELECT count(*) FROM clients WHERE developer = ?) < 30');
-  const list = db.prepare(`SELECT c.id,c.name,c.callback,c.client,c.status,b.developer_name AS developerName,b.icon,EXISTS(SELECT 1 FROM client_native n WHERE n.id=c.id) AS native FROM clients c
-    LEFT JOIN client_brand b ON b.id=c.id WHERE c.developer=? ORDER BY c.name,c.id`);
-  const lookup = db.prepare('SELECT c.*,EXISTS(SELECT 1 FROM client_native n WHERE n.id=c.id) AS native FROM clients c WHERE id=? AND developer=?');
+  const list = db.prepare(`SELECT c.id,c.name,c.callback,c.client,c.status,b.developer_name AS developerName,b.icon,p.description,p.repository,p.callbacks,p.verified,EXISTS(SELECT 1 FROM client_native n WHERE n.id=c.id) AS native FROM clients c
+    LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN app_profiles p ON p.id=c.id WHERE c.developer=? ORDER BY c.name,c.id`);
+  const lookup = db.prepare('SELECT c.*,p.description,p.repository,p.callbacks,p.verified,EXISTS(SELECT 1 FROM client_native n WHERE n.id=c.id) AS native FROM clients c LEFT JOIN app_profiles p ON p.id=c.id WHERE c.id=? AND c.developer=?');
   const active = db.prepare("SELECT 1 FROM clients WHERE client = ? AND status = 'active'");
   const approve = db.prepare("UPDATE clients SET client = ?, status = 'active' WHERE id = ? AND status = 'pending'");
   const revoke = db.prepare("UPDATE clients SET status = 'revoked' WHERE id = ? AND status = 'active'");
 
   const setBrand=db.prepare(`INSERT INTO client_brand VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET
     developer_name=excluded.developer_name,icon=excluded.icon`);
+  const appView=row=>row?{...row,description:row.description??'',repository:row.repository??'',
+    callbacks:row.callbacks?JSON.parse(row.callbacks):[row.callback],verified:!!row.verified}:undefined;
+  const detailByClient=db.prepare(`SELECT c.name,c.callback,p.callbacks FROM clients c LEFT JOIN app_profiles p ON p.id=c.id
+    WHERE c.client=? AND c.status='active'`);
+  const writeAppProfile=db.prepare(`INSERT INTO app_profiles(id,description,repository,callbacks) VALUES(?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET description=excluded.description,repository=excluded.repository,callbacks=excluded.callbacks,verified=0`);
+  const readDeveloper=db.prepare('SELECT name,status FROM developer_profiles WHERE owner=?');
+  const readOpenSource=db.prepare(`SELECT p.repository FROM app_profiles p JOIN clients c ON c.id=p.id
+    WHERE c.developer=? AND c.status='active' AND p.repository<>'' LIMIT 1`);
+  const developerView=owner=>readDeveloper.get(owner)??{name:'',status:'unverified'};
+  const setAppName=db.prepare('UPDATE clients SET name=?,callback=? WHERE id=? AND developer=?');
   return {
-    brand: (client) => db.prepare(`SELECT c.developer AS owner,b.developer_name AS developerName,b.icon
-      FROM clients c LEFT JOIN client_brand b ON b.id=c.id WHERE c.client=? AND c.status='active'`).get(client),
+    brand: (client) => db.prepare(`SELECT c.developer AS owner,coalesce(nullif(d.name,''),b.developer_name) AS developerName,
+      b.icon,p.description,p.repository,p.verified,d.status AS developerStatus
+      FROM clients c LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN app_profiles p ON p.id=c.id
+      LEFT JOIN developer_profiles d ON d.owner=c.developer WHERE c.client=? AND c.status='active'`).get(client),
+    publicDetails: client=>appView(detailByClient.get(client)),
+    developer: developerView,
+    saveDeveloper(owner,name,request){
+      const previous=developerView(owner);
+      if(request&&(!readOpenSource.get(owner)||!name))return null;
+      const status=request&&previous.status!=='verified'?'requested':
+        previous.status==='verified'&&previous.name!==name?'unverified':previous.status;
+      db.prepare(`INSERT INTO developer_profiles VALUES(?,?,?) ON CONFLICT(owner) DO UPDATE SET name=excluded.name,status=excluded.status`).run(owner,name,status);
+      return developerView(owner);
+    },
+    saveApp(owner,id,profile){
+      const previous=appView(lookup.get(id,owner));
+      if(!previous)return null;
+      if(previous.status!=='pending'&&new URL(previous.callback).origin!==new URL(profile.callbacks[0]).origin)return null;
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        setAppName.run(profile.name,profile.callbacks[0],id,owner);
+        const oldBrand=db.prepare('SELECT developer_name FROM client_brand WHERE id=?').get(id);
+        setBrand.run(id,oldBrand?.developer_name??'',profile.icon);
+        writeAppProfile.run(id,profile.description,profile.repository,JSON.stringify(profile.callbacks));
+        db.exec('COMMIT');
+        return {...appView(lookup.get(id,owner)),icon:profile.icon};
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    },
+    administration:()=>({
+      apps:db.prepare(`SELECT c.id,c.name,c.callback,c.status,p.description,p.repository,p.verified,d.name AS developerName
+        FROM clients c LEFT JOIN app_profiles p ON p.id=c.id LEFT JOIN developer_profiles d ON d.owner=c.developer
+        ORDER BY c.status,c.name LIMIT 300`).all().map(app=>({...app,verified:!!app.verified})),
+      developers:db.prepare("SELECT owner,name,status FROM developer_profiles WHERE status IN ('requested','verified') ORDER BY name LIMIT 300").all()
+        .map(developer=>({...developer,repository:readOpenSource.get(developer.owner)?.repository??null})),
+    }),
+    verifyApp(id,verified){
+      const item=db.prepare("SELECT callback FROM clients WHERE id=? AND status='active'").get(id);
+      if(!item)return false;
+      db.prepare(`INSERT INTO app_profiles VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET verified=excluded.verified`)
+        .run(id,'','',JSON.stringify([item.callback]),Number(verified));
+      return true;
+    },
+    verifyDeveloper(owner,verified){
+      if(verified&&!readOpenSource.get(owner))return false;
+      return db.prepare("UPDATE developer_profiles SET status=? WHERE owner=? AND status IN ('requested','verified')")
+        .run(verified?'verified':'unverified',owner).changes===1;
+    },
     updateBrand(owner,id,brand) {
       const item=lookup.get(id,owner);
       if(!item||item.status==='revoked')return false;
       setBrand.run(id,brand.developerName,brand.icon);
+      db.prepare('UPDATE app_profiles SET verified=0 WHERE id=?').run(id);
       return true;
     },
-    submit(developer, name, callback, brand, native = false) {
+    submit(developer, name, callback, brand, native = false, profile) {
       const id = randomUUID();
       db.exec('BEGIN IMMEDIATE');
       try {
         if(!add.run(id,developer,name,callback,developer).changes){db.exec('COMMIT');return null;}
         if(brand)setBrand.run(id,brand.developerName,brand.icon);
+        if(profile)writeAppProfile.run(id,profile.description,profile.repository,JSON.stringify(profile.callbacks));
         if(native)db.prepare('INSERT INTO client_native VALUES(?)').run(id);
         db.exec('COMMIT');
-        return {id,name,callback,status:'pending',...brand,...(native?{native:true}:{})};
+        return {id,name,callback,status:'pending',...brand,...profile,...(native?{native:true}:{})};
       } catch(error){db.exec('ROLLBACK');throw error;}
     },
-    lookup: (owner,id) => lookup.get(id,owner),
-    list: (developer) => list.all(developer),
+    lookup: (owner,id) => appView(lookup.get(id,owner)),
+    list: (developer) => list.all(developer).map(appView),
     published: () => db.prepare("SELECT client,name FROM clients WHERE status='active' ORDER BY name,client LIMIT 200").all(),
     revokeOwned: (owner,id) => db.prepare("UPDATE clients SET status='revoked' WHERE developer=? AND id=? AND status='active'").run(owner,id).changes === 1,
     has: (client) => Boolean(active.get(client)),

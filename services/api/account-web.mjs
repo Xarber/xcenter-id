@@ -1,3 +1,4 @@
+import { createAdminAppRoutes } from './admin-apps.mjs';
 import { hkdfSync } from 'node:crypto';
 import { Resolver } from 'node:dns/promises';
 import { createServer } from 'node:http';
@@ -43,6 +44,7 @@ const accountFiles = configuration ? createAccountFiles({
   key:Buffer.from(hkdfSync('sha256',Buffer.from(configuration.profileKey,'hex'),'','authnjs.files.v1',32)),
 }) : null;
 const registry = openRegistry(join(state, 'apps.sqlite'));
+const reviewApps=createAdminAppRoutes({accounts,registry});
 const mail = mailConfig?.inboundDomains?.length ? openMailStore({ configuration:mailConfig,
   accountsPath:join(state,'accounts.sqlite'), mailPath:join(state,'mail.sqlite') }) : null;
 const provider = configuration ? createIdentityProvider({
@@ -194,7 +196,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     });
     return;
   }
-  if (path === '/account/developer/apps' || /^\/account\/developer\/apps\/[0-9a-f-]{36}\/brand$/.test(path)) {
+  if (['/account/developer/apps','/account/developer/profile'].includes(path) || /^\/account\/developer\/apps\/[0-9a-f-]{36}\/(?:brand|profile)$/.test(path)) {
     if (req.method !== 'GET' && (!accounts.allowsMutation(req) || req.headers['x-authnjs-request'] !== 'developer-portal')) {
       res.writeHead(403, { 'Cache-Control': 'no-store', 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'invalid_origin' }));
@@ -232,12 +234,16 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     } catch { if (!res.headersSent) res.writeHead(500); res.end(); }
     return;
   }
+  if(path==='/account/admin/apps'){
+    void reviewApps(req,res);
+    return;
+  }
   if (path.startsWith('/account/')) {
     void accounts.handle(req, res, path);
     return;
   }
   const webPages = new Set(['/','/signin','/signup','/native-session','/dashboard','/profile','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/mail','/admin']);
-  const relative = webPages.has(path) ? 'index.html' : path.slice(1);
+  const relative = webPages.has(path)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(path) ? 'index.html' : path.slice(1);
   const valid = /^(?:index\.html|revision\.txt|manifest\.webmanifest|service-worker\.js|authnjs-[\w-]+\.(?:svg|png)|(?:_expo|assets)\/[\w@./-]+)$/.test(relative);
   if (!valid || relative.split('/').some((part) => part === '.' || part === '..') ||
       (req.method !== 'GET' && req.method !== 'HEAD')) {

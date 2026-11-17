@@ -74,3 +74,13 @@ Native preview for deployed revision 9745b7f was queued in [run 43934382712](htt
 | 32 AUTHN-032 | Publish two external test apps with distinct hostnames | Implemented | Distinct origins, callback URLs, access grants and unlinking verified using isolated accounts. Public revision 4637889 passed HTTPS and exact OAuth callback initiation checks on both dedicated hostnames. |
 
 The earlier revision 9745b7f produced both iOS artifacts in run 43934382712. The Android jobs failed at the release signing configuration step. This is historical build evidence only.
+
+Native account controls and the registered sign-in component were submitted in [run 44055741615](https://github.com/Xarber/AuthNJS/actions/runs/44055741615) from 72e60f8. Both Android jobs failed at the release signing gate. The iOS builds and installed-device checks were still pending when the run was checked.
+
+| Order and ID | Request | State | Dependencies and next action |
+| --- | --- | --- | --- |
+| 33 AUTHN-033 | Dedicated app permission pages and profile save feedback | Verified | Isolated Chrome verified app URLs and grants, profile save and rejected writes, 320 px dark layout, and Reduced Motion. |
+| 34 AUTHN-034 | Revise developer app profiles and add admin review, verification and storage controls | Implemented | Browser tests covered app editing, callbacks, global developer profile, review eligibility and admin access denial. API tests covered role and recency checks, app/developer verification and changing account quotas. Production admin access awaits a configured account. |
+| 35 AUTHN-035 | Create the Implement X-Center ID skill | Verified | Skill Creator validation passed after installing PyYAML in a temporary environment. |
+| 36 AUTHN-036 | Give mail composition a separate window and keep New email reachable | Verified | Isolated Chrome with an inbox fixture verified fixed launcher, separate dialog, Escape and draft retention. Local STARTTLS delivery was separately verified on X-Center. |
+| 37 AUTHN-037 | Evaluate external SMTP delivery | Queued | Deferred by user. Research completed. Retain the local SMTP path while external delivery is deferred. Activate only after a future request and verified network or relay prerequisites. |

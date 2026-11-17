@@ -175,9 +175,11 @@ export default function WebApp(){
   const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const didShow=useRef(false);
   const path=window.location.pathname.replace(/^\//,'')||'dashboard';
-  const next=path==='native-session'?window.location.pathname+window.location.search:new URLSearchParams(window.location.search).get('continue')??'';
+  const permissionRoute=/^permissions\/([A-Za-z0-9_-]{1,100})$/.exec(path);
+  const next=path==='native-session'?window.location.pathname+window.location.search:
+    new URLSearchParams(window.location.search).get('continue')??(permissionRoute?'/'+path:'');
   const nativeReturn=/^\/native-session\?challenge=[A-Za-z0-9_-]{43}&state=[A-Za-z0-9_-]{43}$/;
-  const continuation=/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)||nativeReturn.test(next)?next:null;
+  const continuation=/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)||nativeReturn.test(next)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(next)?next:null;
   const authDestination=continuation??'/dashboard';
   const emailToken=new URLSearchParams(window.location.hash.slice(1)).get('verify-email');
   async function load(){setAccount((await api('me')).account);}
@@ -252,7 +254,8 @@ export default function WebApp(){
 
   const name=profile.givenName+' '+profile.surname;
   const picture=profile.hasPicture?'/account/avatar':null;
-  const page=path==='signin'||path==='signup'?'dashboard':path;
+  const permissionClient=permissionRoute?.[1];
+  const page=path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':path;
   const [title,summary]=titles[page]??['Account overview','Manage the details, devices, and apps connected to your X-Center ID.'];
   const shortcuts=[
     ['/profile','Your profile','Edit your photo and personal information',UserRound,'xc-sky'],
@@ -269,7 +272,7 @@ export default function WebApp(){
       }).catch(error=>setNotice(error.message))}>Confirm this email address</button></section>}
     <ProfilePage account={account} update={load}/>
   </>;
-  else if(page==='permissions')content=<PermissionsPage/>;
+  else if(page==='permissions')content=<PermissionsPage client={permissionClient}/>;
   else if(page==='devices')content=<DevicesPage/>;
   else if(page==='files'||page==='storage')content=<FilesPage key={page} summary={page==='storage'}/>;
   else if(page==='mail')content=<MailPage account={account}/>;

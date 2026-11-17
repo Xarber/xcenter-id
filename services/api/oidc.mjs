@@ -60,7 +60,11 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
   const StorageAdapter = openOidcStore(database, storageKey);
   class Adapter extends StorageAdapter {
     async find(id) {
-      return this.model === 'Client' && !registry?.has(id) ? undefined : super.find(id);
+      if(this.model!=='Client')return super.find(id);
+      const app=registry?.publicDetails(id);
+      if(!app)return undefined;
+      const saved=await super.find(id);
+      return saved?{...saved,client_name:app.name,redirect_uris:app.callbacks}:undefined;
     }
   }
   const clientsStorage = new StorageAdapter('Client');
@@ -202,8 +206,10 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       <span class="avatar">${person.hasPicture?'<img alt="" src="/account/avatar">':glyph('user')}</span>${glyph('link')}
       <span class="avatar">${brand?.icon?`<img alt="" src="data:image/png;base64,${escape(brand.icon)}">`:visual?glyph(visual):escape(title.slice(0,2).toUpperCase())}</span></div>
       <h1>Link ${escape(title)} to X-Center ID</h1>
+      ${brand?.description?`<p>${escape(brand.description)}</p>`:''}
       <div class="context"><strong>${escape(person.givenName)} ${escape(person.surname)}</strong><br>
-      Developed by ${escape(developerName)} at <strong>${escape(client.host)}</strong></div>
+      Developed by ${escape(developerName)} at <strong>${escape(client.host)}</strong>
+      ${brand?.verified?'<br>Verified app':''}${brand?.developerStatus==='verified'?'<br>Verified developer':''}</div>
       <h2>Permissions</h2><ul class="permission-list">${permissions.filter(item=>item[2]).map(([symbol,label])=>`<li>${glyph(symbol)}<span>${label}</span></li>`).join('')}</ul>
       <p>You can review app access in X-Center ID.</p>
       <form method="post">${missing.has('email') ? `<fieldset><legend>Email address to share</legend>
@@ -223,7 +229,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const metadata = {
         client_id, client_name:application.name,
         ...(client_secret?{client_secret}:{}), application_type:application.native?'native':'web',
-        redirect_uris:[application.callback], grant_types:['authorization_code'], response_types:['code'],
+        redirect_uris:application.callbacks??[application.callback], grant_types:['authorization_code'], response_types:['code'],
         token_endpoint_auth_method:application.native?'none':'client_secret_basic', subject_type:'pairwise',
       };
       await clientsStorage.upsert(client_id,metadata);

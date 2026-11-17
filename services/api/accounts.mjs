@@ -16,6 +16,7 @@ const digest = (value) => createHash('sha256').update(value).digest('hex');
 const now = () => Date.now();
 const sessionAge = 12 * 60 * 60 * 1000;
 const recentAge = 5 * 60 * 1000;
+const standardStorage=10*1024**2;
 
 class AccountError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -89,6 +90,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       owner TEXT PRIMARY KEY REFERENCES accounts(id), username TEXT UNIQUE NOT NULL,
       given_name TEXT NOT NULL, surname TEXT NOT NULL, age_range TEXT NOT NULL
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS account_storage_caps(owner TEXT PRIMARY KEY REFERENCES accounts(id),bytes INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS verified_emails (owner TEXT NOT NULL REFERENCES accounts(id),
       address TEXT PRIMARY KEY, verified INTEGER NOT NULL) STRICT;
   `);
@@ -98,6 +100,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   const adminIds = new Set((process.env.AUTHNJS_ADMIN_ACCOUNT_IDS ?? '').split(',').map(item=>item.trim()).filter(Boolean));
   const isAdmin = (active) => !!(active && adminIds.has(active.owner));
   const q = (sql) => db.prepare(sql);
+  const storageCapacity=owner=>q('SELECT bytes FROM account_storage_caps WHERE owner=?').get(owner)?.bytes??standardStorage;
   const account = q('SELECT name FROM accounts WHERE id=?');
   const readProfile = q('SELECT username,given_name AS givenName,surname,age_range AS ageRange FROM identity_profiles WHERE owner=?');
   if (profileKey && profileKey.length !== 32) throw new Error('Invalid profile encryption key');
@@ -250,9 +253,9 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     }
     if (req.method === 'GET' && pathname === '/account/admin/accounts') {
       requireCondition(isAdmin(active),403,'Administrator access is required.');
-      return {accounts:q(`SELECT p.username,coalesce(e.premium_mail,0) AS premium FROM identity_profiles p
+      return {accounts:q(`SELECT p.username,p.owner,coalesce(e.premium_mail,0) AS premium FROM identity_profiles p
         LEFT JOIN account_entitlements e ON e.owner=p.owner ORDER BY p.username LIMIT 500`).all()
-        .map(row=>({username:row.username,premium:!!row.premium}))};
+        .map(row=>({username:row.username,premium:!!row.premium,capacity:storageCapacity(row.owner)}))};
     }
     if (req.method === 'GET' && pathname === '/account/avatar') {
       const picture = active && profile(active.owner)?.picture;
@@ -312,6 +315,14 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         hash=(SELECT hash FROM account_devices WHERE id=?)`).run(active.owner,active.hash,input.id??'');
       requireCondition(changed.changes===1,404,'Session unavailable.');
       return {ok:true};
+    }
+    if(pathname==='/account/admin/storage'){
+      requireCondition(isAdmin(active),403,'Administrator access is required.');
+      recent(active);
+      const selected=usernameOwner.get(typeof input.username==='string'?input.username:'');
+      requireCondition(selected&&Number.isSafeInteger(input.capacity)&&input.capacity>=1024**2&&input.capacity<=1024**3,422,'Enter an account and a capacity from 1 MB to 1 GB.');
+      q(`INSERT INTO account_storage_caps VALUES(?,?) ON CONFLICT(owner) DO UPDATE SET bytes=excluded.bytes`).run(selected.owner,input.capacity);
+      return {ok:true,capacity:input.capacity};
     }
     if (pathname === '/account/admin/premium') {
       requireCondition(isAdmin(active),403,'Administrator access is required.');
@@ -465,6 +476,13 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     handle,
     current: (req) => session(req),
     allowsMutation,
+    storageCapacity,
+    adminStatus(req,write=false){
+      const active=session(req);
+      if(!isAdmin(active))return 403;
+      if(write&&(!allowsMutation(req)||Date.now()-active.created>=recentAge))return 403;
+      return 200;
+    },
     rememberApp(owner,client,label,grant) {
       db.exec('BEGIN IMMEDIATE');
       try {

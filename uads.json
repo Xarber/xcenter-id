@@ -35,7 +35,11 @@
     "accountStorageBreakdown": "implemented",
     "linkedAppRevocation": "implemented",
     "externalSampleOrigins": "implemented",
-    "emailCodeSignIn": "implemented"
+    "emailCodeSignIn": "implemented",
+    "perAppPermissions": "implemented",
+    "developerAppProfiles": "implemented",
+    "administratorVerification": "implemented",
+    "mailComposer": "implemented"
   },
   "distribution": {
     "githubReleases": "pending authorization and verification"
