@@ -28,3 +28,11 @@ A locally configured dashboard can read mail from the on-appliance inbox and sub
 - The work to enable external delivery is deferred. No Postfix service, public submission listener, paid relay, or DNS change is part of the compose update.
 
 The web inbox opens a dedicated composer only after the fixed New email action is selected. Closing it keeps the current draft while the inbox page remains open. A successful submission clears the draft.
+
+## Reading and cleanup
+
+Both account clients can open a message inside Mail, download individual attachment bytes or download the original RFC 822 message, and permanently delete a message after confirmation. The attachment response uses a generic filename and a forced download. Display names are treated as text. The API derives the owner from the authenticated account session and filters every lookup and deletion by that owner. Changes are visible on reload on other devices. Old snapshots may still contain previously deleted ciphertext.
+
+The API parses bounded incoming MIME and returns plaintext. HTML-only messages are converted to text, without image loading or raw HTML. Native and web use the same API. The original message remains available for use in an external client. Incoming MIME support does not enable rich outbound composition, public SMTP delivery or IMAP. [MailParser documentation](https://nodemailer.com/extras/mailparser)
+
+On 17 November the full API suite passed 16 tests, including anonymous and cross-account access denial, download headers, MIME rendering, origin checks and owner-scoped deletion. The Expo dashboard typecheck passed. Public TCP 25 still refused connections, and DNS showed no dedicated MX for the two receiving subdomains. The new reader has not been staged or physically tested.

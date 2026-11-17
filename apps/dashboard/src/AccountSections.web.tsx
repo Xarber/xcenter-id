@@ -1,3 +1,4 @@
+import type { MailMessage } from './mail-message';
 import { formatBytes, storageCategories } from './storage-summary';
 import { BadgeCheck, File, FileUp, Folder, FolderPlus, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
@@ -105,20 +106,47 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
 export function MailPage({ account }:{account:Account}) {
   const [messages,setMessages]=useState<{id:string;received:number;size:number}[]|null>(null);
   const [status,setStatus]=useState('');
+  const [open,setOpen]=useState<{id:string;message:MailMessage}|null>(null);
+  const [confirmDelete,setConfirmDelete]=useState(false);
   const [compose,setCompose]=useState(false);
   const [draft,setDraft]=useState({to:'',subject:'',text:''});
   const [busy,setBusy]=useState(false);
   const [deliveryError,setDeliveryError]=useState('');
   const dialog=useRef<HTMLDialogElement>(null);
-  useEffect(()=>{void api('inbox').then(result=>setMessages(result.messages)).catch(()=>{});},[]);
+  useEffect(()=>{void api('inbox').then(result=>setMessages(result.messages)).catch(error=>setStatus(notice(error)));},[]);
   useEffect(()=>{if(compose&&!dialog.current?.open)dialog.current?.showModal();},[compose]);
   return <section className={'xc-card xc-pad'+(account.canSendMail?' xc-inbox':'')}>
     <div className="xc-row-head"><span className="xc-symbol xc-sky"><Mail size={21}/></span><div><h2>{account.mailbox??'X-Center mailbox'}</h2>
     <p>{messages?'Your private mailbox.':'This address is reserved. Mailbox delivery is unavailable.'}</p></div></div>
     {messages&&!account.externalMail&&<p>This inbox can receive local X-Center mail. External delivery is unavailable.</p>}
     {messages?.length===0 && <div className="xc-empty">Your inbox is empty.</div>}
-    {messages?.map(message=><div className="xc-list-row" key={message.id}><span>Received {date(message.received)} · {size(message.size)}</span>
-      <a href={'/account/inbox/'+message.id}>Download email</a></div>)}
+    {open ? <article className="xc-stack">
+      <button className="xc-button xc-secondary xc-self-start" onClick={()=>{setOpen(null);setConfirmDelete(false);}}>Back to inbox</button>
+      <h3>{open.message.subject || '(No subject)'}</h3>
+      <p>{open.message.from}</p>
+      <p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{open.message.text}</p>
+      {open.message.attachments.map(file=><a key={file.index} href={'/account/inbox/'+open.id+'/attachments/'+file.index}>{file.name} · {size(file.size)}</a>)}
+      <a href={'/account/inbox/'+open.id}>Download original email</a>
+      <div className="xc-row-head">
+        <button type="button" disabled={busy} className="xc-button xc-secondary" onClick={()=>{
+          if(!confirmDelete){setConfirmDelete(true);return;}
+          const id=open.id;
+          setBusy(true);
+          void api('inbox/'+id,{},'DELETE').then(()=>{
+            setMessages(previous=>previous?.filter(message=>message.id!==id)??null);
+            setOpen(null);setConfirmDelete(false);setStatus('Email deleted.');
+          }).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
+        }}><Trash2 size={18}/> {confirmDelete?'Confirm permanent deletion':'Delete email'}</button>
+        {confirmDelete&&<button className="xc-button xc-secondary" disabled={busy} onClick={()=>setConfirmDelete(false)}>Cancel</button>}
+      </div>
+    </article> : messages?.map(message=><div className="xc-list-row" key={message.id}>
+      <span>Received {date(message.received)} · {size(message.size)}</span>
+      <button className="xc-button xc-secondary" disabled={busy} onClick={()=>{
+        setBusy(true);setStatus('');
+        void api('inbox/'+message.id+'/view').then(result=>setOpen({id:message.id,message:result}))
+          .catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
+      }}>Read email</button>
+    </div>)}
     {account.canSendMail&&<div className="xc-mail-compose-action">
       <button type="button" className="xc-button xc-primary" onClick={()=>{setDeliveryError('');setCompose(true);}}><MailPlus size={18}/> New email</button>
     </div>}

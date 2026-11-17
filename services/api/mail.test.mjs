@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { createServer } from 'node:http';
+import { handleInbox } from './mail-routes.mjs';
 import { randomBytes } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -42,6 +44,11 @@ test('SMTP accepts registered destinations and aliases, rejects relay and isolat
     assert.equal(messages.length,3);
     assert.ok(store.retrieve('alex-owner',messages[0].id).includes(Buffer.from('ciphertext check')));
     assert.equal(store.retrieve('different-owner',messages[0].id),null);
+    assert.equal(store.remove('different-owner',messages[0].id),false);
+    assert.equal(store.remove('alex-owner',messages[0].id),true);
+    assert.equal(store.remove('alex-owner',messages[0].id),false);
+    assert.equal(store.retrieve('alex-owner',messages[0].id),null);
+    assert.equal(store.list('alex-owner').length,2);
     assert.ok(!readFileSync(mailPath).includes(Buffer.from('ciphertext check')));
   } finally {
     await new Promise((resolve) => server.close(resolve));
@@ -67,4 +74,44 @@ test('email remains pending until the matching account uses its one-time verific
     assert.equal(service.confirm('first',token),false);
     assert.equal(db.prepare('SELECT address FROM verified_emails').get().address,'valid@example.test');
   } finally { db.close(); }
+});
+
+test('inbox routes expose text and attachments to their owner and protect deletion', async (t) => {
+  const id = '12345678-1234-1234-1234-123456789abc';
+  const transport = nodemailer.createTransport({streamTransport:true, buffer:true});
+  let {message} = await transport.sendMail({
+    from:'sender@example.test',to:'reader@example.test',subject:'A document',
+    html:'<p>Message text</p><img src="https://example.test/image.png" alt="">',
+    attachments:[{filename:'report.txt',content:'document bytes'}],
+  });
+  const accounts = {
+    current:req=>req.headers['x-test-account']?{owner:req.headers['x-test-account']}:null,
+    allowsMutation:req=>req.headers.origin==='https://identity.example.test',
+  };
+  const mail = {
+    retrieve:owner=>owner==='reader'?message:null,
+    remove:owner=>{if(owner==='reader')message=null;},
+  };
+  const server = createServer((req,res)=>void handleInbox(req,res,req.url,accounts,mail));
+  server.listen(0,'127.0.0.1');
+  await once(server,'listening');
+  t.after(()=>new Promise(resolve=>server.close(resolve)));
+  const root = 'http://127.0.0.1:'+server.address().port+'/account/inbox/'+id;
+  const reader = {'X-Test-Account':'reader'};
+  assert.equal((await fetch(root+'/view')).status,401);
+  assert.equal((await fetch(root+'/view',{headers:{'X-Test-Account':'other'}})).status,404);
+  const response = await fetch(root+'/view',{headers:reader});
+  assert.equal(response.headers.get('cache-control'),'no-store');
+  const view = await response.json();
+  assert.match(view.text,/Message text/);
+  assert.equal(view.html,undefined);
+  assert.equal(view.attachments[0].name,'report.txt');
+  const attachment = await fetch(root+'/attachments/0',{headers:reader});
+  assert.equal(attachment.headers.get('content-disposition'),'attachment; filename="attachment-1"');
+  assert.equal(await attachment.text(),'document bytes');
+  assert.equal((await fetch(root,{method:'DELETE',headers:reader})).status,403);
+  assert.equal((await fetch(root,{method:'DELETE',headers:{
+    ...reader,Origin:'https://identity.example.test','X-AuthNJS-Request':'account-consent',
+  }})).status,200);
+  assert.equal((await fetch(root+'/view',{headers:reader})).status,404);
 });

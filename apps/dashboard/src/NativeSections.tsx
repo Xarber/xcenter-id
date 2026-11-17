@@ -1,3 +1,4 @@
+import type { MailMessage } from './mail-message';
 import { pickDocumentAsync, pickProfilePhoto, shareDownload } from './native-files';
 import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -40,6 +41,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [source,setSource]=useState('');
   const [destination,setDestination]=useState('');
   const [messages,setMessages]=useState<Mail[]>([]);
+  const [openMail,setOpenMail]=useState<{id:string;message:MailMessage}|null>(null);
+  const [confirmMailDeletion,setConfirmMailDeletion]=useState(false);
   const [files,setFiles]=useState<Files|null>(null);
   const [folder,setFolder]=useState<string|null>(null);
   const [folderName,setFolderName]=useState('');
@@ -218,8 +221,26 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       content=<>{paragraph(account.mailbox??'No mailbox has been reserved.')}
         {paragraph(account.canReceiveMail?(messages.length?'Your inbox':'Your inbox is empty.'):'Mailbox delivery is unavailable.')}
         {account.canReceiveMail&&!account.externalMail&&paragraph('This inbox can receive local X-Center mail. External delivery is unavailable.')}
-        {messages.map(item=>row(item.id,'Received '+date(item.received),formatBytes(item.size),
-          button('Open email',()=>run(()=>shareDownload('inbox/'+item.id,'message.eml',token)))))}
+        {openMail ? <>
+          {button('Back to inbox',()=>{setOpenMail(null);setConfirmMailDeletion(false);})}
+          {row(openMail.id,openMail.message.subject||'(No subject)',openMail.message.from)}
+          {paragraph(openMail.message.text)}
+          {openMail.message.attachments.map(file=><View key={file.index}>
+            {paragraph(file.name+' · '+formatBytes(file.size))}
+            {button('Download attachment',()=>run(()=>shareDownload('inbox/'+openMail.id+'/attachments/'+file.index,'attachment-'+(file.index+1),token)))}
+          </View>)}
+          {button('Download original email',()=>run(()=>shareDownload('inbox/'+openMail.id,'message.eml',token)))}
+          {button(confirmMailDeletion?'Confirm permanent deletion':'Delete email',()=>{
+            if(!confirmMailDeletion){setConfirmMailDeletion(true);return;}
+            run(async()=>{
+              await api('inbox/'+openMail.id,{},'DELETE');
+              setMessages(items=>items.filter(item=>item.id!==openMail.id));
+              setOpenMail(null);setConfirmMailDeletion(false);
+            },'Email deleted.');
+          })}
+          {confirmMailDeletion&&button('Cancel deletion',()=>setConfirmMailDeletion(false))}
+        </> : messages.map(item=>row(item.id,'Received '+date(item.received),formatBytes(item.size),
+          button('Read email',()=>run(async()=>setOpenMail({id:item.id,message:await api('inbox/'+item.id+'/view')})))))}
         {account.canSendMail&&<>{!account.externalMailSubmission&&paragraph('You can send to X-Center mailboxes.')} {field('Recipient',recipient,setRecipient,{keyboardType:'email-address',autoCapitalize:'none'})}
           {field('Subject',subject,setSubject,{maxLength:120})}{field('Message',mailText,setMailText,{multiline:true})}
           {button('Send email',()=>run(async()=>{await api('mail/send',{to:recipient,subject,text:mailText});setRecipient('');setSubject('');setMailText('');},'Mail accepted for delivery.'))}</>}

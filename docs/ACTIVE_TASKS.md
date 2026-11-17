@@ -86,3 +86,19 @@ Native account controls and the registered sign-in component were submitted in [
 | 37 AUTHN-037 | Evaluate external SMTP delivery | Queued | Deferred by user. Research completed. Retain the local SMTP path while external delivery is deferred. Activate only after a future request and verified network or relay prerequisites. |
 
 Public web revision bd6b402 is deployed on the account and sample origins. Both iOS artifacts are from the native preview source 72e60f8. The Admin dashboard awaits an authorized production account assignment. External SMTP delivery remains deferred by the user.
+
+### 17 November follow-up
+
+Mail confidentiality and mailbox transport move ahead of the compact navbar fix at the user's request. Independent account and repository work can proceed while public mail routing is blocked.
+
+| Order and ID | Request | State | Evidence, dependencies and next action |
+| --- | --- | --- | --- |
+| 38 AUTHN-038 | Read and clean up mail in web and native, with attachments and safe formatting | Implemented | Owner-scoped plaintext reader, downloads and confirmed permanent deletion. API regression tests and Expo typecheck passed. Next stage browser and native verification. Outgoing rich formatting and attachments remain open. |
+| 39 AUTHN-039 | External delivery, Hide My Email and mail-client interoperability | Blocked | Reopened deferred AUTHN-037. Public TCP 25 refused and mail subdomains have no own MX. Root MX remains iCloud. Configure an authorized upstream SMTP sender and external ingress, validate aliases, and add authenticated submission plus IMAP for other email clients. |
+| 40 AUTHN-040 | Mobile and web parity, device labels, signup/passkey naming, localized dates and Italian plus other main languages | Queued | Compare native and web account sections and share presentation and localization. Check platform control of credential names and username eligibility before registration. |
+| 41 AUTHN-041 | Permission toggles, incremental authorization and full unlink revocation | Queued | Trace existing OAuth consent and grant behavior, then verify unlink clears every grant projection. |
+| 42 AUTHN-042 | Friends, share files and app data, and polish web and native file browsers | Queued | Design explicit invitation, recipient and resource boundaries before implementing cross-account grants. |
+| 43 AUTHN-043 | Preserve horizontal scroll in the compact account navbar | Queued | User ordered after email. Tab anchors in Expo Web currently cause document navigation. |
+| 44 AUTHN-044 | Grant the production account xarberyt admin and rename it to xarber | Queued | Verify stable account identity and protected-name ownership. Prepare isolated backup, targeted change and live verification. |
+| 45 AUTHN-045 | Rename and brand the GitHub repository | In Progress | Verified repository admin permission. Update the existing repository and preserve history and access. |
+| 46 AUTHN-046 | Fix Android signing and prepare AltSource and distribution | Blocked | Latest builds failed signing validation and GitHub Actions secret list was empty. Locate the established signing identity or obtain explicit confirmation for a new key if this package has never been distributed. Apply §8 before builds and use actual release artifacts for metadata. |

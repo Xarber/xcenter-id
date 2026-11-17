@@ -1,3 +1,4 @@
+import { handleInbox } from './mail-routes.mjs';
 import { createAdminAppRoutes } from './admin-apps.mjs';
 import { hkdfSync } from 'node:crypto';
 import { Resolver } from 'node:dns/promises';
@@ -217,21 +218,10 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void provider.oidc(req, res);
     return;
   }
-  if (mail && req.method === 'GET' && (path === '/account/inbox' || /^\/account\/inbox\/[0-9a-f-]{36}$/.test(path))) {
-    const session = accounts.current(req);
-    if (!session) { res.writeHead(401, { 'Cache-Control':'no-store' }).end(); return; }
-    try {
-      if (path === '/account/inbox') {
-        res.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store'});
-        res.end(JSON.stringify({ messages:mail.list(session.owner) }));
-      } else {
-        const message = mail.retrieve(session.owner, path.split('/').at(-1));
-        if (!message) { res.writeHead(404, {'Cache-Control':'no-store'}).end(); return; }
-        res.writeHead(200, {'Content-Type':'application/octet-stream','Content-Disposition':'attachment; filename="message.eml"',
-          'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
-        res.end(message);
-      }
-    } catch { if (!res.headersSent) res.writeHead(500); res.end(); }
+  if (path === '/account/inbox' || path.startsWith('/account/inbox/')) {
+    void handleInbox(req,res,path,accounts,mail).then(handled=>{
+      if (!handled) res.writeHead(404,{'Cache-Control':'no-store'}).end();
+    }).catch(()=>{ if (!res.headersSent) res.writeHead(500); res.end(); });
     return;
   }
   if(path==='/account/admin/apps'){

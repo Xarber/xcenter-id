@@ -32,6 +32,7 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
   const add = db.prepare('INSERT INTO inbox VALUES (?,?,?,?,?)');
   const count = db.prepare('SELECT total(size) AS bytes,count(*) AS messages FROM inbox WHERE owner=?');
   const list = db.prepare('SELECT id,received,size FROM inbox WHERE owner=? ORDER BY received DESC,id LIMIT 100');
+  const remove = db.prepare('DELETE FROM inbox WHERE owner=? AND id=?');
   const get = db.prepare('SELECT * FROM inbox WHERE owner=? AND id=?');
 
   function resolveRecipient(value) {
@@ -92,6 +93,7 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
     },
     usage: (owner) => count.get(owner).bytes,
     list: (owner) => list.all(owner),
+    remove: (owner,id) => remove.run(owner,id).changes === 1,
     retrieve(owner,id) {
       const row = get.get(owner,id);
       if (!row) return null;
