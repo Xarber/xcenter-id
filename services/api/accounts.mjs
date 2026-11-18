@@ -431,7 +431,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       return {ok:true};
     }
     if(pathname==='/account/username-change'||pathname==='/account/admin/username-changes'){
-      recent(active);
+      requireCondition(active,401,'Sign in first.');
+      if(pathname.includes('/admin/')||input.action==='confirm')recent(active);
       requireCondition(req.headers['x-authnjs-request']==='account-consent',403,'Invalid request.');
       requireCondition(profileKey,503,'Username changes require encrypted account storage.');
       const admin=pathname.includes('/admin/');
@@ -754,7 +755,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       requireCondition(available(owner)&&profile(owner),403,'Account unavailable.');
       requireCondition(q('SELECT premium_mail FROM account_entitlements WHERE owner=?').get(owner)?.premium_mail===1,403,'Premium private addresses are not enabled for your account.');
       if(client){const existing=q('SELECT local,active FROM mailbox_aliases WHERE owner=? AND client=?').get(owner,client);if(existing)return existing.active?existing.local+'@mail.xcenter.it':null;}
-      const chosen=candidate||'alias'+randomBytes(7).toString('hex');
+      const words=['amber','birch','cedar','dawn','fern','grove','lark','maple','moss','pearl','reed','sage'];
+      const chosen=candidate||words[randomBytes(1)[0]%words.length]+randomBytes(5).toString('hex');
       const result=validateUsername(chosen,reservedNames);requireCondition(!result.error,422,result.error);
       db.exec('BEGIN IMMEDIATE');
       try{
@@ -768,6 +770,17 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       requireCondition(typeof enabled==='boolean'&&available(owner),422,'Choose an address state.');
       if(enabled)requireCondition(q('SELECT premium_mail FROM account_entitlements WHERE owner=?').get(owner)?.premium_mail===1,403,'Premium private addresses are unavailable.');
       return q('UPDATE mailbox_aliases SET active=? WHERE owner=? AND local=?').run(Number(enabled),owner,local).changes===1;
+    },
+    linkedAppLabel:(owner,client)=>q('SELECT label FROM connected_apps WHERE owner=? AND client=?').get(owner,client)?.label??appBrand(client)?.name,
+    isAdministrator:req=>isAdmin(session(req)),
+    deleteMailboxAlias(owner,local){
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        const removed=q('DELETE FROM mailbox_aliases WHERE owner=? AND local=?').run(owner,local).changes;
+        if(removed)q('INSERT OR IGNORE INTO retired_usernames VALUES(?)').run(local);
+        db.exec('COMMIT');
+        return !!removed;
+      }catch(error){db.exec('ROLLBACK');throw error;}
     },
     mailboxSender(owner,address){
       const current=profile(owner)?.username+'@mail.xcenter.it';

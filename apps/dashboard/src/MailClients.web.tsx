@@ -1,10 +1,10 @@
-import {useEffect,useState} from 'react';import {api} from './web-account';import Reauthenticate from './Reauthenticate.web';
+import {useEffect,useState} from 'react';import {api} from './web-account';import {confirmIdentity} from './Reauthenticate.web';
 type Client={id:string;label:string;created:number;lastUsed:number|null};
 export default function MailClients(){
  const [clients,setClients]=useState<Client[]>([]),[label,setLabel]=useState(''),[secret,setSecret]=useState(''),[editing,setEditing]=useState(false),[status,setStatus]=useState('');
  const load=()=>api('mail/clients').then(r=>setClients(r.clients));useEffect(()=>{void load().catch(e=>setStatus(e.message));},[]);
- function act(body:object){setStatus('');void api('mail/clients',body).then(async result=>{if(result.password)setSecret(result.password);setEditing(false);setLabel('');await load();}).catch(e=>setStatus(e.message));}
- return <section className="xc-card xc-pad xc-stack"><h2>Mail clients</h2><p>Use a separate credential for each mail app. Revoking it does not sign out your dashboard.</p><details><summary>Confirm identity</summary><Reauthenticate complete={()=>setStatus('Identity confirmed.')}/></details>
+ function act(body:object){setStatus('');void (async()=>{if(!(await api('session/access')).confirmed)await confirmIdentity();return api('mail/clients',body);})().then(async result=>{if(result.password)setSecret(result.password);setEditing(false);setLabel('');await load();}).catch(e=>setStatus(e.message));}
+ return <section className="xc-card xc-pad xc-stack"><h2>Mail clients</h2><p>Use a separate credential for each mail app. Revoking it does not sign out your dashboard.</p>
  <button className="xc-button xc-secondary" onClick={()=>{setEditing(!editing);setSecret('');}}>Add mail client</button>
  {editing&&<form onSubmit={event=>{event.preventDefault();act({action:'create',label});}}><label>Client name<input value={label} maxLength={64} required onChange={e=>setLabel(e.target.value)}/></label><button className="xc-button xc-primary">Create client credential</button></form>}
  {secret&&<div className="xc-stack"><p>Save this password in your mail client now. It is shown once.</p><code style={{overflowWrap:'anywhere'}}>{secret}</code><button className="xc-button xc-secondary" onClick={()=>setSecret('')}>Hide credential</button></div>}

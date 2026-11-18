@@ -2,6 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
+const attempts=new Map();
+const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const inviteLifetime = 15 * 60_000;
 const pair = (first, second) => [first, second].sort();
 
@@ -16,6 +18,11 @@ export function openFriends(database,available=()=>true) {
       id TEXT UNIQUE NOT NULL, first TEXT NOT NULL, second TEXT NOT NULL,
       created INTEGER NOT NULL, PRIMARY KEY(first,second)
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS friend_requests (
+      id TEXT PRIMARY KEY, sender TEXT NOT NULL, recipient TEXT NOT NULL, created INTEGER NOT NULL,
+      UNIQUE(sender,recipient)
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS friend_request_recipient ON friend_requests(recipient,created);
     CREATE INDEX IF NOT EXISTS friendship_second ON friendships(second,first);
   `);
   const saveInvite = db.prepare(`INSERT INTO friend_invites VALUES (?,?,?) ON CONFLICT(owner)
@@ -30,13 +37,19 @@ export function openFriends(database,available=()=>true) {
 
   return {
     invite(owner) {
-      const code = randomBytes(24).toString('base64url');
+      const code=Array.from(randomBytes(10),byte=>alphabet[byte%32]).join('');
       const expires = Date.now()+inviteLifetime;
       saveInvite.run(owner,digest(code),expires);
       return {code,expires};
     },
     accept(owner,code) {
-      if (typeof code!=='string' || !/^[A-Za-z0-9_-]{32}$/.test(code)) return false;
+      if(typeof code!=='string'||!/^(?:[A-Za-z0-9_-]{32}|[A-Za-z2-9]{10})$/.test(code))return false;
+      const now=Date.now();
+      for(const [id,state] of attempts)if(state.until<=now)attempts.delete(id);
+      const rate=attempts.get(owner)??{count:0,until:now+60_000};
+      if(rate.count>=10||(!attempts.has(owner)&&attempts.size>=5000))return false;
+      rate.count++;attempts.set(owner,rate);
+      if(code.length===10)code=code.toUpperCase();
       db.exec('BEGIN IMMEDIATE');
       try {
         const hash=digest(code);
@@ -50,6 +63,29 @@ export function openFriends(database,available=()=>true) {
         db.exec('COMMIT');
         return true;
       } catch (error) { db.exec('ROLLBACK'); throw error; }
+    },
+    request(owner,target){
+      if(!target||target===owner||!available(target)||match.get(...pair(owner,target)))return;
+      const now=Date.now();
+      db.prepare('DELETE FROM friend_requests WHERE sender=? AND created<?').run(owner,now-7*86400_000);
+      if(db.prepare('SELECT count(*) AS n FROM friend_requests WHERE sender=?').get(owner).n>=30)return;
+      db.prepare('INSERT OR IGNORE INTO friend_requests VALUES(?,?,?,?)').run(randomUUID(),owner,target,now);
+    },
+    pending:owner=>db.prepare('SELECT id,sender FROM friend_requests WHERE recipient=? AND created>? ORDER BY created DESC LIMIT 100').all(owner,Date.now()-7*86400_000).filter(item=>available(item.sender)),
+    answer(owner,id,accept){
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        const item=db.prepare('SELECT sender FROM friend_requests WHERE id=? AND recipient=? AND created>?').get(id,owner,Date.now()-7*86400_000);
+        if(!item||(accept&&(!available(item.sender)||count.get(owner,owner).count>=100||count.get(item.sender,item.sender).count>=100))){
+          db.exec('ROLLBACK');return false;
+        }
+        if(accept){
+          link.run(randomUUID(),...pair(owner,item.sender),Date.now());
+          db.prepare('DELETE FROM friend_requests WHERE sender=? AND recipient=?').run(owner,item.sender);
+        }
+        db.prepare('DELETE FROM friend_requests WHERE id=?').run(id);
+        db.exec('COMMIT');return true;
+      }catch(error){db.exec('ROLLBACK');throw error;}
     },
     list: owner => list.all(owner,owner).filter(row=>available(row.first)&&available(row.second)).map(row=>({id:row.id,owner:row.first===owner?row.second:row.first,created:row.created})),
     linked: (owner, friend) => available(owner)&&available(friend)?match.get(...pair(owner,friend))?.id:undefined,
@@ -68,9 +104,9 @@ export function createFriendRoutes({accounts,friends}) {
     if (req.method==='GET'&&path==='/account/friends') {
       const entries=friends.list(user.owner).flatMap(({id,owner,created})=>{
         const username=accounts.username(owner);
-        return username?[{id,username,created}]:[];
+        return username?[{id,username,created,avatar:accounts.publicProfileAvatar?.(username)?'/public/profiles/'+username+'/avatar':null}]:[];
       });
-      return send(res,200,{friends:entries});
+      return send(res,200,{friends:entries,requests:friends.pending(user.owner).flatMap(({id,sender})=>{const username=accounts.username(sender);return username?[{id,username}]:[];})});
     }
     if (!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent'){
       return send(res,403,{error:'Open X-Center ID to change your friends.'});
@@ -81,7 +117,7 @@ export function createFriendRoutes({accounts,friends}) {
       friends.remove(user.owner,removeId);
       return send(res,200,{ok:true});
     }
-    if (req.method!=='POST'||path!=='/account/friends/accept') return send(res,405,{error:'Method unavailable.'});
+    if (req.method!=='POST'||!['/account/friends/accept','/account/friends/request','/account/friends/respond'].includes(path)) return send(res,405,{error:'Method unavailable.'});
     if (!req.headers['content-type']?.startsWith('application/json')) return send(res,415,{error:'JSON required.'});
     const chunks=[];
     let size=0;
@@ -90,9 +126,19 @@ export function createFriendRoutes({accounts,friends}) {
       if(size>1024){req.resume();return send(res,413,{error:'Request too large.'});}
       chunks.push(chunk);
     }
-    let code;
-    try { code=JSON.parse(Buffer.concat(chunks).toString())?.code; }
+    let input;
+    try { input=JSON.parse(Buffer.concat(chunks).toString()); }
     catch { return send(res,422,{error:'Invalid invitation.'}); }
-    return friends.accept(user.owner,code)?send(res,200,{ok:true}):send(res,422,{error:'This invitation cannot be accepted.'});
+    if(path.endsWith('/request')){
+      const name=typeof input?.username==='string'?input.username.trim().toLowerCase():'';
+      if(!/^[a-z][a-z0-9]{2,23}$/.test(name))return send(res,422,{error:'Enter a valid username.'});
+      friends.request(user.owner,accounts.ownerForUsername(name));
+      return send(res,202,{ok:true});
+    }
+    if(path.endsWith('/respond')){
+      return typeof input?.id==='string'&&typeof input.accept==='boolean'&&friends.answer(user.owner,input.id,input.accept)
+        ?send(res,200,{ok:true}):send(res,422,{error:'This request is unavailable.'});
+    }
+    return friends.accept(user.owner,input?.code)?send(res,200,{ok:true}):send(res,422,{error:'This invitation cannot be accepted.'});
   };
 }

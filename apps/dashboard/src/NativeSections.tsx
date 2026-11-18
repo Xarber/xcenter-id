@@ -1,7 +1,6 @@
 import MailClients from './MailClients';
 import AppIcon from './AppIcon';
 import PublicProfile from './PublicProfile';
-import {isSampleClient} from './application-identity';
 import HostedDataPermissions from './HostedDataPermissions';
 import IncomingEmail from './IncomingEmail';
 import NativeAdminUsers from './NativeAdminUsers';
@@ -14,7 +13,7 @@ import { accountGreeting, accountShortcuts, accountStatus } from './account-over
 import BirthdayPicker from './BirthdayPicker';
 import type { MailMessage, PrivateAddress } from './mail-message';
 import { pickDocumentAsync, pickProfilePhoto, shareDownload } from './native-files';
-import { Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, Share, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useEffect, useState, type ReactNode } from 'react';
 import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -27,7 +26,7 @@ type Device = {id:string;label:string;created:number;current:boolean};
 type ConnectedApp = {client:string;label:string;icon?:string};
 type Entry = {id:string;name:string;size:number};
 type Files = {folders:Entry[];files:Entry[];breadcrumbs:Entry[];categories:Record<string,number>;used:number;limit:number};
-type Mail = {id:string;received:number;size:number};
+type Mail = {id:string;received:number;size:number;subject?:string;from?:string;preview?:string};
 type Grant = {source:string;destination:string;expires:number};
 type SampleGrant = {source:string;destination:string;sourceName:string;app:string;shared:boolean;expires:number|null};
 type App = {client:string;name:string};
@@ -91,6 +90,9 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [aliases,setAliases]=useState<PrivateAddress[]>([]);
   const [openMail,setOpenMail]=useState<{id:string;message:MailMessage}|null>(null);
   const [confirmMailDeletion,setConfirmMailDeletion]=useState(false);
+  const [inviteMode,setInviteMode]=useState<'create'|'accept'|null>(null);
+  const [friendUsername,setFriendUsername]=useState('');
+  const [friendRequests,setFriendRequests]=useState<{id:string;username:string}[]>([]);
   const [friends,setFriends]=useState<Friend[]>([]);
   const [incoming,setIncoming]=useState<SharedFile[]>([]);
   const [outgoing,setOutgoing]=useState<SharedFile[]>([]);
@@ -138,7 +140,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       setUsernameRequests((await api('admin/username-changes')).requests);
     }
     if(section==='devices')setDevices((await api('devices')).devices);
-    if(section==='apps')setApps((await api('connected-apps')).apps.filter((app:{client:string})=>!isSampleClient(app.client)));
+    if(section==='apps')setApps((await api('connected-apps')).apps);
     if(section==='permissions'){
       const [active,samples,registered]=await Promise.all([api('data-grants'),api('sample-grants'),api('apps')]);
       setGrants(active.grants.filter((entry:Grant & {dataset:string})=>entry.dataset==='saved-place.v1'));
@@ -146,7 +148,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       setPublished(registered.apps);
     }
     if(section==='files'||section==='storage')setFiles(await api(filesPath));
-    if(section==='friends'||section==='files')setFriends((await api('friends')).friends);
+    if(section==='friends'||section==='files'){const people=await api('friends');setFriends(people.friends);setFriendRequests(people.requests??[]);}
     if(section==='friends'){
       const [shares,index]=await Promise.all([api('files/shared'),api('friends/records')]);
       setRecordIndex(index);
@@ -237,15 +239,14 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         {field('Surname',surname,setSurname,{maxLength:64,autoComplete:'family-name'})}
         {<BirthdayPicker value={birthday} onChange={setBirthday} ink={colors.ink} accent={colors.accent}/>}
         {button('Save profile',()=>run(async()=>{await mutate('profile',{givenName,surname,birthday,picture});setEditingProfile(false);},'Profile saved.'))}
-        {account.profile&&button('Cancel editing',()=>setEditingProfile(false))}</>:<>{paragraph(givenName+' '+surname)}{paragraph(birthday?new Date(birthday+'T12:00:00Z').toLocaleDateString(accountLocale(),{timeZone:'UTC'}):'Birthday not set')}{button('Edit profile',()=>setEditingProfile(true))}</>}
+        {account.profile&&button('Cancel editing',()=>setEditingProfile(false))}</>:<>{account.profile?.hasPicture&&<Image accessibilityLabel="Profile photo" style={styles.avatar} source={{uri:accountHost+'/account/avatar',headers:{Authorization:'Bearer '+token,'X-AuthNJS-Native':'account-manager'}}}/>} {paragraph(givenName+' '+surname)}{paragraph('Age group: '+(account.profile?.ageRange??'Not set'))}{paragraph(birthday?new Date(birthday+'T12:00:00Z').toLocaleDateString(accountLocale(),{timeZone:'UTC'}):'Birthday not set')}{button('Edit profile',()=>setEditingProfile(true))}</>}
         {button('Change username',()=>setDetailsPanel(detailsPanel==='username'?'':'username'))}
         {account.profile&&detailsPanel==='username'&&<>
           <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Username change</Text>
-          {button('Confirm identity',()=>run(async()=>{await nativeReauthenticate(token);},'Identity confirmed.'))}
           {paragraph('Confirm your request here. An administrator must approve the change, including your mailbox address.')}
           {usernameRequest?<>
             {paragraph('@'+usernameRequest.proposed+(usernameRequest.confirmed?' · Waiting for administrator approval':' · Waiting for your confirmation'))}
-            {!usernameRequest.confirmed&&button('Confirm request',()=>run(()=>mutate('username-change',{action:'confirm',id:usernameRequest.id})))}
+            {!usernameRequest.confirmed&&button('Confirm request',()=>run(async()=>{if(!(await api('session/access')).confirmed&&!await nativeReauthenticate(token))return;await mutate('username-change',{action:'confirm',id:usernameRequest.id});}))}
             {button('Cancel request',()=>run(()=>mutate('username-change',{action:'cancel',id:usernameRequest.id})))}
           </>:<>
             {field('New username',newUsername,setNewUsername,{autoCapitalize:'none',maxLength:24})}
@@ -345,10 +346,26 @@ export default function NativeSections({ section,token,account,colors,reload,exp
     case 'friends':
       content=<>
         {paragraph('Create a one-time code and share it privately. It expires after 15 minutes.')}
-        {button('Create invitation',()=>run(async()=>setInvite((await api('friends/invite',{})).code)))}
-        {!!invite&&<Text selectable style={{color:colors.ink}}>{invite}</Text>}
-        {field('Invitation from a friend',friendCode,setFriendCode,{maxLength:32,autoCapitalize:'none'})}
-        {button('Accept invitation',()=>run(async()=>{await api('friends/accept',{code:friendCode.trim()});setFriendCode('');await load();},'Invitation accepted.'),busy||friendCode.trim().length!==32)}
+        {button('Create invitation',()=>{setInvite('');setInviteMode('create');run(async()=>setInvite((await api('friends/invite',{})).code));})}
+        {button('Enter invitation code',()=>setInviteMode('accept'))}
+        {field('Friend’s username',friendUsername,setFriendUsername,{maxLength:24,autoCapitalize:'none'})}
+        {button('Send request',()=>run(async()=>{await api('friends/request',{username:friendUsername});setFriendUsername('');},'Request submitted.'),busy||!friendUsername.trim())}
+        {friendRequests.map(item=>row(item.id,'@'+item.username,'Friend request',<View>
+          {button('Accept',()=>run(()=>mutate('friends/respond',{id:item.id,accept:true})))}
+          {button('Decline',()=>run(()=>mutate('friends/respond',{id:item.id,accept:false})))}
+        </View>))}
+        {inviteMode&&<MailScreen colors={colors} close={()=>setInviteMode(null)}>
+          {inviteMode==='create'?<>
+            {paragraph('Share this invitation')}
+            {!!invite&&<Text selectable style={{color:colors.ink}}>{invite}</Text>}
+            {!!invite&&button('Share invitation link',()=>void Share.share({message:accountHost+'/friends#invite='+invite}))}
+          </>:<>
+            {field('Invitation from a friend',friendCode,setFriendCode,{maxLength:32,autoCapitalize:'none'})}
+            {button('Accept invitation',()=>run(async()=>{await api('friends/accept',{code:friendCode.trim()});setFriendCode('');await load();setInviteMode(null);},'Invitation accepted.'),busy||![10,32].includes(friendCode.trim().length))}
+          </>}
+          {status&&paragraph(status)}
+          {button('Close',()=>setInviteMode(null))}
+        </MailScreen>}
         {friends.map(friend=>row(friend.id,'@'+friend.username,'',button('Remove friend',()=>confirm(
           'Remove friend?','Both accounts will lose access to files shared through this friendship.',
           ()=>run(()=>mutate('friends/'+friend.id,{},'DELETE'),'Friend removed.'),
@@ -463,7 +480,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         },busy||!selectedMail.length)}
         {messages.map(item=>{
           const checked=selectedMail.includes(item.id);
-          return row(item.id,'Received '+date(item.received),formatBytes(item.size),selectingMail?
+          return row(item.id,item.subject||'(No subject)',[item.from,item.preview,date(item.received)].filter(Boolean).join(' · '),selectingMail?
             <Pressable accessibilityRole="checkbox" accessibilityState={{checked}} disabled={busy||(!checked&&selectedMail.length>=100)}
               onPress={()=>setSelectedMail(previous=>checked?previous.filter(id=>id!==item.id):[...previous,item.id])}
               style={[styles.button,{backgroundColor:colors.soft}]}>
@@ -476,8 +493,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           setMessages(previous=>[...previous,...page.messages]);setInboxCursor(page.nextCursor);
         }))}
         {account.externalMailLimits&&paragraph('External mail: '+account.externalMailLimits.usedToday+' / '+(account.externalMailLimits.daily??'unlimited')+' today · '+account.externalMailLimits.usedMonth+' / '+(account.externalMailLimits.monthly??'unlimited')+' this month')}
-        {premiumAliases&&button('Create private email address',()=>setCreatingAlias(!creatingAlias))}
-        {creatingAlias&&<>{field('Address name (optional)',aliasName,setAliasName,{autoCapitalize:'none',maxLength:24})}{paragraph('Uses @mail.xcenter.it, just like a regular address. Leave blank to generate a name.')}{button('Create address',()=>run(async()=>{await api('mail/aliases',{name:aliasName||undefined});setCreatingAlias(false);setAliasName('');await load();},'Private address created.'))}</>}
+        {account.canReceiveMail&&button('Create private email address',()=>setCreatingAlias(!creatingAlias))}
+        {creatingAlias&&<>{premiumAliases&&account.admin&&field('Address name (optional)',aliasName,setAliasName,{autoCapitalize:'none',maxLength:24})}{button('Create address',()=>run(async()=>{await api('mail/aliases',{name:aliasName||undefined});setCreatingAlias(false);setAliasName('');await load();},'Private address created.'))}</>}
         {aliases.length>0&&<Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>{accountMessage('privateAddresses','Hide My Email addresses')}</Text>}
         {aliases.filter(item=>!item.active).map(item=>button('Turn on '+item.address,()=>run(async()=>{await api('mail/aliases/'+item.address,{active:true},'PUT');await load();} )))}
         {aliases.map(item=>row(item.address,item.address,item.active?'On · '+(item.premium?'Premium address':'Private address'):'Off · Not receiving mail',

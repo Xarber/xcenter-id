@@ -1,5 +1,4 @@
 import AppIcon from './AppIcon.web';
-import {isSampleClient} from './application-identity';
 import Reauthenticate from './Reauthenticate.web';
 import { AdminAccounts, IconAction } from './AdminUsers.web';
 import { AdminUsernameChanges } from './UsernameChange.web';
@@ -8,7 +7,7 @@ import { accountMessage } from './account-locale';
 import type { Friend } from './friends-model';
 import type { MailMessage, PrivateAddress } from './mail-message';
 import { formatBytes, storageCategories } from './storage-summary';
-import { Grid2X2, BadgeCheck, Download, File, FileUp, Folder, FolderPlus, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
+import { Bold, Italic, Paperclip, UserRound, Grid2X2, BadgeCheck, Download, File, FileUp, Folder, FolderPlus, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { api, fileAsBase64, type Account } from './web-account';
 
@@ -129,7 +128,7 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
 const mailLocation=()=>/^\/mail\/([0-9a-f-]{36})$/.exec(window.location.pathname)?.[1]??null;
 
 export function MailPage({ account }:{account:Account}) {
-  const [messages,setMessages]=useState<{id:string;received:number;size:number}[]|null>(null);
+  const [messages,setMessages]=useState<{id:string;received:number;size:number;subject?:string;from?:string;preview?:string}[]|null>(null);
   const [inboxCursor,setInboxCursor]=useState<string|null>(null);
   const [selecting,setSelecting]=useState(false);
   const [selected,setSelected]=useState<string[]>([]);
@@ -150,6 +149,16 @@ export function MailPage({ account }:{account:Account}) {
   const [attachment,setAttachment]=useState<{name:string;content:string}|undefined>();
   const [deliveryError,setDeliveryError]=useState('');
   const dialog=useRef<HTMLDialogElement>(null);
+  const editor=useRef<HTMLTextAreaElement>(null);
+  const filePicker=useRef<HTMLInputElement>(null);
+  function wrapSelection(marker:string){
+    const field=editor.current;
+    if(!field)return;
+    const {selectionStart:start,selectionEnd:end}=field;
+    setFormatted(true);
+    setDraft(value=>({...value,text:value.text.slice(0,start)+marker+value.text.slice(start,end)+marker+value.text.slice(end)}));
+    requestAnimationFrame(()=>{field.focus();field.setSelectionRange(start+marker.length,end+marker.length);});
+  }
   useEffect(()=>{void api('inbox').then(result=>{
     setMessages(result.messages);setInboxCursor(result.nextCursor??null);
   }).catch(error=>setStatus(notice(error)));},[]);
@@ -222,7 +231,7 @@ export function MailPage({ account }:{account:Account}) {
         {confirmDelete&&<button className="xc-button xc-secondary" disabled={busy} onClick={()=>setConfirmDelete(false)}>{accountMessage('cancel','Cancel')}</button>}
       </div>
     </article> : !messageId&&messages?.map(message=><div className="xc-list-row" key={message.id}>
-      <span>Received {date(message.received)} · {size(message.size)}</span>
+      <span className="xc-avatar"><UserRound size={18}/></span><div className="xc-mail-preview"><strong>{message.subject||'(No subject)'}</strong><span>{message.from||'Unknown sender'}</span>{message.preview&&<p>{message.preview}</p>}<small>{date(message.received)}</small></div>
       {selecting?<label><input type="checkbox" checked={selected.includes(message.id)}
         disabled={busy||(!selected.includes(message.id)&&selected.length>=100)} onChange={event=>{
           const checked=event.target.checked;
@@ -241,11 +250,12 @@ export function MailPage({ account }:{account:Account}) {
       }).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
     }}>{accountMessage('olderEmail','Load older email')}</button>}
     {!messageId&&account.externalMailLimits&&<p>External email allowance: {account.externalMailLimits.usedToday} / {account.externalMailLimits.daily??'unlimited'} today · {account.externalMailLimits.usedMonth} / {account.externalMailLimits.monthly??'unlimited'} this month.</p>}
-    {!messageId&&premiumAliases&&<section className="xc-card xc-pad"><button className="xc-button xc-secondary" onClick={()=>setCreatingAlias(!creatingAlias)}>Create private email address</button>{creatingAlias&&<form className="xc-stack" onSubmit={event=>{event.preventDefault();setBusy(true);void api('mail/aliases',{name:aliasName||undefined}).then(()=>api('mail/aliases')).then(result=>{setAliases(result.aliases);setAliasName('');setCreatingAlias(false);setStatus('Private address created.');}).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));}}><label>Address name (optional)<input value={aliasName} maxLength={24} pattern="[a-zA-Z][a-zA-Z0-9]{2,23}" onChange={e=>setAliasName(e.target.value)}/></label><p>Uses @mail.xcenter.it, just like a regular account address. Leave the name blank to generate one.</p><button className="xc-button xc-primary" disabled={busy}>Create address</button></form>}</section>}
-    {!messageId&&aliases.length>0&&<details>
-      <summary>{accountMessage('privateAddresses','Hide My Email addresses')} · {aliases.filter(item=>item.active).length} On / {aliases.filter(item=>!item.active).length} Off</summary><p>On forwards incoming mail to your inbox. Off stops new deliveries to that address.</p>
+    {!messageId&&account.canReceiveMail&&<section className="xc-card xc-pad"><button className="xc-button xc-secondary" onClick={()=>setCreatingAlias(!creatingAlias)}>Create private email address</button>{creatingAlias&&<form className="xc-stack" onSubmit={event=>{event.preventDefault();setBusy(true);void api('mail/aliases',{name:aliasName||undefined}).then(()=>api('mail/aliases')).then(result=>{setAliases(result.aliases);setAliasName('');setCreatingAlias(false);setStatus('Private address created.');}).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));}}>{account.admin&&premiumAliases&&<label>Address name (optional)<input value={aliasName} maxLength={24} pattern="[a-zA-Z][a-zA-Z0-9]{2,23}" onChange={e=>setAliasName(e.target.value)}/></label>}<p>Generate a separate address that delivers to this inbox.</p><button className="xc-button xc-primary" disabled={busy}>Create address</button></form>}</section>}
+    {!messageId&&aliases.length>0&&<section id="private-addresses" className="xc-stack">
+      <h3>{accountMessage('privateAddresses','Hide My Email addresses')} · {aliases.filter(item=>item.active).length} On / {aliases.filter(item=>!item.active).length} Off</h3><p>On forwards incoming mail to your inbox. Off stops new deliveries to that address.</p>
       {aliases.map(item=><div className="xc-list-row" key={item.address}>
-        <div><strong>{item.address}</strong><p>{item.active?'On · '+(item.premium?'Premium address':'Private address'):'Off · Not receiving mail'}</p></div>
+        <div><strong>{item.address}</strong><p>{item.active?'On · '+(item.premium?'Premium address':'Private address'):'Off · Not receiving mail'}</p><small>{item.clientLabel??(item.client.startsWith('dashboard')?'Created by you':item.client)}</small></div>
+        {!item.active&&<button type="button" className="xc-button xc-secondary" onClick={()=>{if(!window.confirm('Permanently delete '+item.address+'?'))return;void api('mail/aliases/'+item.address+'?permanent=true',{},'DELETE').then(()=>setAliases(items=>items.filter(alias=>alias.address!==item.address))).catch(error=>setStatus(notice(error)));}}>Delete address</button>}
         {!item.active&&<button className="xc-button xc-secondary" disabled={busy} onClick={()=>{setBusy(true);void api('mail/aliases/'+item.address,{active:true},'PUT').then(()=>api('mail/aliases')).then(r=>{setAliases(r.aliases);setStatus('Private address enabled.');}).catch(e=>setStatus(notice(e))).finally(()=>setBusy(false));}}>Turn on</button>}
         {item.active&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
           if(confirmAlias!==item.address){setConfirmAlias(item.address);return;}
@@ -256,7 +266,7 @@ export function MailPage({ account }:{account:Account}) {
         }}>{confirmAlias===item.address?'Confirm stopping delivery':accountMessage('disableAddress','Disable address')}</button>}
         {confirmAlias===item.address&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>setConfirmAlias('')}>{accountMessage('cancel','Cancel')}</button>}
       </div>)}
-    </details>}
+    </section>}
     {account.canSendMail&&<div className="xc-mail-compose-action">
       <button type="button" className="xc-button xc-primary" onClick={()=>{setDeliveryError('');setCompose(true);}}><MailPlus size={18}/> {accountMessage('newEmail','New email')}</button>
     </div>}
@@ -276,17 +286,20 @@ export function MailPage({ account }:{account:Account}) {
         <label>From<select value={sender} onChange={event=>setSender(event.target.value)}><option value="">{account.mailbox}</option>{aliases.filter(item=>item.active&&item.premium).map(item=><option key={item.address} value={item.address}>{item.address}</option>)}</select></label>
         <label>{accountMessage('recipient','Recipient')}<input type="email" autoFocus required value={draft.to} onChange={event=>setDraft({...draft,to:event.target.value})}/></label>
         <label>{accountMessage('subject','Subject')}<input required maxLength={120} value={draft.subject} onChange={event=>setDraft({...draft,subject:event.target.value})}/></label>
-        <label>{accountMessage('message','Message')}<textarea aria-label={accountMessage('message','Message')} required rows={5} value={draft.text} onChange={event=>setDraft({...draft,text:event.target.value})}/></label>
-        <label><input type="checkbox" checked={formatted} onChange={event=>setFormatted(event.target.checked)}/> Format message</label>
-        {formatted&&<p>Use **bold** or _italics_ in your message.</p>}
-        <label>Attachment (up to 256 KB)<input type="file" onChange={event=>{
+        <label>{accountMessage('message','Message')}<textarea ref={editor} aria-label={accountMessage('message','Message')} required rows={5} value={draft.text} onChange={event=>setDraft({...draft,text:event.target.value})}/></label>
+        <div className="xc-compose-tools" role="group" aria-label="Message tools">
+          <button type="button" className="xc-button xc-secondary" aria-label="Bold selected text" onClick={()=>wrapSelection('**')}><Bold size={18}/></button>
+          <button type="button" className="xc-button xc-secondary" aria-label="Italicize selected text" onClick={()=>wrapSelection('_')}><Italic size={18}/></button>
+          <button type="button" className="xc-button xc-secondary" aria-label="Attach a file up to 256 KB" onClick={()=>filePicker.current?.click()}><Paperclip size={18}/></button>
+        </div>
+        <input hidden ref={filePicker} type="file" onChange={event=>{
           const file=event.target.files?.[0];event.target.value='';
           if(!file)return;
           if(file.size>256*1024 || !file.size){setDeliveryError('Choose a file between 1 byte and 256 KB.');return;}
           setBusy(true);
           void fileAsBase64(file).then(content=>{setAttachment({name:file.name,content});setDeliveryError('');})
             .catch(error=>setDeliveryError(notice(error))).finally(()=>setBusy(false));
-        }}/></label>
+        }}/>
         {attachment&&<button type="button" className="xc-button xc-secondary" onClick={()=>setAttachment(undefined)}>Remove {attachment.name}</button>}
         {deliveryError&&<p role="alert">{deliveryError}</p>}
         <button className="xc-button xc-primary xc-self-start" disabled={busy}>{busy?'Sending…':accountMessage('sendEmail','Send email')}</button>
@@ -313,7 +326,6 @@ function AdminContent() {
       .catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
   }
   return <>
-    <details className="xc-card xc-pad"><summary>Confirm administrator identity</summary><Reauthenticate complete={()=>setStatus('Identity confirmed.')}/></details>
     <AdminAccounts/>
     <AdminUsernameChanges refreshAccounts={refresh}/>
     <AdminSupport/>
@@ -344,7 +356,7 @@ export function ConnectedApps() {
   const [status,setStatus]=useState('');
   const [confirm,setConfirm]=useState('');
   const [busy,setBusy]=useState(false);
-  useEffect(()=>{void api('connected-apps').then(data=>setApps(data.apps.filter((app:{client:string})=>!isSampleClient(app.client)))).catch(error=>setStatus(notice(error)));},[]);
+  useEffect(()=>{void api('connected-apps').then(data=>setApps(data.apps)).catch(error=>setStatus(notice(error)));},[]);
   return <div className="xc-pad">
     <h2>Authorized apps</h2>
     {apps?.length===0 && <div className="xc-empty">No apps have been authorized yet.</div>}

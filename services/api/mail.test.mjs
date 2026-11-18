@@ -123,7 +123,7 @@ test('inbox routes expose text and attachments to their owner and protect deleti
     allowsMutation:req=>req.headers.origin==='https://identity.example.test',
   };
   const mail = {
-    page:(owner,cursor)=>({messages:[],nextCursor:owner==='reader'&&cursor?.id===id?'verified':null}),
+    page:(owner,cursor)=>({messages:owner==='reader'&&!cursor?[{id}]:[],nextCursor:owner==='reader'&&cursor?.id===id?'verified':null}),
     retrieve:owner=>owner==='reader'?message:null,
     remove:owner=>{if(owner==='reader')message=null;},
     removeMany:(owner,ids)=>{assert.deepEqual(ids,[id]);return owner==='reader'?1:0;},
@@ -147,6 +147,9 @@ test('inbox routes expose text and attachments to their owner and protect deleti
   assert.deepEqual(await (await fetch(list+'?cursor=1:'+id,{headers:reader})).json(),{messages:[],nextCursor:'verified'});
   assert.equal((await fetch(root+'/view')).status,401);
   assert.equal((await fetch(root+'/view',{headers:{'X-Test-Account':'other'}})).status,404);
+  const previews=await (await fetch(list,{headers:reader})).json();
+  assert.deepEqual(previews.messages,[{id,subject:'A document',from:'sender@example.test',preview:'Message text'}]);
+  assert.deepEqual((await (await fetch(list,{headers:{'X-Test-Account':'other'}})).json()).messages,[]);
   const response = await fetch(root+'/view',{headers:reader});
   assert.equal(response.headers.get('cache-control'),'no-store');
   const view = await response.json();

@@ -110,3 +110,16 @@ test('friend invitations and file shares isolate recipients and do not revive on
   assert.equal(friends.accept('recipient',friends.invite('owner').code),true);
   assert.equal((await call('recipient','/shared/'+share.id)).status,404);
 });
+
+test('only the named recipient can accept a username friend request',()=>{
+  const friends=openFriends(':memory:');
+  try{
+    friends.request('sender','recipient');
+    const [{id}]=friends.pending('recipient');
+    assert.equal(friends.answer('other',id,true),false);
+    assert.equal(friends.linked('sender','recipient'),undefined);
+    assert.equal(friends.answer('recipient',id,true),true);
+    assert.ok(friends.linked('sender','recipient'));
+    assert.equal(friends.answer('recipient',id,true),false);
+  }finally{friends.close();}
+});

@@ -84,3 +84,5 @@ Provider settings: [SMTP2GO relay documentation](https://developers.smtp2go.com/
 
 
 Production activation passed: API 5c3187f, Web c27d386, SMTP and client listeners 5c3187f. Public TLS greetings were observed on465/993. A real SMTP2GO→public MX→support inbox round-trip passed, supplementing the user-confirmed outgoing iCloud delivery. Existing accounts can now use the configured relay with persisted per-user and global limits. Mail-client credential creation remains passkey-confirmed; actual third-party mail-app login is not yet verified. See [production recovery](operations/XCENTER_ID_PRODUCTION.md).
+
+The dashboard polish batch adds bounded plain-text previews to the owner-scoped mailbox index. New consent choices distinguish the primary mailbox and verified external email addresses from Hide My Email. Hide My Email selects the premium address type when entitled. New generated standard addresses remain on the dedicated alias domain. A deleted premium local part stays reserved, so it cannot later route to a different person. Token claim lookup checks existing alias state and never creates an alias.

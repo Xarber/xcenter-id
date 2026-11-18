@@ -258,3 +258,15 @@ Current implementation and preparation are complete for this mail batch. The nex
 
 
 New private native preview [44335880160](https://github.com/Xarber/xcenter-id/actions/runs/44335880160) is confirmed queued for exact9aa4ee94031b36b575ddc14256682016cb87c999. Four-format results remain pending. [Mail verification report](reports/MAIL_ROLLOUT_2026-11-18.md) records checks and missing evidence. Commits5c3187f/c27d386/9aa4ee9 are confirmed onorigin/testing and unsigned because the configured hardware signing identity was unavailable. No temporary branch/worktree created; unrelated Finder metadata remains untracked.
+
+### Dashboard polish and publication review
+
+| ID | Request | State | Evidence and next action |
+| --- | --- | --- | --- |
+| AUTHN-067 | Fix app linking, authorizations and developer documentation | Implemented | Isolated Chrome exercised a registered client, code exchange, and visibility in Apps and Permissions. Linked sample apps are visible to their owner, while the public sample directory stays hidden. Apps links to the platform-neutral OIDC and HTTPS API guide. |
+| AUTHN-068 | Polish onboarding, profile, controls and identity prompts | Implemented | Four shared introduction steps, row-sized selection controls, profile avatar and age group, and automatic confirmation for mail-client actions and confirmation of a pending username change. Submitting a username change request requires the signed-in session. Broader review of remaining legacy controls and admin prompt flows is open. |
+| AUTHN-069 | Improve friends and sharing | Implemented | Ten-character single-use invites, fragment-based links, web/native invitation dialogs and username requests. Existing 32-character invites remain accepted. Profile photos respect public profile settings. Separate file share groups. Verify installed-device sharing and profile-photo rendering. |
+| AUTHN-070 | Improve mailbox and private email choices | Implemented | Mail index includes bounded subject, sender and text preview, with a default web sender icon. Composer adds formatting and attachment controls. Consent offers the primary address, verified emails and one Hide My Email choice. Generated aliases are available without premium, custom names are limited to eligible admins, and disabled aliases can be permanently deleted on web. Verify current mail UI and consent choices in production before marking verified. |
+| AUTHN-071 | Scrub sensitive history and publish if safe | Blocked | An offline mirror rewritten by git-filter-repo covers the five remote branches and has no reachable files from the four excluded legacy paths. Repo remains private. GitHub can retain historical objects and cached views after a force push, and existing Actions artifacts need a disclosure review. Confirm remote purge procedure and audit retained content before publication. No remote history rewrite or visibility change. |
+
+The earlier native build stopped before runner allocation because GitHub rejected the account's billing setup. No replacement native build was submitted for this batch.

@@ -1,6 +1,6 @@
 import { IconAction } from './AdminUsers.web';
 import { Check, RefreshCw, X } from 'lucide-react';
-import Reauthenticate from './Reauthenticate.web';
+import {confirmIdentity} from './Reauthenticate.web';
 import { useEffect, useState } from 'react';
 import { api } from './web-account';
 import type { UsernameRequest } from './support-model';
@@ -13,13 +13,13 @@ export function UsernameChange() {
   async function load(){setRequest((await api('username-change')).request);}
   function change(action:string){
     setBusy(true);setStatus('');
-    void api('username-change',{action,id:request?.id,username:name}).then(load)
+    void (async()=>{if(action==='confirm'&&!(await api('session/access')).confirmed)await confirmIdentity();
+      await api('username-change',{action,id:request?.id,username:name});await load();})()
       .catch(error=>setStatus(error.message)).finally(()=>setBusy(false));
   }
   useEffect(()=>{void load().catch(error=>setStatus(error.message));},[]);
   return <section className="xc-card xc-pad xc-stack">
     <h2>Username change</h2>
-    <details><summary>Confirm identity</summary><Reauthenticate complete={()=>setStatus('Identity confirmed.')}/></details>
     <p>Confirm the request here, then wait for an administrator to approve it. Approval changes your X-Center mailbox address.</p>
     {request?<div className="xc-stack"><strong>@{request.proposed}</strong>
       <p>{request.confirmed?'Waiting for administrator approval.':'Waiting for your confirmation.'}</p>

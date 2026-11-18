@@ -39,13 +39,14 @@ export async function handleMailAliases(req,res,path,accounts,mail) {
   const session = accounts.current(req);
   if (!session) { json(res,{error:'Sign in to manage your private addresses.'},401); return true; }
   if (req.method==='GET' && path==='/account/mail/aliases') {
-    json(res,{aliases:mail.aliases(session.owner),premium:accounts.premiumEligible?.(session.owner)??false});
+    json(res,{aliases:mail.aliases(session.owner).map(alias=>({...alias,clientLabel:accounts.linkedAppLabel?.(session.owner,alias.client)})),premium:accounts.premiumEligible?.(session.owner)??false});
     return true;
   }
   if(req.method==='POST'&&path==='/account/mail/aliases'){
     if(!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent'){json(res,{error:'Invalid origin.'},403);return true;}
     let text='';try{for await(const chunk of req.iterator({destroyOnReturn:false})){text+=chunk.toString();if(text.length>1024){req.resume();json(res,{error:'Request too large.'},413);return true;}}
-      const input=JSON.parse(text);const address=accounts.createMailboxAlias(session.owner,input.name);json(res,{address},201);
+      const input=JSON.parse(text);if(input?.name&&!accounts.isAdministrator(req)){json(res,{error:'Only administrators can name an address.'},403);return true;}
+      const address=mail.createPrivateAddress(session.owner,input?.name);json(res,address?{address}:{error:'Private address unavailable.'},address?201:422);
     }catch(error){json(res,{error:error.status?error.message:'Could not create this address.'},error.status??422);}return true;
   }
   const address=/^\/account\/mail\/aliases\/([a-z0-9.-]+@(?:hme\.|mail\.)xcenter\.it)$/.exec(path)?.[1];
@@ -59,8 +60,8 @@ export async function handleMailAliases(req,res,path,accounts,mail) {
   else if (!accounts.allowsMutation(req) || req.headers['x-authnjs-request']!=='account-consent') {
     json(res,{error:'Invalid origin.'},403);
   } else {
-    mail.revokeAlias(session.owner,address);
-    json(res,{ok:true});
+    const removed=new URL(req.url,'http://localhost').searchParams.get('permanent')==='true'?mail.deleteAlias(session.owner,address):mail.revokeAlias(session.owner,address);
+    json(res,removed?{ok:true}:{error:'Address unavailable.'},removed?200:404);
   }
   return true;
 }
@@ -95,7 +96,18 @@ export async function handleInbox(req, res, path, accounts, mail) {
       if (cursors.length > 1 || (cursors.length && !cursor)) {
         json(res,{error:'Invalid inbox page.'},400);
       } else {
-        json(res,mail.page(session.owner,cursor ? {received:Number(cursor[1]),id:cursor[2]} : null));
+        const page=mail.page(session.owner,cursor ? {received:Number(cursor[1]),id:cursor[2]} : null);
+        for(const item of page.messages){
+          try{
+            const raw=mail.retrieve(session.owner,item.id);
+            if(!raw)continue;
+            const parsed=await simpleParser(raw.subarray(0,32*1024),{skipImageLinks:true,skipTextToHtml:true,skipHtmlToText:true});
+            item.subject=parsed.subject?.slice(0,160);
+            item.from=parsed.from?.text.slice(0,160);
+            item.preview=(parsed.text??(parsed.html?convert(parsed.html,{selectors:[{selector:'img',format:'skip'}]}):'')).replace(/\s+/g,' ').trim().slice(0,180);
+          }catch{/* The original remains accessible in the message reader. */}
+        }
+        json(res,page);
       }
     } else {
       const message = mail.retrieve(session.owner,match[1]);

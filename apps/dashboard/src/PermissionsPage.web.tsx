@@ -24,7 +24,7 @@ export default function PermissionsPage({client}: {client?:string}) {
     const [registered,linked,assigned,example]=await Promise.all([api('apps'),api('connected-apps'),api('data-grants'),api('sample-grants')]);
     setState({
       apps:registered.apps.filter((app:App)=>!isSampleClient(app.client)),
-      linked:linked.apps.filter((app:{client:string})=>!isSampleClient(app.client)).map((app:{client:string;label:string})=>({client:app.client,name:app.label})),
+      linked:linked.apps.map((app:{client:string;label:string})=>({client:app.client,name:app.label})),
       grants:assigned.grants.filter((grant:Grant)=>grant.dataset==='saved-place.v1'),
       samples:[],
     });

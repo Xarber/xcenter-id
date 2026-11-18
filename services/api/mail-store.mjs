@@ -114,8 +114,23 @@ export function openMailStore({ accountsPath, mailPath, configuration,accountSer
     resolveRecipient,
     maskedAvailable: domains.has('hme.xcenter.it'),
     premiumAvailable: domains.has('mail.xcenter.it'),
+    createPrivateAddress(owner,name){
+      if(accountService.premiumEligible(owner))return accountService.createMailboxAlias(owner,name);
+      if(name||!domains.has('hme.xcenter.it'))return null;
+      return this.alias(owner,'dashboard:'+randomUUID());
+    },
+    deleteAlias(owner,address){
+      const parts=/^([a-z0-9.-]{1,63})@(hme\.xcenter\.it|mail\.xcenter\.it)$/.exec(address);
+      if(!parts)return false;
+      if(parts[2]==='hme.xcenter.it')return db.prepare('DELETE FROM aliases WHERE owner=? AND id=?').run(owner,parts[1]).changes===1;
+      if(accountService?.deleteMailboxAlias(owner,parts[1]))return true;
+      return db.prepare('DELETE FROM premium_aliases WHERE owner=? AND id=?').run(owner,parts[1]).changes===1;
+    },
     alias(owner,client) {
       if (!domains.has('hme.xcenter.it')) return null;
+      const current=alias.get(owner,client);
+      if(current)return current.id+'@hme.xcenter.it';
+      if(db.prepare('SELECT count(*) AS n FROM aliases WHERE owner=?').get(owner).n>=30)return null;
       const id = randomUUID();
       insertAlias.run(id,owner,client);
       const found = alias.get(owner,client);

@@ -25,13 +25,13 @@ function html(res, content, status = 200, callbackOrigin = '') {
     .connection{display:flex;align-items:center;gap:.9rem;margin:1.2rem 0}
     .connection .avatar{width:56px;height:56px;display:grid;place-items:center;overflow:hidden;border-radius:.8rem;background:var(--soft);color:var(--text);font-weight:800}
     .connection img{width:100%;height:100%;object-fit:cover}.permission-list{list-style:none;padding:0;display:grid;gap:.65rem}
-    .permission-list .permission-toggle{display:flex;align-items:center;gap:.7rem;padding:.75rem .85rem;background:var(--soft);border-radius:.75rem;cursor:pointer;width:100%;min-height:46px}
+    .permission-toggle{display:flex;align-items:center;gap:.7rem;padding:.75rem .85rem;background:var(--soft);border-radius:.75rem;cursor:pointer;width:100%;min-height:46px}
     .permission-toggle input{margin-inline-start:auto;flex:none;appearance:none;width:2.7rem;height:1.55rem;border-radius:2rem;border:1px solid var(--border);background:var(--card);position:relative;cursor:pointer}
     .permission-toggle input::before{content:'';position:absolute;inset:.2rem auto .2rem .2rem;aspect-ratio:1;border-radius:50%;background:var(--muted);transition:transform 160ms ease}
     .permission-toggle input:checked{background:var(--action);border-color:var(--action)}.permission-toggle input:checked::before{background:white;transform:translateX(1.1rem)}
     @media(prefers-reduced-motion:reduce){.permission-toggle input::before{transition:none}}
     .permission-list li{display:flex;align-items:center;gap:.7rem}.permission-list svg,.connection svg{width:20px;height:20px;flex:none}
-    :focus-visible{outline:3px solid #6b94ff;outline-offset:3px}
+    :focus{outline:none}:focus-visible{box-shadow:0 0 0 2px #6b94ff}
     @media(prefers-color-scheme:dark){:root{--bg:#101522;--card:#192132;--text:#f3f6ff;--muted:#b1c1dc;--border:#35445e;--action:#375fce;--soft:#23355d}.brand{color:#adc5ff}}
     </style><main><span class="brand">X-Center ID</span>${content}</main></html>`);
 }
@@ -90,6 +90,11 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const active=accounts.current(ctx.req);
     return !active||ctx.oidc.session.accountId!==active.owner;
   }));
+  policy.get('consent').checks.add(new interactionPolicy.Check('link_account','Link this application',ctx=>{
+    if(ctx.oidc.result?.consent?.grantId)return false;
+    const owner=ctx.oidc.session?.accountId;
+    return !!owner&&!accounts.linkedGrant(owner,ctx.oidc.client.clientId);
+  }));
   const provider = new Provider(issuer, {
     clients, adapter: Adapter, jwks: configuration.jwks,
     cookies: { keys: configuration.cookieKeys, short: { secure: true, httpOnly: true, sameSite: 'lax' },
@@ -114,8 +119,8 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const person = accounts.identity(owner);
       if (!person) return undefined;
       const selection = source?.grantId ? await selections.find(source.grantId) : undefined;
-      const email = selection?.premium ? mail?.premiumAlias(owner,selection.client) :
-        selection?.alias ? mail?.alias(owner, selection.client) :
+      const email = selection?.primary ? person.username+'@mail.xcenter.it' :
+        selection?.premium||selection?.alias||selection?.privateAddress ? mail?.aliases(owner).find(item=>item.active&&item.client===selection.client&&(!selection.privateAddress||item.address===selection.privateAddress))?.address :
         selection?.email && person.emails.find(({ address }) => address === selection.email)?.address;
       return {
         accountId: owner,
@@ -172,12 +177,13 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const requested = new Set(prompt.details.missingOIDCScope ?? []);
       const selected = requested.has('email') ? input.get('email') : null;
       const eligible = accounts.premiumEligible(active.owner);
-      const premium = selected === 'premium' && eligible ? mail?.premiumAlias(active.owner,client.client_id) : null;
+      const premium = (selected === 'premium'||selected==='masked') && eligible && mail?.premiumAvailable ? mail?.premiumAlias(active.owner,client.client_id) : null;
       if(selected === 'premium' && !premium) return html(res,'<h1>Premium Hide My Email is unavailable</h1>',409);
-      const alias = selected === 'masked' ? mail?.alias(active.owner,client.client_id) : null;
-      if (selected === 'masked' && !alias) return html(res,'<h1>Hide My Email is unavailable</h1>',409);
-      const email = premium || alias || selected;
-      if (email && !alias && !premium && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
+      const alias = selected === 'masked' && !premium && !(eligible&&mail?.premiumAvailable) ? mail?.alias(active.owner,client.client_id) : null;
+      if (selected === 'masked' && !alias && !premium) return html(res,'<h1>Hide My Email is unavailable</h1>',409);
+      const primary=selected==='primary'&&mail;
+      const email = premium || alias || (primary?person.username+'@mail.xcenter.it':selected);
+      if (email && !alias && !premium && !primary && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
       if(applicationData&&String(details.params.scope??'').split(' ').includes('app_data'))applicationData.authorize(active.owner,client.client_id,input.getAll('data-permission'));
       const choices = new Set(input.getAll('permission'));
       const optional = ['profile','age_range','app_data'].filter(scope=>requested.has(scope));
@@ -188,8 +194,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       grant.addOIDCScope(allowed);
       if (denied.length) grant.rejectOIDCScope(denied);
       const grantId = await grant.save();
-      if (email) await selections.upsert(grantId,premium ? { premium:true, client:client.client_id }
-        : alias ? { alias:true, client:client.client_id } : { email });
+      if (email) await selections.upsert(grantId,premium||alias ? { privateAddress:email, client:client.client_id } : primary?{primary:true}:{ email });
       accounts.rememberApp(active.owner,client.client_id,client.client_name ?? client.client_id,grantId);
       await provider.interactionFinished(req,res,{ consent:{ grantId } });
       return;
@@ -229,8 +234,8 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       <p>You can review app access in X-Center ID.</p>
       ${missing.has('email') ? `<fieldset><legend>Email address to share</legend>
       <label><input type="radio" name="email" value="" checked>Do not share an email address</label>
-      ${mail?.premiumAvailable && accounts.premiumEligible(active.owner) ? '<label><input type="radio" name="email" value="premium">Use a premium private address</label>' : ''}
-      ${mail?.maskedAvailable ? '<label><input type="radio" name="email" value="masked">Hide my email</label>' : ''}
+      ${mail?`<label><input type="radio" name="email" value="primary">X-Center ID · ${escape(person.username)}@mail.xcenter.it</label>`:''}
+      ${(mail?.maskedAvailable||mail?.premiumAvailable&&accounts.premiumEligible(active.owner)) ? '<label><input type="radio" name="email" value="masked">Hide my email</label>' : ''}
       ${person.emails.map(({address}) => `<label><input type="radio" name="email" value="${escape(address)}">${escape(address)}</label>`).join('')}
       </fieldset>` : ''}
       <button name="action" value="approve">${incremental?'Authorize selected permissions':'Link app'}</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin);

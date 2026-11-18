@@ -1,3 +1,4 @@
+import {introduction} from './introduction';
 import MailClients from './MailClients.web';
 import ApplicationStorage from './ApplicationStorage.web';
 import DeveloperDocumentation from './DeveloperDocumentation.web';
@@ -52,17 +53,17 @@ function Logo({href='/dashboard'}:{href?:string}){
 }
 
 function Intro({close}:{close:()=>void}){
+  const [step,setStep]=useState(0);
   const dialog=useRef<HTMLDialogElement>(null);
   useEffect(()=>{dialog.current?.showModal();},[]);
-  return <dialog className="xc-intro" ref={dialog} onCancel={event=>{event.preventDefault();close();}}>
+  const page=introduction[step];
+  const Icon=[UserRound,Grid2X2,ShieldCheck,Code2][step];
+  return <dialog className="xc-intro" ref={dialog} aria-labelledby="intro-title" onCancel={event=>{event.preventDefault();close();}}>
     <button type="button" className="xc-close" aria-label="Close introduction" onClick={close}><X size={20}/></button>
-    <img src="/authnjs-icon.svg" alt="" width={57} height={57}/>
-    <h2>Your X-Center ID</h2><p>Use one account to manage your profile, passkeys, files and app permissions.</p>
-    <div className="xc-stack">
-      <div className="xc-row-head"><span className="xc-symbol xc-sky"><UserRound size={20}/></span><div><strong>Make it yours</strong><p>Set your profile and verified email addresses.</p></div></div>
-      <div className="xc-row-head"><span className="xc-symbol xc-mint"><ShieldCheck size={20}/></span><div><strong>Stay in control</strong><p>See which apps can access your data.</p></div></div>
-    </div>
-    <button type="button" className="xc-button xc-primary" onClick={close}>Open dashboard <ArrowRight size={16}/></button>
+    <div className="xc-stack" aria-live="polite"><span className="xc-symbol xc-sky"><Icon size={24}/></span>
+      <small>{step+1} of {introduction.length}</small><h2 id="intro-title">{page.title}</h2><p>{page.description}</p></div>
+    <div className="xc-actions">{step>0&&<button className="xc-button xc-secondary" onClick={()=>setStep(step-1)}>Back</button>}
+      <button className="xc-button xc-primary" onClick={()=>step===introduction.length-1?close():setStep(step+1)}>{step===introduction.length-1?'Open dashboard':'Next'} <ArrowRight size={16}/></button></div>
   </dialog>;
 }
 
@@ -342,6 +343,7 @@ export default function WebApp(){
   else if(page==='developer')content=<section className="xc-card xc-pad"><DeveloperPortal back={()=>window.location.assign('/apps')}/></section>;
   else if(page==='apps')content=<><section className="xc-card"><ConnectedApps/></section><section className="xc-card xc-pad">
     <div className="xc-row-head"><span className="xc-symbol xc-lavender"><Grid2X2 size={22}/></span><div><h2>Apps using X-Center ID</h2><p>Manage your connected apps or register your own integration.</p></div></div>
+    <div className="xc-list-row"><div><strong>Integration guide</strong><p>Set up sign-in and use the API from any platform.</p></div><a className="xc-button xc-secondary" href="/docs#manual"><Code2 size={16}/> Developer docs</a></div>
     <div className="xc-list-row"><div><strong>Developer portal</strong><p>Register or review your applications.</p></div><a className="xc-button xc-secondary" href="/developer"><Code2 size={16}/> Developer apps</a></div>
   </section></>;
   else if(page==='settings')content=<><PreferenceControls value={preferences} change={changePreferences}/><section className="xc-card xc-pad">

@@ -26,9 +26,9 @@ export default function ProfilePage({ account, update, complete }: {
     catch(error) { setNotice(error instanceof Error ? error.message : 'Could not complete this action.'); }
     finally { setBusy(false); }
   }
-  if(profile&&!editing)return <><section className="xc-card xc-pad xc-stack"><h2>Personal information</h2><p>{profile.givenName} {profile.surname}</p><p>@{profile.username}</p><p>{profile.birthday?new Date(profile.birthday+'T12:00:00Z').toLocaleDateString(accountLocale(),{timeZone:'UTC'}):'Birthday not set'}</p><button className="xc-button xc-secondary" onClick={()=>setEditing(true)}>Edit profile</button></section><PublicProfile/>
+  if(profile&&!editing)return <><section className="xc-card xc-pad xc-stack"><h2>Personal information</h2><div className="xc-row-head"><div className="xc-avatar xc-avatar-large">{image?<img src={image} alt=""/>:<UserRound size={36}/>}</div><div><strong>{profile.givenName} {profile.surname}</strong><p>@{profile.username}</p></div></div><p>Age group: {profile.ageRange??'Not set'}</p><p>{profile.birthday?new Date(profile.birthday+'T12:00:00Z').toLocaleDateString(accountLocale(),{timeZone:'UTC'}):'Birthday not set'}</p><button className="xc-button xc-secondary" onClick={()=>setEditing(true)}>Edit profile</button></section><PublicProfile/>
     <details className="xc-card xc-pad"><summary>Change username</summary><UsernameChange/></details>
-    <details className="xc-card xc-pad"><summary>Email addresses</summary>{account.emails.map(email=><p key={email.address}>{email.address} · {email.verified?'Verified':'Unverified'}</p>)}<IncomingEmail updated={update}/></details>
+    <section className="xc-card xc-pad xc-stack"><h2>Email addresses</h2>{account.mailbox&&<p>{account.mailbox} · X-Center ID</p>}{account.emails.map(email=><p key={email.address}>{email.address} · {email.verified?'Verified':'Unverified'}</p>)}<IncomingEmail updated={update}/><a className="xc-button xc-secondary xc-self-start" href="/mail#private-addresses">Manage Hide My Email</a></section>
     <details className="xc-card xc-pad"><summary>Developer profile</summary><DeveloperIdentityPanel/></details></>;
   return <>
     {profile&&<button className="xc-button xc-secondary xc-self-start" onClick={()=>setEditing(false)}>Cancel editing</button>}

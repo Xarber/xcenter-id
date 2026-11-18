@@ -1,3 +1,5 @@
+import Animated, {Easing, FadeIn, ReduceMotion} from 'react-native-reanimated';
+import {introduction} from './introduction';
 import {languages,parsePreferences,preferencesKey} from './preferences';
 import {setAccountLanguage} from './account-locale';
 import NativeSupport from './NativeSupport';
@@ -51,6 +53,7 @@ function NativeAccount() {
   const [loading,setLoading]=useState(true);
   const [pending,setPending]=useState(false);
   const [intro,setIntro]=useState(false);
+  const [introStep,setIntroStep]=useState(0);
   const [developer,setDeveloper]=useState(false);
   const [sampleMode,setSampleMode]=useState(false);
   const [error,setError]=useState('');
@@ -141,9 +144,13 @@ function NativeAccount() {
     </Modal>}
     <ScrollView contentContainerStyle={styles.content}>
       {intro?<View style={[styles.card,{backgroundColor:colors.panel}]}>
-        <Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>Your X-Center ID</Text>
-        <Text style={{color:colors.muted}}>Manage profile, devices, apps and permissions in one account.</Text>
-        {action('Open dashboard','arrow-forward-outline',()=>setIntro(false))}
+        <Animated.View key={introStep} entering={FadeIn.duration(200).easing(Easing.bezier(.23,1,.32,1)).reduceMotion(ReduceMotion.System)}>
+          <Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>{introduction[introStep].title}</Text>
+          <Text style={{color:colors.muted}}>{introduction[introStep].description}</Text>
+        </Animated.View>
+        <Text style={{color:colors.muted}}>{introStep+1} of {introduction.length}</Text>
+        {introStep>0&&action('Back','arrow-back-outline',()=>setIntroStep(introStep-1))}
+        {action(introStep===introduction.length-1?'Open dashboard':'Next','arrow-forward-outline',()=>introStep===introduction.length-1?setIntro(false):setIntroStep(introStep+1))}
         {action('Skip introduction','close-outline',()=>setIntro(false))}
       </View>:<>
         {loading?<ActivityIndicator accessibilityLabel="Opening account"/>:locked&&token?
@@ -166,7 +173,7 @@ function NativeAccount() {
           {action('Mail app access','mail-open-outline',()=>setTab(pages.find(page=>page[0]==='mail-clients')!))}
           {action('Support','help-circle-outline',()=>setTab(pages.find(page=>page[0]==='support')!))}
           {action('Developer documentation','book-outline',()=>void openBrowserAsync(accountHost+'/docs'))}
-          {action('View introduction' ,'information-circle-outline',()=>setIntro(true))}
+          {action('View introduction' ,'information-circle-outline',()=>{setIntroStep(0);setIntro(true);})}
           {action('Version 0.1.0','code-slash-outline',()=>{
             if(++taps.current===3){setDeveloper(true);taps.current=0;}
             if(timer.current)clearTimeout(timer.current);
