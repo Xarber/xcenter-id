@@ -302,7 +302,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void accounts.handle(req, res, path);
     return;
   }
-  const webPages = new Set(['/mail-clients','/docs','/','/signin','/signup','/native-session','/dashboard','/profile','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/friends','/mail','/admin','/support','/reauth']);
+  const webPages = new Set(['/mail-clients','/docs','/','/signin','/signup','/native-session','/dashboard','/profile','/profile/visibility','/profile/username','/profile/developer','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/friends','/mail','/admin','/support','/reauth']);
   const relative = webPages.has(path)||/^\/developer\/storage\/[0-9a-f-]{36}$/.test(path)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(path)||
     /^\/(?:mail\/[0-9a-f-]{36}|admin\/users\/[a-z][a-z0-9]{2,23})$/.test(path) ? 'index.html' : path.slice(1);
   const valid = /^(?:index\.html|revision\.txt|manifest\.webmanifest|service-worker\.js|authnjs-[\w-]+\.(?:svg|png)|(?:_expo|assets)\/[\w@./-]+)$/.test(relative);

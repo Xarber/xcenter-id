@@ -1,18 +1,17 @@
 import {useEffect,useState} from 'react';
 import {api} from './web-account';
 import {formatBytes} from './storage-summary';
-import Reauthenticate from './Reauthenticate.web';
+import {confirmIdentity} from './Reauthenticate.web';
 export default function ApplicationStorage({id,admin=false}:{id:string;admin?:boolean}){
  const [state,setState]=useState<{used:number;records:number;capacity:number;hasKey:boolean;shared:string[];requests:{source:string;collection:string;label:string}[]}|null>(null);
  const [edit,setEdit]=useState(false),[status,setStatus]=useState(''),[secret,setSecret]=useState(''),[busy,setBusy]=useState(false);
  const [shared,setShared]=useState(''),[requests,setRequests]=useState('[]'),[capacity,setCapacity]=useState('10'),[unit,setUnit]=useState(2);
  async function load(){const data=await api('app-storage/'+id);setState(data);setShared(data.shared.join('\n'));setRequests(JSON.stringify(data.requests,null,2));setCapacity(String(data.capacity/1024**2));}
  useEffect(()=>{void load().catch(error=>setStatus(error.message));return ()=>setSecret('');},[id]);
- function act(data:object){setBusy(true);setStatus('');void api('app-storage/'+id,data).then(async result=>{if(result.secret)setSecret(result.secret);await load();setStatus('Saved.');}).catch(error=>setStatus(error.message)).finally(()=>setBusy(false));}
+ function act(data:object){setBusy(true);setStatus('');void (async()=>{if(!(await api('session/access')).confirmed)await confirmIdentity();return api('app-storage/'+id,data);})().then(async result=>{if(result.secret)setSecret(result.secret);await load();setStatus('Saved.');}).catch(error=>setStatus(error.message)).finally(()=>setBusy(false));}
  return <section className="xc-card xc-pad xc-stack"><a href={admin?'/admin':'/developer'}>Back to apps</a><h2>Application database</h2>
  <p>Private by default. Public records can be read by anyone. App database records are separate from account file storage.</p>
  {state&&<><p>{formatBytes(state.used)} of {formatBytes(state.capacity)} · {state.records} records</p>
- <details><summary>Confirm identity</summary><Reauthenticate complete={()=>setStatus('Identity confirmed.')}/></details>
  <button className="xc-button xc-secondary" onClick={()=>setEdit(!edit)}>{edit?'Close settings':'Edit database settings'}</button>
  {edit&&<><label>Collections available for user-approved sharing<textarea value={shared} onChange={e=>setShared(e.target.value)} placeholder="One collection name per line"/></label>
  <label>Permissions requested from other apps<textarea value={requests} onChange={e=>setRequests(e.target.value)}/></label>

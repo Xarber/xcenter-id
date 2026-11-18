@@ -218,11 +218,14 @@ export default function WebApp(){
   const didShow=useRef(false);
   const path=window.location.pathname.replace(/^\//,'')||'dashboard';
   const permissionRoute=/^permissions\/([A-Za-z0-9_-]{1,100})$/.exec(path);
+  const profileSection=/^profile\/(visibility|username|developer)$/.exec(path)?.[1];
+  const invite=new URLSearchParams(window.location.hash.slice(1)).get('invite');
+  const friendReturn=path==='friends'&&invite&&/^(?:[A-Za-z2-9]{10}|[A-Za-z0-9_-]{32})$/.test(invite)?'/friends#invite='+invite:'';
   const mailRoute=/^mail\/[0-9a-f-]{36}$/.test(path);
   const next=path==='native-session'||path==='reauth'?window.location.pathname+window.location.search:
-    new URLSearchParams(window.location.search).get('continue')??(permissionRoute||mailRoute?'/'+path:'');
+    new URLSearchParams(window.location.search).get('continue')??(friendReturn||(permissionRoute||mailRoute||profileSection?'/'+path:''));
   const nativeReturn=/^\/native-session\?challenge=[A-Za-z0-9_-]{43}&state=[A-Za-z0-9_-]{43}$/;
-  const continuation=/^\/reauth\?request=[A-Za-z0-9_-]{43}$/.test(next)||/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)||nativeReturn.test(next)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(next)||/^\/mail\/[0-9a-f-]{36}$/.test(next)?next:null;
+  const continuation=/^\/friends#invite=(?:[A-Za-z2-9]{10}|[A-Za-z0-9_-]{32})$/.test(next)||/^\/profile\/(?:visibility|username|developer)$/.test(next)||/^\/reauth\?request=[A-Za-z0-9_-]{43}$/.test(next)||/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)||nativeReturn.test(next)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(next)||/^\/mail\/[0-9a-f-]{36}$/.test(next)?next:null;
   const authDestination=continuation??'/dashboard';
   const emailToken=new URLSearchParams(window.location.hash.slice(1)).get('verify-email');
   async function load(){const result=await api('me');setAccount(result.account);setLocked(!!result.locked);}
@@ -315,7 +318,7 @@ export default function WebApp(){
   const picture=profile.hasPicture?'/account/avatar':null;
   const permissionClient=permissionRoute?.[1];
   const storageRoute=/^developer\/storage\/([0-9a-f-]{36})$/.exec(path)?.[1];
-  const page=storageRoute?'developer':path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':mailRoute?'mail':path.startsWith('admin/users/')?'admin':path;
+  const page=profileSection?'profile':storageRoute?'developer':path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':mailRoute?'mail':path.startsWith('admin/users/')?'admin':path;
   const [title,summary]=titles[page]??[accountMessage('overviewTitle','Account overview'),accountMessage('overviewSummary','Manage the details, devices, and apps connected to your X-Center ID.')];
   const shortcutIcons = {
     profile:[UserRound,'xc-sky'],security:[Fingerprint,'xc-mint'],
@@ -329,7 +332,7 @@ export default function WebApp(){
       <button type="button" className="xc-button xc-primary" onClick={()=>void api('email/confirm',{token:emailToken}).then(()=>{
         window.history.replaceState(null,'','/profile');setNotice('Email verified.');return load();
       }).catch(error=>setNotice(error.message))}>Confirm this email address</button></section>}
-    <ProfilePage account={account} update={load}/>
+    <ProfilePage account={account} update={load} section={profileSection}/>
   </>;
   else if(page==='permissions')content=<PermissionsPage client={permissionClient}/>;
   else if(page==='devices')content=<DevicesPage/>;

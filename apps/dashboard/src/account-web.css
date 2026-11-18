@@ -141,16 +141,16 @@ body{overflow-y:auto}
 .xc-mailbox .xc-row-head>div{min-width:0}.xc-mailbox h2,.xc-mailbox .xc-list-row strong{overflow-wrap:anywhere}
 
 /* Keep selection controls in the row with a full-size label hit target. */
-:where(label):has(> input:is([type=checkbox],[type=radio])){display:flex;align-items:center;gap:.7rem;min-height:44px;cursor:pointer}
+label:has(> input:is([type=checkbox],[type=radio])){display:flex;align-items:center;gap:.7rem;min-height:44px;cursor:pointer}
 input:is([type=checkbox],[type=radio]){inline-size:1.2rem;block-size:1.2rem;min-width:1.2rem;margin:0;flex:none;accent-color:var(--blue)}
 .xc-list-row>div,.xc-row-head>div{min-width:0;overflow-wrap:anywhere}
 .xc-list-row>.xc-actions{flex-wrap:wrap}
 .xc-docs pre{max-width:100%;min-width:0;overflow:auto;padding:1rem;border-radius:12px;background:var(--paper)}
 .xc-mail-preview{min-width:0;display:grid;gap:.2rem;flex:1;text-align:left;color:inherit;text-decoration:none}
 .xc-mail-preview p{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
-.xc-intro[open]{transition:opacity 200ms cubic-bezier(.23,1,.32,1),transform 200ms cubic-bezier(.23,1,.32,1)}
-@starting-style{.xc-intro[open]{opacity:0;transform:scale(.97)}}
-@media(prefers-reduced-motion:reduce){.xc-intro[open]{transition:none}}
+:is(.xc-intro,.xc-compose-dialog)[open]{transition:opacity 200ms cubic-bezier(.23,1,.32,1),transform 200ms cubic-bezier(.23,1,.32,1)}
+@starting-style{:is(.xc-intro,.xc-compose-dialog)[open]{opacity:0;transform:scale(.97)}}
+@media(prefers-reduced-motion:reduce){:is(.xc-intro,.xc-compose-dialog)[open]{transition:none}}
 
 .xc-compose-tools{display:flex;align-items:center;gap:.5rem}
 .xc-compose-tools button{width:44px;padding:0;justify-content:center}

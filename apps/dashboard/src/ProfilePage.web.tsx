@@ -2,13 +2,13 @@ import PublicProfile from './PublicProfile.web';
 import IncomingEmail from './IncomingEmail.web';
 import { UsernameChange } from './UsernameChange.web';
 import { accountMessage,accountLocale } from './account-locale';
-import { Camera, Check, CircleHelp, Mail, Save, UserRound } from 'lucide-react';
+import { Camera, Check, ChevronRight, CircleHelp, Code2, Mail, Save, ShieldCheck, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import DeveloperIdentityPanel from './DeveloperIdentity.web';
 import { api, profilePhoto, type Account } from './web-account';
 
-export default function ProfilePage({ account, update, complete }: {
-  account:Account; update:()=>Promise<void>; complete?:()=>void;
+export default function ProfilePage({ account, update, complete, section }: {
+  account:Account; update:()=>Promise<void>; complete?:()=>void; section?:string;
 }) {
   const [editing,setEditing]=useState(!account.profile);
   const [picture,setPicture] = useState<string|null|undefined>();
@@ -26,10 +26,16 @@ export default function ProfilePage({ account, update, complete }: {
     catch(error) { setNotice(error instanceof Error ? error.message : 'Could not complete this action.'); }
     finally { setBusy(false); }
   }
-  if(profile&&!editing)return <><section className="xc-card xc-pad xc-stack"><h2>Personal information</h2><div className="xc-row-head"><div className="xc-avatar xc-avatar-large">{image?<img src={image} alt=""/>:<UserRound size={36}/>}</div><div><strong>{profile.givenName} {profile.surname}</strong><p>@{profile.username}</p></div></div><p>Age group: {profile.ageRange??'Not set'}</p><p>{profile.birthday?new Date(profile.birthday+'T12:00:00Z').toLocaleDateString(accountLocale(),{timeZone:'UTC'}):'Birthday not set'}</p><button className="xc-button xc-secondary" onClick={()=>setEditing(true)}>Edit profile</button></section><PublicProfile/>
-    <details className="xc-card xc-pad"><summary>Change username</summary><UsernameChange/></details>
+  if(profile&&section)return <><a className="xc-button xc-secondary xc-self-start" href="/profile">Back to profile</a>{section==='visibility'?<PublicProfile/>:section==='username'?<UsernameChange/>:<DeveloperIdentityPanel/>}</>;
+  if(profile&&!editing)return <><section className="xc-card xc-pad xc-stack"><h2>Personal information</h2><div className="xc-row-head"><div className="xc-avatar xc-avatar-large">{image?<img src={image} alt=""/>:<UserRound size={36}/>}</div><div><strong>{profile.givenName} {profile.surname}</strong><p>@{profile.username}</p></div></div><p>Age group: {profile.ageRange??'Not set'}</p><p>{profile.birthday?new Date(profile.birthday+'T12:00:00Z').toLocaleDateString(accountLocale(),{timeZone:'UTC'}):'Birthday not set'}</p><button className="xc-button xc-secondary" onClick={()=>setEditing(true)}>Edit profile</button></section>
+    <nav className="xc-permission-directory" aria-label="Profile settings">
+      {[['visibility','Public profile',ShieldCheck],['username','Change username',UserRound],['developer','Developer profile',Code2]].map(([path,label,Icon])=>{
+        const Symbol=Icon as typeof UserRound;
+        return <a key={String(path)} className="xc-card xc-permission-link" href={'/profile/'+path}><span className="xc-symbol xc-lavender"><Symbol size={20}/></span><strong className="xc-permission-name">{String(label)}</strong><ChevronRight size={18}/></a>;
+      })}
+    </nav>
     <section className="xc-card xc-pad xc-stack"><h2>Email addresses</h2>{account.mailbox&&<p>{account.mailbox} · X-Center ID</p>}{account.emails.map(email=><p key={email.address}>{email.address} · {email.verified?'Verified':'Unverified'}</p>)}<IncomingEmail updated={update}/><a className="xc-button xc-secondary xc-self-start" href="/mail#private-addresses">Manage Hide My Email</a></section>
-    <details className="xc-card xc-pad"><summary>Developer profile</summary><DeveloperIdentityPanel/></details></>;
+    </>;
   return <>
     {profile&&<button className="xc-button xc-secondary xc-self-start" onClick={()=>setEditing(false)}>Cancel editing</button>}
     <section className="xc-card xc-profile-card">
