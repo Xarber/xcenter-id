@@ -294,3 +294,5 @@ The web export is deployed. See the [production receipt](operations/XCENTER_ID_P
 | ID | Request | State | Evidence |
 | --- | --- | --- | --- |
 | AUTHN-074 | Make the integration skill perform registration preparation, DNS activation and target-app sync work | Verified | Installed and tracked copies match and pass skill validation. Checked the portal action labels against the dashboard source and the storage and permission instructions against the API contract. The unnamed target app was not changed. |
+
+Usage checkpoint under UADS §0. The five-hour window has 4% remaining and resets on 2026-11-19 at 01:26 CET. The weekly window has 70% remaining and resets on 2026-11-25 at 15:25 CET. The verified local skill update is published to testing as d72aa7c. Next runnable checks after the short-window reset require the target app repository for its integration, the mailbox owner's real verification attempt for production inbox confirmation, or an updated installed native build for native UI validation.
