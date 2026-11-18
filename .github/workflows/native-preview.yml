@@ -25,6 +25,7 @@ jobs:
           sparse-checkout: |
             apps/dashboard
             packages/expo
+            scripts/apk-certificate.awk
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -92,6 +93,7 @@ jobs:
           sparse-checkout: |
             apps/dashboard
             packages/expo
+            scripts/apk-certificate.awk
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -154,10 +156,7 @@ jobs:
               --out "$artifact" app/build/outputs/apk/release/app-release.apk
             "$apksigner" verify --verbose --print-certs "$artifact" > "$RUNNER_TEMP/apk-signature.txt"
             cat "$RUNNER_TEMP/apk-signature.txt"
-            observed=$(awk 'tolower($0) ~ /^signer.*certificate sha-256 digest:/ {
-                sub(/^.*digest:[[:space:]]*/, ""); gsub(/[^0-9a-fA-F]/, ""); print tolower($0)
-              }' "$RUNNER_TEMP/apk-signature.txt" |
-              sort -u)
+            observed=$(awk -f ../../scripts/apk-certificate.awk "$RUNNER_TEMP/apk-signature.txt" | sort -u)
             for arch in armeabi-v7a arm64-v8a x86 x86_64; do
               unzip -Z1 "$artifact" | awk -v dir="lib/$arch/" 'index($0, dir) == 1 { found=1 } END {exit !found}'
             done
