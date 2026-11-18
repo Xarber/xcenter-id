@@ -34,3 +34,7 @@ Source work is integrated on testing. No main/beta promotion or public release i
 HOSTED_DATA.md describes the data model, interfaces, encryption, ACLs, quotas and residual risks. NAVIGATION.md describes native/web behavior and preferences. INTEGRATION.md, API.md, SUPPORT.md, SECURITY.md, TESTING.md and ACTIVE_TASKS.md are updated. Machine-readable performance targets and private release metadata were added without inventing measured results. Relevant UADS subjects are SEC-001/002, PLAT-001, UI-001/002/003, QA-001, DOC-001, REL-001 and OPS-001; manifest-wide states remain pending.
 
 No temporary Git branch/worktree was created. Existing untracked .DS_Store files were preserved and excluded. Commits are unsigned because the hardware signing key was unavailable; no shared history was rewritten.
+
+## Git and preview receipt
+
+Feature commit b6b4f84 and CI fixes 65031be/2a92156 are pushed to testing. Native preview [44325257679](https://github.com/Xarber/xcenter-id/actions/runs/44325257679) was submitted and verified against full source 2a92156e0d3fd4a676c02af112f68720b4e931c9. Both Android jobs started; both iOS jobs were queued at the receipt. This is a running private preview, not successful build or release evidence. The earlier run's successful artifacts remain preserved. Production and email remain unchanged by this checkpoint.
