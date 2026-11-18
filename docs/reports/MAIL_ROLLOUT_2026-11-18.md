@@ -1,0 +1,11 @@
+# Mail rollout verification
+
+18 November2026; implementation5c3187f, web polishc27d386, receipt9aa4ee9. Scoped UADS security/QA/operations/documentation requirements apply; this is not a full compliance audit.
+
+- API Node test runner:30 passed locally and30 passed in the existing Linux runtime image. Tests include sender forgery, owner separation, alias reservation/off/on, revoked/restricted credentials, encrypted mail, live TLS IMAP and loopback SMTP, forged trust headers, signature verification and competing email-claim transfer.
+- Dashboard: typecheck passed,4 regressions passed, Expo Web export passed. 390px Chrome with synthetic passkeys/accounts passed premium address creation, visible On/Off/reactivation, one-time credential creation/hiding/revocation. Screenshots inspected; long address wrapping and stale status fixed and flow rerun.
+- Compliance schema/references:16 declarations validated. This is structural evidence only. API audit:0 known vulnerabilities. The unpatched picomatch build-tool advisory remains a dashboard/stable-release blocker; no stable release was published.
+- Production: exact Webc27d386, issuer discovery, anonymous denial, incoming STARTTLS/support recipient/relay rejection and public TLS465/993 passed. Real outgoing test arrival confirmed by user. External relay→publicMX→protected support inbox matched operational probe passed. Open/click tracking observed Off. Three new containers had0 restarts and no logged errors during inspection.
+- Recovery:7 checked online snapshots; prior proxy files and services retained. Initial stale sample-page expectation caused automatic rollback; updated intentional404 check passed. Shared-volume nightly backup remains blocked by low storage. No unrelated caches or data deleted.
+- Native preview submitted from9aa4ee9: https://github.com/Xarber/xcenter-id/actions/runs/44335880160 . Submission verified, queued; none of its artifacts is yet verified. No active long build wait or background-monitoring promise.
+- Missing: installed iOS/Android, physical FIDO2, real external mail-app authentication, external owner's verification proof, full accessibility review, changed-code coverage measurement, off-device restore and release/distribution gates. These are not counted as passes.
