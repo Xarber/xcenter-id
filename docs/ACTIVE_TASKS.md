@@ -160,3 +160,22 @@ AUTHN-046 build diagnosis. Run 44138528022 completed three artifact jobs. Gradle
 The five-hour window reached 8% remaining and resets on 17 November at 22:45:39 CET. UADS §0 pauses new work. The user's weekly override remains in effect. [Native retry 44145142129](https://github.com/Xarber/xcenter-id/actions/runs/44145142129) was confirmed queued for `31891c3`. The earlier AAB and both iOS artifacts passed their SHA-256 checks and the AAB signer matched the expected Android certificate. Physical devices, release publication and AltSource remain unverified.
 
 Resume the user's priority order with AUTHN-039. Establish and verify an external inbound delivery path and a usable outbound route, then finish authenticated SMTP submission and mailbox access for external clients. Continue support address routing with the existing iCloud apex route preserved. Recheck the production snapshot guard and verify the retry's Android APK, AAB and iOS artifacts before any release. AUTHN-043 remains sequenced after mail.
+
+### 18 November follow-up
+
+Production revision 861128c is now live at id.xcenter.it and both sample hosts. A checked six-database rollback snapshot is at the protected host path recorded in the operations runbook. New priority is the reusable integration skill, then native crash, authenticated admin access and account detail moderation, locked account support, and inbound email verification while external sending remains unavailable.
+
+| ID | Request | State | Next action |
+| --- | --- | --- | --- |
+| AUTHN-053 | Integrate X-Center ID skill | Verified | Installed and source-controlled skill validated with Skill Creator. Independent review completed and clarified native versus confidential backend registration. |
+| AUTHN-054 | Native accountStatus crash | In Progress | Remove unsupported Intl constructor dependency, test missing constructors and run native preview after the batch. |
+| AUTHN-055 | Admin authentication, icons, avatar fallback and user detail controls | In Progress | Add in-session passkey authentication, details, app moderation and mailbox warnings. |
+| AUTHN-056 | Support access while account locked | In Progress | Restrict preserved sessions to support operations and expose that UI. |
+| AUTHN-057 | Temporary verification using mailto and authenticated inbound mail | In Progress | Verify the received sender and a single-use code at the SMTP boundary, then expose the pending verification flow. |
+
+
+18 November batch checkpoint: AUTHN-054–057 are implemented. API tests passed 24/24, dashboard tests 3/3, TypeScript and the UADS structural validator passed. Isolated Chrome passed in-session browser/native confirmation, cross-account denial, default avatars, account detail moderation, warnings, locked passkey support-only access and replies, descriptive mailto, and cross-client PKCE redemption/replay denial. The signed loopback SMTP regression verifies the matching sender and code, rejecting forged headers, changed content and replay. Native runtime and the first independently sent external verification message remain unverified.
+
+Build gate: independent implementation and preparation for this batch are done. Production export and the requested four-job native preview are the next verification steps. No stable release or public artifact publication is planned. APK certificate verification remains to validate on the new run. External outbound transport, submission/IMAP, complete localization, physical devices and distribution publication remain outstanding; the compact navbar item remains ordered after mail by the user.
+
+Dependency gate: the dashboard audit reports the high picomatch advisory GHSA-fc5q-39xc-vjpf (CVE-2026-112366), including transitive Expo/Metro build tooling. The affected upstream releases extend through 4.0.7 and no patched npm release is currently available. Do not force a framework downgrade or disable the audit. API audit reports zero vulnerabilities. Stable publication remains gated on resolution or an authorized, justified exception. The diagnostic native preview and targeted runtime deployment remain distinct from stable release publication.

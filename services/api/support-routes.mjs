@@ -25,10 +25,11 @@ export function createSupportRoutes({accounts,mail}) {
     if(!route)return answer(res,404,{error:'Support route unavailable.'});
     const admin=route[1]==='admin/support';
     const id=route[2];
-    const current=accounts.current(req);
+    const current=admin?accounts.current(req):accounts.supportCurrent(req);
     if(!current)return answer(res,401,{error:'Sign in to use support.'});
     if(admin&&accounts.adminStatus(req)!==200)return answer(res,403,{error:'Administrator access is required.'});
     if(!mail)return answer(res,503,{error:'Support mail is unavailable.'});
+    if(!admin&&req.method==='GET'&&!id)return answer(res,200,{requests:await mail.ownSupport(current.owner)});
     if(admin&&req.method==='GET'){
       if(!id)return answer(res,200,{requests:mail.listSupport()});
       const details=await mail.readSupport(id);
@@ -36,10 +37,11 @@ export function createSupportRoutes({accounts,mail}) {
     }
     if((req.method!=='POST'&&req.method!=='DELETE')||(admin?!id:!!id) ||
       (!admin&&req.method!=='POST'))return answer(res,405,{error:'Method unavailable.'});
-    const permits=()=>accounts.current(req)&&accounts.allowsMutation(req)&&req.headers['x-authnjs-request']==='account-consent';
+    const permits=()=>(admin?accounts.current(req)&&accounts.allowsMutation(req):
+      accounts.supportCurrent(req)?.owner===current.owner&&accounts.allowsSupportMutation(req))&&req.headers['x-authnjs-request']==='account-consent';
     if(!permits())return answer(res,403,{error:'Open the account manager to continue.'});
     if(admin&&req.method==='DELETE'){
-      if(accounts.adminStatus(req,true)!==200)return answer(res,403,{error:'Sign in again before removing a request.'});
+      if(accounts.adminStatus(req,true)!==200)return answer(res,403,{error:'Confirm your identity before removing a request.'});
       return mail.removeSupport(id)?answer(res,200,{ok:true}):answer(res,404,{error:'Request unavailable.'});
     }
     const data=await input(req);

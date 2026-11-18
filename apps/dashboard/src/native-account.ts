@@ -49,3 +49,13 @@ export async function nativePasskeySession(signUp=false) {
 export const readSession=()=>SecureStore.getItemAsync(sessionKey);
 export const saveSession=(token:string)=>SecureStore.setItemAsync(sessionKey,token,{keychainAccessible:SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY});
 export const clearSession=()=>SecureStore.deleteItemAsync(sessionKey);
+
+export async function nativeReauthenticate(token:string) {
+  const request=await nativeRequest('reauth/native',token,{});
+  const result=await openAuthSessionAsync(request.url,'authnjs-dashboard://reauth');
+  if(result.type!=='success')return false;
+  const callback=new URL(result.url);
+  if(callback.protocol!=='authnjs-dashboard:'||callback.host!=='reauth'||callback.pathname||
+    callback.searchParams.get('state')!==request.state)throw new Error('Invalid confirmation return.');
+  return true;
+}

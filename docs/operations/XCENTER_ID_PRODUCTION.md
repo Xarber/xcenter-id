@@ -39,3 +39,8 @@ The production identity vhost now uses the targeted account patch from c89b65b o
 Before cutover, the operator took a checked SQLite backup and verified rename, reverse rename and rename again against an isolated copy. The candidate passed issuer discovery and denied anonymous Admin API access before cutover. The first readiness probe hit a connection reset during startup, then the listener was rechecked and passed. After cutover, the stored profile matched the active administrator ID, HTTPS discovery passed and anonymous Admin requests returned 403. The user's authenticated browser session and Admin tab have not been exercised.
 
 Rollback is available from `/srv/xcenter/infra/changes/id.xcenter.it.before-admin-c89b65b.conf` and the preserved `xcenter-id-public` container. To reverse the username itself, use the audited operator tool to re-encrypt with the old username. A direct SQL rename would break authentication of the encrypted profile. The isolated staging container was stopped and the protected backup and original deployment were retained.
+
+
+## 18 November recovery baseline
+
+Revision 861128c is live for the issuer and both sample hosts through `xcenter-id-public-861128c` on loopback 18802. The older administrator container on 18801 is retained. Six online SQLite snapshots passed quick_check at `/var/lib/xcenter-id-rollbacks/pre-861128c.uZ3ysD`; previous proxy files are under `/srv/xcenter/infra/changes/pre-861128c/`. Root has about 2.2 GiB available and SharedData about 1.1 GiB. The nightly backup guard remains unchanged; these targeted pre-deploy snapshots use the root volume. Mail ingress is now publicly exposed with STARTTLS, but independent external receipt and outbound delivery remain unverified. Preserve iCloud apex MX.

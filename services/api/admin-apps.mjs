@@ -3,7 +3,7 @@ export function createAdminAppRoutes({accounts,registry}){
     const answer=(status,value)=>res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(value));
     const write=req.method==='POST';
     if(accounts.adminStatus(req,write)!==200||write&&req.headers['x-authnjs-request']!=='account-consent'){
-      return answer(403,{error:'Sign in again with an administrator account.'});
+      return answer(403,{error:'Confirm administrator access.'});
     }
     if(req.method==='GET')return answer(200,registry.administration());
     if(!write)return answer(405,{error:'Method unavailable.'});

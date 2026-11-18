@@ -31,6 +31,7 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
     CREATE TABLE IF NOT EXISTS support_requests(id TEXT PRIMARY KEY, owner TEXT NOT NULL,
       created INTEGER NOT NULL, replied INTEGER) STRICT;
     CREATE INDEX IF NOT EXISTS support_requests_owner ON support_requests(owner,created);
+    CREATE TABLE IF NOT EXISTS support_replies(request TEXT PRIMARY KEY, reply TEXT NOT NULL) STRICT;
   `);
   const alias = db.prepare('SELECT id FROM aliases WHERE owner=? AND client=? AND active=1');
   const insertAlias = db.prepare('INSERT INTO aliases (id,owner,client) VALUES (?,?,?) ON CONFLICT(owner,client) DO NOTHING');
@@ -151,6 +152,19 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
         return true;
       });
     },
+    async ownSupport(owner) {
+      const rows=db.prepare('SELECT id,created,replied FROM support_requests WHERE owner=? ORDER BY created DESC LIMIT 30').all(owner);
+      return Promise.all(rows.map(async row=>{
+        const request=retrieve(supportOwner,row.id);
+        const reference=db.prepare('SELECT reply FROM support_replies WHERE request=?').get(row.id);
+        const reply=reference&&retrieve(owner,reference.reply);
+        const parsed=request&&await simpleParser(request,{skipImageLinks:true,skipTextToHtml:true,skipHtmlToText:true});
+        const response=reply&&await simpleParser(reply,{skipImageLinks:true,skipTextToHtml:true,skipHtmlToText:true});
+        return {id:row.id,created:row.created,replied:row.replied,subject:parsed?.subject??'Support request',
+          text:parsed?.text??'',reply:response?.text??null};
+      }));
+    },
+    notice(owner,content) {return !!deliver(owner,content);},
     listSupport() {
       const listRequests=db.prepare(`SELECT i.id,i.received,r.replied,r.owner IS NULL AS external
         FROM inbox i LEFT JOIN support_requests r ON i.id=r.id
@@ -173,7 +187,9 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
       return transaction(()=>{
         const row=db.prepare('SELECT owner,replied FROM support_requests WHERE id=?').get(id);
         if(!row||row.replied||!username.get(row.owner)||!retrieve(supportOwner,id))return false;
-        if(!deliver(row.owner,content))return false;
+        const reply=deliver(row.owner,content);
+        if(!reply)return false;
+        db.prepare('INSERT INTO support_replies VALUES(?,?)').run(id,reply);
         db.prepare('UPDATE support_requests SET replied=? WHERE id=?').run(Date.now(),id);
         return true;
       });

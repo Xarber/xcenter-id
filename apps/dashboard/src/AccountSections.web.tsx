@@ -1,6 +1,7 @@
+import Reauthenticate from './Reauthenticate.web';
+import { AdminAccounts, IconAction } from './AdminUsers.web';
 import { AdminUsernameChanges } from './UsernameChange.web';
 import { AdminSupport } from './Support.web';
-import type { ManagedAccount } from './support-model';
 import { accountMessage } from './account-locale';
 import type { Friend } from './friends-model';
 import type { MailMessage, PrivateAddress } from './mail-message';
@@ -289,67 +290,23 @@ export function MailPage({ account }:{account:Account}) {
 
 type AdminApp={id:string;name:string;status:string;callback:string;developerName?:string;repository?:string;verified:boolean};
 type AdminDeveloper={owner:string;name:string;status:string;repository?:string};
-export function AdminPage() {
-  const [users,setUsers]=useState<ManagedAccount[]>([]);
-  const [deleting,setDeleting]=useState('');
-  const [signingOut,setSigningOut]=useState('');
-  const [confirmation,setConfirmation]=useState('');
+function AdminContent() {
   const [apps,setApps]=useState<AdminApp[]>([]);
   const [developers,setDevelopers]=useState<AdminDeveloper[]>([]);
-  const [filter,setFilter]=useState('');
-  const [edit,setEdit]=useState<string|null>(null);
-  const [capacity,setCapacity]=useState('');
   const [status,setStatus]=useState('');
   const [busy,setBusy]=useState(false);
   async function refresh(){
-    const [members,inventory]=await Promise.all([api('admin/accounts'),api('admin/apps')]);
-    setUsers(members.accounts);setApps(inventory.apps);setDevelopers(inventory.developers);
+    const inventory=await api('admin/apps');setApps(inventory.apps);setDevelopers(inventory.developers);
   }
   useEffect(()=>{void refresh().catch(error=>setStatus(notice(error)));},[]);
   function save(path:string,value:object,success:string){
     setStatus('');setBusy(true);
-    void api(path,value).then(refresh).then(()=>{setStatus(success);setEdit(null);})
+    void api(path,value).then(refresh).then(()=>{setStatus(success);})
       .catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
   }
   return <>
-    <section className="xc-card xc-pad"><div className="xc-row-head"><span className="xc-symbol xc-lavender"><ShieldCheck size={21}/></span>
-      <div><h2>Accounts</h2><p>Manage account access, storage and premium alias eligibility.</p></div></div>
-      <label className="xc-admin-search">Find an account<input type="search" value={filter} onChange={event=>setFilter(event.target.value)} placeholder="Username"/></label>
-      {users.filter(user=>user.username.includes(filter.trim().toLowerCase())).map(user=><div className="xc-list-row xc-permission-row" key={user.username}>
-        <div className="xc-row-head">
-          <img className="xc-admin-avatar" width={44} height={44} alt="" loading="lazy"
-            src={'/account/admin/accounts/'+user.username+'/avatar'} onError={event=>{event.currentTarget.hidden=true;}}/>
-          <div><strong>@{user.username}</strong><p>{formatBytes(user.capacity)} storage{user.locked?' · Locked':''}</p></div>
-        </div>
-        {edit===user.username?<form className="xc-actions" onSubmit={event=>{
-          event.preventDefault();save('admin/storage',{username:user.username,capacity:Number(capacity)*1024**2},'Storage capacity updated.');
-        }}><label>Capacity in MB<input required type="number" min={1} max={1024} step={1} value={capacity} onChange={event=>setCapacity(event.target.value)}/></label>
-          <button className="xc-button xc-primary" disabled={busy}>Save capacity</button>
-          <button className="xc-button xc-secondary" type="button" onClick={()=>setEdit(null)} disabled={busy}>Cancel</button>
-        </form>:<div className="xc-actions">
-          <button className="xc-button xc-secondary" disabled={busy} onClick={()=>{setEdit(user.username);setCapacity(String(Math.round(user.capacity/1024**2)));}}>Change storage</button>
-          <button className="xc-button xc-secondary" disabled={busy} onClick={()=>
-            save('admin/premium',{username:user.username,enabled:!user.premium},'Eligibility updated.')}>
-            {user.premium?'Disable premium aliases':'Enable premium aliases'}
-          </button>
-          {!user.protected&&<><button className="xc-button xc-secondary" disabled={busy} onClick={()=>save('admin/account-status',
-            {username:user.username,action:user.locked?'unlock':'lock'},user.locked?'Account unlocked.':'Account locked.')}>{user.locked?'Unlock':'Lock account'}</button>
-            <button className="xc-button xc-secondary" disabled={busy} onClick={()=>{
-              if(signingOut!==user.username){setSigningOut(user.username);return;}
-              setSigningOut('');save('admin/account-status',{username:user.username,action:'revoke-sessions'},'All devices signed out.');
-            }}>{signingOut===user.username?'Confirm sign out':'Sign out all devices'}</button>
-            <button className="xc-button xc-secondary" disabled={busy} onClick={()=>{setDeleting(user.username);setConfirmation('');}}>Delete account</button></>}
-          </div>}
-        {deleting===user.username&&<form className="xc-stack" onSubmit={event=>{
-          event.preventDefault();save('admin/account-status',{username:user.username,action:'delete',confirmation},'Account deleted.');
-        }}>
-          <p>This removes the profile and credentials and signs out every device. Enter @{user.username} without the @ to confirm.</p>
-          <label>Confirm username<input value={confirmation} onChange={event=>setConfirmation(event.target.value)}/></label>
-          <div className="xc-actions"><button className="xc-button xc-secondary" disabled={busy||confirmation!==user.username}>Permanently delete account</button>
-          <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>setDeleting('')}>Cancel deletion</button></div>
-        </form>}
-      </div>)}
-    </section>
+    <details className="xc-card xc-pad"><summary>Confirm administrator identity</summary><Reauthenticate complete={()=>setStatus('Identity confirmed.')}/></details>
+    <AdminAccounts/>
     <AdminUsernameChanges refreshAccounts={refresh}/>
     <AdminSupport/>
     <section className="xc-card xc-pad"><div className="xc-row-head"><BadgeCheck size={21}/><h2>Developer verification</h2></div>
@@ -357,10 +314,8 @@ export function AdminPage() {
       {developers.map(developer=><div className="xc-list-row xc-permission-row" key={developer.owner}>
         <div><strong>{developer.name}</strong><p>{developer.status==='verified'?'Verified':'Review requested'}</p>
           {developer.repository&&<a href={developer.repository} target="_blank" rel="noreferrer">Review GitHub repository</a>}</div>
-        <button className="xc-button xc-secondary" disabled={busy} onClick={()=>
-          save('admin/apps',{type:'developer',id:developer.owner,verified:developer.status!=='verified'},'Developer verification updated.')}>
-          {developer.status==='verified'?'Remove verification':'Verify developer'}
-        </button>
+        <IconAction label={developer.status==='verified'?'Remove verification':'Verify developer'} disabled={busy} onClick={()=>
+          save('admin/apps',{type:'developer',id:developer.owner,verified:developer.status!=='verified'},'Developer verification updated.')}><BadgeCheck size={20}/></IconAction>
       </div>)}
     </section>
     <section className="xc-card xc-pad"><div className="xc-row-head"><BadgeCheck size={21}/><h2>Registered apps</h2></div>
@@ -368,9 +323,8 @@ export function AdminPage() {
       {apps.map(app=><div className="xc-list-row xc-permission-row" key={app.id}>
         <div><strong>{app.name}</strong><p>{app.developerName??'Developer'} · {app.status}</p>
           <p>{new URL(app.callback).hostname}</p>{app.repository&&<a href={app.repository} rel="noreferrer" target="_blank">Review repository</a>}</div>
-        {app.status==='active'&&<button className="xc-button xc-secondary" disabled={busy}
-          onClick={()=>save('admin/apps',{type:'app',id:app.id,verified:!app.verified},'App verification updated.')}>
-          {app.verified?'Remove verification':'Verify app'}</button>}
+        {app.status==='active'&&<IconAction label={app.verified?'Remove verification':'Verify app'} disabled={busy}
+          onClick={()=>save('admin/apps',{type:'app',id:app.id,verified:!app.verified},'App verification updated.')}><BadgeCheck size={20}/></IconAction>}
       </div>)}
     </section>
     {status&&<p className="xc-notice" role="status">{status}</p>}
@@ -399,4 +353,13 @@ export function ConnectedApps() {
       </div></div>)}
     {status&&<p role="status">{status}</p>}
   </div>;
+}
+
+export function AdminPage(){
+  const [authorized,setAuthorized]=useState(false);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState('');
+  useEffect(()=>{void api('admin/access').then(result=>setAuthorized(result.authorized)).catch(error=>setError(error.message)).finally(()=>setLoading(false));},[]);
+  if(loading)return <p role="status">Checking administrator access…</p>;
+  return authorized?<AdminContent/>:<><Reauthenticate complete={()=>setAuthorized(true)}/>{error&&<p role="alert">{error}</p>}</>;
 }

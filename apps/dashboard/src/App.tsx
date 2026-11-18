@@ -1,3 +1,4 @@
+import NativeSupport from './NativeSupport';
 import { accountMessage } from './account-locale';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -133,6 +134,7 @@ function NativeAccount() {
         {loading?<ActivityIndicator accessibilityLabel="Opening account"/>:locked&&token?
           <View style={[styles.card,{backgroundColor:colors.panel}]}>
             <Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>Account locked</Text>
+            <NativeSupport token={token} colors={colors}/>
             {action('Check again','refresh-outline',()=>void load(token).catch(()=>setError('Could not check your account.')))}
             {action('Sign out','log-out-outline',()=>void signOut())}
           </View>:!token||!account?

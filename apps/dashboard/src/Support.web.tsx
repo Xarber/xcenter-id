@@ -1,8 +1,12 @@
+import { IconAction } from './AdminUsers.web';
+import { ArrowLeft, Check, RefreshCw, Send, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from './web-account';
 import type { SupportMessage, SupportRequest } from './support-model';
 
 export function SupportPage() {
+  const [requests,setRequests]=useState<{id:string;subject:string;reply:string|null}[]>([]);
+  useEffect(()=>{void api('support').then(result=>setRequests(result.requests)).catch(()=>{});},[]);
   const [subject,setSubject]=useState('');
   const [text,setText]=useState('');
   const [status,setStatus]=useState('');
@@ -14,6 +18,7 @@ export function SupportPage() {
     }).catch(error=>setStatus(error.message)).finally(()=>setBusy(false));
   }}>
     <h2>Contact support</h2>
+    {requests.map(request=><div key={request.id}><strong>{request.subject}</strong><p style={{whiteSpace:'pre-wrap'}}>{request.reply??'Awaiting a reply.'}</p></div>)}
     <p>Send feedback or get help with your account. X-Center administrators can read your request.</p>
     <label>Subject<input required maxLength={120} value={subject} onChange={event=>setSubject(event.target.value)}/></label>
     <label>Message<textarea required rows={5} maxLength={3000} value={text} onChange={event=>setText(event.target.value)}/></label>
@@ -38,7 +43,7 @@ export function AdminSupport() {
   return <section className="xc-card xc-pad xc-stack">
     <h2>Support inbox</h2>
     {open?<article className="xc-stack">
-      <button type="button" className="xc-button xc-secondary xc-self-start" disabled={busy} onClick={()=>{setOpen(null);setConfirm(false);}}>All requests</button>
+      <IconAction label="All requests" disabled={busy} onClick={()=>{setOpen(null);setConfirm(false);}}><ArrowLeft size={20}/></IconAction>
       <h3>{open.message.subject||'(No subject)'}</h3>
       <p>{open.message.sender}{open.message.external?' · Unverified email sender':''}</p>
       <p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{open.message.text}</p>
@@ -47,15 +52,15 @@ export function AdminSupport() {
         run(async()=>{await api('admin/support/'+open.id,{text});setOpen(null);setText('');await load();setStatus('Reply delivered to Mail.');});
       }}>
         <label>Reply<textarea required rows={4} maxLength={3000} value={text} onChange={event=>setText(event.target.value)}/></label>
-        <button className="xc-button xc-primary xc-self-start" disabled={busy||!text.trim()}>Send mailbox reply</button>
+        <IconAction type="submit" label="Send mailbox reply" disabled={busy||!text.trim()}><Send size={20}/></IconAction>
       </form>}
       {open.message.external&&<p>External replies require a configured email sender.</p>}
-      <button type="button" className="xc-button xc-secondary xc-self-start" disabled={busy} onClick={()=>{
+      <IconAction label={confirm?'Confirm removal':'Remove request'} disabled={busy} onClick={()=>{
         if(!confirm){setConfirm(true);return;}
         run(async()=>{await api('admin/support/'+open.id,{},'DELETE');setOpen(null);setConfirm(false);await load();});
-      }}>{confirm?'Confirm removal':'Remove request'}</button>
+      }}>{confirm?<Check size={20}/>:<Trash2 size={20}/>}</IconAction>
     </article>:<>
-      <button type="button" className="xc-button xc-secondary xc-self-start" disabled={busy} onClick={()=>run(load)}>Refresh requests</button>
+      <IconAction label="Refresh requests" disabled={busy} onClick={()=>run(load)}><RefreshCw size={20}/></IconAction>
       {requests.length===0&&!busy&&<p>No support requests.</p>}
       {requests.map(request=><button type="button" className="xc-button xc-secondary xc-self-start" key={request.id} disabled={busy}
         onClick={()=>run(async()=>{setOpen({id:request.id,message:await api('admin/support/'+request.id)});setText('');setConfirm(false);})}>

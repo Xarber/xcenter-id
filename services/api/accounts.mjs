@@ -1,3 +1,4 @@
+import { openInboundVerification } from './inbound-verification.mjs';
 import { openEmailSignIn } from './email-signin.mjs';
 import { openNativeSession } from './native-session.mjs';
 import { createPasskeyLabelResolver, passkeyLabel } from './passkey-label.mjs';
@@ -54,7 +55,7 @@ async function body(req, limit=65536) {
   throw new AccountError(400, 'Invalid request.');
 }
 
-export function createAccounts({ database, origin, sendVerification, profileKey, outboundMail, canReceiveMail = false, externalMail = false }) {
+export function createAccounts({ database, origin, sendVerification, profileKey, outboundMail, canReceiveMail = false, externalMail = false, inboundVerification=false }) {
   const url = new URL(origin);
   if (url.origin !== origin || url.protocol !== 'https:') throw new Error('Set the exact HTTPS account origin');
   const rpID = url.hostname;
@@ -104,7 +105,12 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     CREATE TABLE IF NOT EXISTS username_change_requests(owner TEXT PRIMARY KEY REFERENCES accounts(id),
       id TEXT UNIQUE NOT NULL, previous TEXT NOT NULL, proposed TEXT NOT NULL, expires INTEGER NOT NULL,
       confirmed INTEGER NOT NULL DEFAULT 0) STRICT;
+    CREATE TABLE IF NOT EXISTS session_confirmations(hash TEXT PRIMARY KEY REFERENCES account_sessions(hash) ON DELETE CASCADE,
+      expires INTEGER NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS native_confirmations(code TEXT PRIMARY KEY, hash TEXT NOT NULL REFERENCES account_sessions(hash) ON DELETE CASCADE,
+      expires INTEGER NOT NULL) STRICT;
   `);
+  const inbound=openInboundVerification(database,{enabled:inboundVerification});
   const native = openNativeSession(db);
   const emailSignIn=openEmailSignIn(db,{send:sendVerification,secret:profileKey??randomBytes(32)});
   const verification = openEmailVerification(db,{ send:sendVerification, origin });
@@ -203,8 +209,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     const browser=/Edg\//.test(header)?'Edge':/Chrome|CriOS/.test(header)?'Chrome':/Firefox/.test(header)?'Firefox':/Safari/.test(header)?'Safari':'Browser';
     return browser+' on '+os;
   }
-  function login(req,res, owner, nativeSource) {
-    requireCondition(available(owner),401,'Sign-in is unavailable.');
+  function login(req,res, owner, nativeSource,allowLocked=false) {
+    requireCondition(available(owner)||allowLocked&&restriction.get(owner)?.status==='locked',401,'Sign-in is unavailable.');
     const value = token();
     q('DELETE FROM account_sessions WHERE expires<=?').run(now());
     const hash=digest(value);
@@ -242,11 +248,23 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
 
   function recent(active) {
     requireCondition(active, 401, 'Sign in first.');
-    requireCondition(now() - active.created < recentAge, 403, 'Sign out and sign back in before continuing.');
+    requireCondition(confirmed(active), 403, 'Confirm your identity to continue.');
+  }
+  function confirmed(active) {
+    return !!active&&(now()-active.created<recentAge||
+      !!q('SELECT 1 FROM session_confirmations WHERE hash=? AND expires>?').get(active.hash,now()));
   }
 
   async function route(req, res, pathname) {
     const active = session(req);
+    if(req.method==='GET'&&pathname==='/account/admin/access'){
+      requireCondition(isAdmin(active),403,'Administrator access is required.');
+      return {authorized:confirmed(active)};
+    }
+    if(pathname.startsWith('/account/admin/')){
+      requireCondition(isAdmin(active),403,'Administrator access is required.');
+      recent(active);
+    }
     if (req.method === 'GET' && pathname === '/account/me') {
       if (!active) {
         const preserved=session(req,true);
@@ -269,6 +287,10 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       } };
     }
 
+    if(req.method==='GET'&&pathname==='/account/email/incoming'){
+      requireCondition(active,401,'Sign in first.');
+      return {enabled:inbound.enabled,pending:inbound.pending(active.owner)};
+    }
     if (req.method === 'GET' && pathname === '/account/connected-apps') {
       requireCondition(active,401,'Sign in first.');
       return {apps:q('SELECT client,label,updated FROM connected_apps WHERE owner=? ORDER BY updated DESC LIMIT 100').all(active.owner)};
@@ -288,7 +310,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       return {accounts:q(`SELECT p.username,p.owner,coalesce(e.premium_mail,0) AS premium FROM identity_profiles p
         LEFT JOIN account_entitlements e ON e.owner=p.owner ORDER BY p.username LIMIT 500`).all()
         .map(row=>({username:row.username,premium:!!row.premium,capacity:storageCapacity(row.owner),
-          locked:restriction.get(row.owner)?.status==='locked',protected:adminIds.has(row.owner)}))};
+          locked:restriction.get(row.owner)?.status==='locked',protected:adminIds.has(row.owner),hasPicture:!!profile(row.owner)?.picture}))};
     }
     if(req.method==='GET'&&pathname==='/account/username-change'){
       requireCondition(active,401,'Sign in first.');
@@ -325,7 +347,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         const username=typeof input.username==='string'?input.username.trim().toLowerCase():'';
         requireCondition(/^[a-z][a-z0-9]{2,23}$/.test(username),422,'Enter a valid X-Center username.');
         const owner=usernameOwner.get(username)?.owner;
-        requireCondition(owner&&available(owner),404,'No available X-Center ID uses this username.');
+        requireCondition(owner&&(available(owner)||restriction.get(owner)?.status==='locked'),404,'No available X-Center ID uses this username.');
+        if(restriction.get(owner)?.status==='locked')return {method:'passkey'};
         const email=emails.all(owner)[0]?.address;
         if(!email||!emailSignIn.enabled)return {method:'passkey'};
         const result=await emailSignIn.start(owner,email,channel);
@@ -343,14 +366,21 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       limitChallenges();
       const input=await body(req);
       const source=native.exchange(input);
-      const browser=source && lookupSession.get(source,now());
+      const browser=source && lookupPreservedSession.get(source,now());
       requireCondition(browser,401,'The app sign-in expired. Start again.');
-      return {token:login(req,res,browser.owner,browser)};
+      return {token:login(req,res,browser.owner,browser,true)};
     }
     requireCondition(allowsMutation(req)||(pathname==='/account/logout'&&nativeRequest(req)&&session(req,true)),403,'Invalid origin.');
     if (pathname === '/account/mail/send') requireCondition(active,401,'Sign in first.');
     const input = await body(req,pathname==='/account/mail/send'?512*1024:undefined);
     if(active)requireCondition(session(req),401,'Sign in first.');
+    if(pathname==='/account/reauth/native'){
+      requireCondition(active&&nativeRequest(req),401,'Use the signed-in account manager.');
+      q('DELETE FROM native_confirmations WHERE expires<=? OR hash=?').run(now(),active.hash);
+      const code=token();
+      q('INSERT INTO native_confirmations VALUES(?,?,?)').run(digest(code),active.hash,now()+120_000);
+      return {url:origin+'/reauth?request='+code,state:code};
+    }
     if(pathname==='/account/admin/account-status'){
       requireCondition(isAdmin(active),403,'Administrator access is required.');
       recent(active);
@@ -374,7 +404,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         if(action==='delete'){
           q('INSERT INTO retired_usernames VALUES(?)').run(username);
           for(const table of ['passkeys','connected_apps','app_disconnects','account_entitlements','account_storage_caps',
-            'identity_profiles','signup_usernames','verified_emails','email_verifications','username_change_requests']){
+            'identity_profiles','signup_usernames','verified_emails','email_verifications','username_change_requests',
+            'inbound_verifications','inbound_verification_rates']){
             q('DELETE FROM '+table+' WHERE owner=?').run(target);
           }
           q("UPDATE accounts SET name='Deleted account' WHERE id=?").run(target);
@@ -428,9 +459,10 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       return {ok:true};
     }
     if(pathname==='/account/native/authorize'){
-      requireCondition(active && req.headers.origin===origin,401,'Sign in to X-Center ID first.');
+      const source=active??session(req,true);
+      requireCondition(source && req.headers.origin===origin,401,'Sign in to X-Center ID first.');
       limitChallenges();
-      const location=native.issue(active.hash,input.challenge,input.state);
+      const location=native.issue(source.hash,input.challenge,input.state);
       requireCondition(location,422,'Invalid app sign-in request.');
       return {location};
     }
@@ -470,6 +502,12 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       requireCondition(outboundMail && identity,503,'Mail sending is unavailable.');
       const result = await outboundMail.send(active.owner,identity.username,input);
       if (!result.ok) throw new AccountError(result.status,result.error);
+      return result;
+    }
+    if(pathname==='/account/email/incoming'){
+      requireCondition(active,401,'Sign in first.');
+      const result=inbound.start(active.owner,input.email);
+      if(!result.ok)throw new AccountError(result.status,result.error);
       return result;
     }
     if (pathname === '/account/email') {
@@ -523,16 +561,26 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     }
 
     const action = pathname.split('/')[2];
-    requireCondition(['signup', 'login', 'add'].includes(action), 404, 'Account route unavailable.');
-    if (action === 'add') recent(active);
+    requireCondition(['signup', 'login', 'add','reauth'].includes(action), 404, 'Account route unavailable.');
+    if(action==='reauth')requireCondition(active,401,'Sign in first.');
+    else if (action === 'add') recent(active);
     else requireCondition(!active, 409, 'Sign out before starting a new account or sign-in.');
     if (pathname.endsWith('/options')) {
       limitChallenges();
-      if (action === 'login') {
-        const options = await generateAuthenticationOptions({ rpID, userVerification: 'required' });
+      if (action === 'login'||action==='reauth') {
+        const options = await generateAuthenticationOptions({ rpID, userVerification: 'required',
+          ...(action==='reauth'?{allowCredentials:keys.all(active.owner).map(({id,transports})=>({id,transports:JSON.parse(transports)}))}:{}) });
         const username = typeof input.username === 'string' ? input.username.trim().toLowerCase() : '';
         requireCondition(!username || /^[a-z][a-z0-9]{2,23}$/.test(username),422,'Enter a valid X-Center username.');
-        prepare(res, { action, username, expected: options.challenge });
+        let target;
+        if(action==='reauth'&&input.request){
+          requireCondition(typeof input.request==='string'&&/^[A-Za-z0-9_-]{43}$/.test(input.request),422,'Invalid confirmation.');
+          target=q(`SELECT c.hash FROM native_confirmations c JOIN account_sessions s ON c.hash=s.hash
+            WHERE c.code=? AND c.expires>? AND s.owner=? AND s.expires>?`).get(digest(input.request),now(),active.owner,now())?.hash;
+          requireCondition(target,403,'Open confirmation from the signed-in app.');
+        }
+        prepare(res, { action, username, expected: options.challenge,
+          ...(action==='reauth'?{sessionHash:active.hash,target,request:input.request}:{}) });
         return options;
       }
       const name = passkeyLabel(input.name);
@@ -559,9 +607,10 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     requireCondition(pathname.endsWith('/finish'), 404, 'Account route unavailable.');
     const challenge = consume(req, action, active);
     requireCondition(input.response && typeof input.response.id === 'string', 400, 'Invalid passkey response.');
-    if (action === 'login') {
+    if (action === 'login'||action==='reauth') {
       const saved = key.get(input.response.id);
-      requireCondition(saved&&available(saved.owner), 401, 'Could not sign in with this passkey.');
+      requireCondition(saved&&(available(saved.owner)||action==='login'&&restriction.get(saved.owner)?.status==='locked'), 401, 'Could not sign in with this passkey.');
+      if(action==='reauth')requireCondition(saved.owner===active.owner,403,'Use a passkey for the signed-in account.');
       const handle = input.response.response?.userHandle;
       requireCondition(!handle || handle === Buffer.from(saved.owner).toString('base64url'), 401, 'Could not sign in with this passkey.');
       const result = await verifyAuthenticationResponse({
@@ -571,10 +620,25 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       }).catch(() => null);
       requireCondition(result?.verified && (!challenge.username || profile(saved.owner)?.username === challenge.username),
         401, 'Could not sign in with this passkey and username.');
-      requireCondition(available(saved.owner),401,'Sign-in is unavailable.');
+      requireCondition(available(saved.owner)||action==='login'&&restriction.get(saved.owner)?.status==='locked',401,'Sign-in is unavailable.');
       requireCondition(q('UPDATE passkeys SET counter=? WHERE id=? AND counter=?')
         .run(result.authenticationInfo.newCounter, saved.id, saved.counter).changes === 1, 409, 'Sign-in changed. Try again.');
-      login(req,res,saved.owner);
+      if(action==='reauth'){
+        requireCondition(session(req),401,'Sign in first.');
+        const elevate=q('INSERT INTO session_confirmations VALUES(?,?) ON CONFLICT(hash) DO UPDATE SET expires=excluded.expires');
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          if(challenge.target){
+            requireCondition(q('DELETE FROM native_confirmations WHERE code=? AND hash=? AND expires>?')
+              .run(digest(challenge.request),challenge.target,now()).changes===1,403,'Confirmation expired.');
+            elevate.run(challenge.target,now()+30*60_000);
+          }
+          elevate.run(active.hash,now()+30*60_000);
+          db.exec('COMMIT');
+        }catch(error){db.exec('ROLLBACK');throw error;}
+        return {ok:true,...(challenge.target?{returnTo:'authnjs-dashboard://reauth?state='+challenge.request}:{})};
+      }
+      login(req,res,saved.owner,undefined,true);
       return { ok: true };
     }
     const result = await verifyRegistrationResponse({
@@ -627,6 +691,25 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   return {
     handle,
     current: (req) => session(req),
+    supportCurrent: req=>session(req,true),
+    allowsSupportMutation: req=>req.headers.origin===origin||(nativeRequest(req)&&!!session(req,true)),
+    adminDetails(username) {
+      const owner=usernameOwner.get(username)?.owner;
+      if(!owner)return null;
+      const person=profile(owner);
+      return {owner,username,hasPicture:!!person?.picture,name:person?.givenName+' '+person?.surname,
+        locked:restriction.get(owner)?.status==='locked',protected:adminIds.has(owner),capacity:storageCapacity(owner),
+        premium:q('SELECT premium_mail FROM account_entitlements WHERE owner=?').get(owner)?.premium_mail===1,
+        created:q('SELECT created FROM accounts WHERE id=?').get(owner).created,
+        devices:q('SELECT count(*) AS count FROM account_sessions WHERE owner=? AND expires>?').get(owner,now()).count,
+        passkeys:keys.all(owner).length,
+        apps:q('SELECT client,label,updated FROM connected_apps WHERE owner=? ORDER BY updated DESC').all(owner)};
+    },
+    auditAdmin(req,target,action) {
+      const active=session(req);
+      requireCondition(isAdmin(active)&&confirmed(active),403,'Confirm administrator access.');
+      q('INSERT INTO account_admin_events VALUES(?,?,?,?,?)').run(randomUUID(),active.owner,target,action,now());
+    },
     available,
     username: (owner) => q('SELECT username FROM identity_profiles WHERE owner=?').get(owner)?.username,
     allowsMutation,
@@ -634,7 +717,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     adminStatus(req,write=false){
       const active=session(req);
       if(!isAdmin(active))return 403;
-      if(write&&(!allowsMutation(req)||Date.now()-active.created>=recentAge))return 403;
+      if(!confirmed(active)||write&&!allowsMutation(req))return 403;
       return 200;
     },
     renameStoredUsername(owner, from, to) {

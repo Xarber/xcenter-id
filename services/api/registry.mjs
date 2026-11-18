@@ -11,6 +11,7 @@ export function openRegistry(path) {
     ) STRICT;
     CREATE TABLE IF NOT EXISTS client_brand(id TEXT PRIMARY KEY,developer_name TEXT NOT NULL,icon TEXT)
       STRICT;
+    CREATE TABLE IF NOT EXISTS app_restrictions(id TEXT PRIMARY KEY, restricted INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS client_native(id TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS app_profiles(id TEXT PRIMARY KEY, description TEXT NOT NULL, repository TEXT NOT NULL, callbacks TEXT NOT NULL, verified INTEGER NOT NULL DEFAULT 0) STRICT;
     CREATE TABLE IF NOT EXISTS developer_profiles(owner TEXT PRIMARY KEY,name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unverified') STRICT;
@@ -19,7 +20,7 @@ export function openRegistry(path) {
   const list = db.prepare(`SELECT c.id,c.name,c.callback,c.client,c.status,b.developer_name AS developerName,b.icon,p.description,p.repository,p.callbacks,p.verified,EXISTS(SELECT 1 FROM client_native n WHERE n.id=c.id) AS native FROM clients c
     LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN app_profiles p ON p.id=c.id WHERE c.developer=? ORDER BY c.name,c.id`);
   const lookup = db.prepare('SELECT c.*,p.description,p.repository,p.callbacks,p.verified,EXISTS(SELECT 1 FROM client_native n WHERE n.id=c.id) AS native FROM clients c LEFT JOIN app_profiles p ON p.id=c.id WHERE c.id=? AND c.developer=?');
-  const active = db.prepare("SELECT 1 FROM clients WHERE client = ? AND status = 'active'");
+  const active = db.prepare("SELECT 1 FROM clients WHERE client = ? AND status = 'active' AND id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)");
   const approve = db.prepare("UPDATE clients SET client = ?, status = 'active' WHERE id = ? AND status = 'pending'");
   const revoke = db.prepare("UPDATE clients SET status = 'revoked' WHERE id = ? AND status = 'active'");
 
@@ -28,7 +29,7 @@ export function openRegistry(path) {
   const appView=row=>row?{...row,description:row.description??'',repository:row.repository??'',
     callbacks:row.callbacks?JSON.parse(row.callbacks):[row.callback],verified:!!row.verified}:undefined;
   const detailByClient=db.prepare(`SELECT c.name,c.callback,p.callbacks FROM clients c LEFT JOIN app_profiles p ON p.id=c.id
-    WHERE c.client=? AND c.status='active'`);
+    WHERE c.client=? AND c.status='active' AND c.id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)`);
   const writeAppProfile=db.prepare(`INSERT INTO app_profiles(id,description,repository,callbacks) VALUES(?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET description=excluded.description,repository=excluded.repository,callbacks=excluded.callbacks,verified=0`);
   const readDeveloper=db.prepare('SELECT name,status FROM developer_profiles WHERE owner=?');
@@ -40,7 +41,7 @@ export function openRegistry(path) {
     brand: (client) => db.prepare(`SELECT c.developer AS owner,coalesce(nullif(d.name,''),b.developer_name) AS developerName,
       b.icon,p.description,p.repository,p.verified,d.status AS developerStatus
       FROM clients c LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN app_profiles p ON p.id=c.id
-      LEFT JOIN developer_profiles d ON d.owner=c.developer WHERE c.client=? AND c.status='active'`).get(client),
+      LEFT JOIN developer_profiles d ON d.owner=c.developer WHERE c.client=? AND c.status='active' AND c.id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)`).get(client),
     publicDetails: client=>appView(detailByClient.get(client)),
     developer: developerView,
     saveDeveloper(owner,name,request){
@@ -103,9 +104,19 @@ export function openRegistry(path) {
         return {id,name,callback,status:'pending',...brand,...profile,...(native?{native:true}:{})};
       } catch(error){db.exec('ROLLBACK');throw error;}
     },
+    moderate(owner,id,action){
+      const app=lookup.get(id,owner);
+      if(!app||app.status!=='active')return false;
+      if(action==='delete')return revoke.run(id).changes===1;
+      db.prepare('INSERT INTO app_restrictions VALUES(?,?) ON CONFLICT(id) DO UPDATE SET restricted=excluded.restricted')
+        .run(id,Number(action==='restrict'));
+      return true;
+    },
+    managed: owner=>list.all(owner).map(row=>({...appView(row),restricted:
+      db.prepare('SELECT restricted FROM app_restrictions WHERE id=?').get(row.id)?.restricted===1})),
     lookup: (owner,id) => appView(lookup.get(id,owner)),
     list: (developer) => list.all(developer).map(appView),
-    published: () => db.prepare("SELECT client,name FROM clients WHERE status='active' ORDER BY name,client LIMIT 200").all(),
+    published: () => db.prepare("SELECT client,name FROM clients WHERE status='active' AND id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1) ORDER BY name,client LIMIT 200").all(),
     revokeOwned: (owner,id) => db.prepare("UPDATE clients SET status='revoked' WHERE developer=? AND id=? AND status='active'").run(owner,id).changes === 1,
     has: (client) => Boolean(active.get(client)),
     approve: (id, client) => approve.run(client, id).changes === 1,

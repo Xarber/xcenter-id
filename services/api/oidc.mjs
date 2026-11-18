@@ -144,7 +144,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const found = await provider.Client.find(params.client_id);
     const client = found && { client_id:found.clientId, client_name:found.clientName, host:new URL(found.redirectUris[0]).hostname };
     const callbackOrigin=found?.redirectUris.includes(params.redirect_uri)?new URL(params.redirect_uri).origin:'';
-    if (!client) return html(res, '<h1>This app is unavailable</h1>', 404);
+    if (!client||!knownClient(client.client_id)) return html(res, '<h1>This app is unavailable</h1>', 404);
     if (!person) {
       const location = '/signin?continue=' + encodeURIComponent(path);
       res.writeHead(303,{Location:location,'Cache-Control':'no-store'}).end();

@@ -19,3 +19,12 @@ The 17 November continuation used an isolated HTTPS issuer and Chrome at 390 px.
 ## Open verification
 
 Run the account, privacy and mail flows separately on installed iOS and Android builds. A virtual WebAuthn credential does not establish physical FIDO2 compatibility. External mail needs an independent sender and inbox and verified public transport. Deployment must retain a checked recovery snapshot. The current production mount is below the backup job's space threshold. Changed-line and changed-branch coverage have yet to be measured.
+
+## 18 November regression batch
+
+The API suite now covers inbound verification with generated DKIM keys and fixture DNS, forged authentication headers, replay, expiry and SMTP delivery. Registry tests cover app restriction, restoration, deletion and ownership. Account tests cover support and replies while locked. The dashboard regression suite exercises missing Intl constructors.
+
+Isolated Chrome at 390 px verified an old administrator session opening the menu with its existing passkey, the default avatar, user detail pages, mailbox warnings, locked-account appeals and reply history, and a descriptive mailto draft. A native-session confirmation rejected another browser account and confirmed only the original native session. Two public client fixtures verified wrong-client code denial and one-time exchange, followed by administrator restriction, restoration and deletion. Native installation and an independent external verification message remain open.
+
+
+18 November final source batch: 24 API tests and 3 dashboard tests passed; dashboard TypeScript and the 16-declaration UADS structural check passed (using the existing temporary Python environment with jsonschema). Isolated Chrome covered admin renewal, native-bound renewal, account details/default avatar/warnings, app moderation, restricted support-only sign-in/replies, temporary mailto creation and cross-client authorization-code isolation. Actual iOS/Android devices and real external incoming verification remain unverified. The dashboard dependency audit fails on the unpatched picomatch advisory recorded in SECURITY.md; the API audit passes.

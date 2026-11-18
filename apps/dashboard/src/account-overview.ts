@@ -1,4 +1,5 @@
-import { accountLanguage, accountMessage } from './account-locale';
+import { accountCount } from './account-counts.mjs';
+import { accountMessage } from './account-locale';
 
 const shortcuts = [
   ['profile','profileShortcut','profileDescription'],
@@ -18,9 +19,9 @@ export function accountGreeting(name:string,locale?:string) {
 }
 
 export function accountStatus(passkeys:number,emails:number,locale=Intl.DateTimeFormat().resolvedOptions().locale) {
-  const numbers=new Intl.NumberFormat(locale);
-  const plurals=new Intl.PluralRules(accountLanguage(locale));
-  const count=(key:string,value:number)=>accountMessage(key+(plurals.select(value)==='one'?'One':'Other'),'',locale)
-    .replace('{count}',numbers.format(value));
+  const count=(key:string,value:number)=>{
+    const {suffix,formatted}=accountCount(value,locale);
+    return accountMessage(key+suffix,'',locale).replace('{count}',formatted);
+  };
   return count('enrolled',passkeys)+' · '+count('verified',emails);
 }

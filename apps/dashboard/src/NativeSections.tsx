@@ -1,4 +1,7 @@
-import type { ManagedAccount, SupportMessage, SupportRequest, UsernameRequest } from './support-model';
+import IncomingEmail from './IncomingEmail';
+import NativeAdminUsers from './NativeAdminUsers';
+import NativeSupport from './NativeSupport';
+import type { SupportMessage, SupportRequest, UsernameRequest } from './support-model';
 import { accountMessage } from './account-locale';
 import { placeLabel, type Friend, type SharedFile, type FriendRecordIndex, type ShareablePlace } from './friends-model';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +13,7 @@ import { Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollV
 import { useEffect, useState, type ReactNode } from 'react';
 import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { AccountRequestError, accountHost, nativeRequest } from './native-account';
+import { AccountRequestError, accountHost, nativeRequest, nativeReauthenticate } from './native-account';
 import { formatBytes, storageCategories } from './storage-summary';
 import type { Account } from './web-account';
 import DeveloperPortal from './DeveloperPortal';
@@ -60,13 +63,10 @@ function MailScreen({colors,close,children}:{colors:Theme;close:()=>void;childre
 export default function NativeSections({ section,token,account,colors,reload,expired,passkeys,navigate }:Props) {
   const [supportSubject,setSupportSubject]=useState('');
   const [supportText,setSupportText]=useState('');
-  const [managed,setManaged]=useState<ManagedAccount[]>([]);
-  const [accountFilter,setAccountFilter]=useState('');
+  const [adminAuthorized,setAdminAuthorized]=useState(false);
   const [newUsername,setNewUsername]=useState('');
   const [usernameRequest,setUsernameRequest]=useState<UsernameRequest|null>(null);
   const [usernameRequests,setUsernameRequests]=useState<UsernameRequest[]>([]);
-  const [target,setTarget]=useState('');
-  const [typedName,setTypedName]=useState('');
   const [requests,setRequests]=useState<SupportRequest[]>([]);
   const [request,setRequest]=useState<{id:string;message:SupportMessage}|null>(null);
   const [devices,setDevices]=useState<Device[]>([]);
@@ -122,7 +122,9 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   async function load() {
     if(section==='profile'&&account.profile)setUsernameRequest((await api('username-change')).request);
     if(section==='admin'&&account.admin){
-      setManaged((await api('admin/accounts')).accounts);
+      const {authorized}=await api('admin/access');
+      setAdminAuthorized(authorized);
+      if(!authorized)return;
       setRequests((await api('admin/support')).requests);
       setUsernameRequests((await api('admin/username-changes')).requests);
     }
@@ -160,6 +162,14 @@ export default function NativeSections({ section,token,account,colors,reload,exp
     await Promise.all([load(),reload()]);
   }
   function button(label:string,work:()=>void,disabled=busy) {
+    const adminIcons:Record<string,React.ComponentProps<typeof Ionicons>['name']>={
+      'Authenticate':'finger-print','Approve change':'checkmark','Decline request':'close',
+      'All requests':'arrow-back','Send mailbox reply':'send-outline','Remove request':'trash-outline','Refresh requests':'refresh',
+    };
+    if(section==='admin'&&adminIcons[label])return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={work}
+      style={[styles.fileAction,{backgroundColor:colors.soft,opacity:disabled?0.6:1}]}>
+      <Ionicons name={adminIcons[label]} size={22} color={colors.accent}/>
+    </Pressable>;
     return <Pressable accessibilityRole="button" disabled={disabled} onPress={work}
       style={({pressed})=>[styles.button,{backgroundColor:colors.soft,opacity:pressed||disabled?.6:1}]}>
       <Text style={{color:colors.accent,fontWeight:'700'}}>{label}</Text>
@@ -219,6 +229,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         {button('Save profile',()=>run(()=>mutate('profile',{givenName,surname,birthday,picture}),'Profile saved.'))}
         {account.profile&&<>
           <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Username change</Text>
+          {button('Confirm identity',()=>run(async()=>{await nativeReauthenticate(token);},'Identity confirmed.'))}
           {paragraph('Confirm your request here. An administrator must approve the change, including your mailbox address.')}
           {usernameRequest?<>
             {paragraph('@'+usernameRequest.proposed+(usernameRequest.confirmed?' · Waiting for administrator approval':' · Waiting for your confirmation'))}
@@ -231,7 +242,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         </>}
         {account.emails.map(item=>row(item.address,item.address,'Verified email'))}
         {field('New email address',email,setEmail,{keyboardType:'email-address',autoCapitalize:'none',autoComplete:'email'})}
-        {button('Send verification email',()=>run(()=>mutate('email',{email}),'Check your email to verify this address.'))}</>;
+        {button('Send verification email',()=>run(()=>mutate('email',{email}),'Check your email to verify this address.'))}
+        <IncomingEmail token={token} updated={reload} colors={colors}/></>;
       break;
     case 'devices':
       content=devices.map(device=>row(device.id,device.label,device.current?'This device':'Signed in '+date(device.created),
@@ -356,44 +368,17 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       </>;
       break;
     case 'support':
-      content=<>
-        {paragraph('X-Center administrators can read your request. Replies arrive in Mail.')}
-        {field('Subject',supportSubject,setSupportSubject,{maxLength:120,editable:!busy})}
-        {field('Message',supportText,setSupportText,{multiline:true,maxLength:3000,editable:!busy})}
-        {button('Send to support',()=>run(async()=>{
-          await api('support',{subject:supportSubject,text:supportText});
-          setSupportSubject('');setSupportText('');
-        },'Request sent. Check Mail for a reply.'),busy||!supportSubject.trim()||!supportText.trim())}
-      </>;
+      content=<NativeSupport token={token} colors={colors}/>;
       break;
     case 'admin':
       if(!account.admin){content=paragraph('Administrator access is required.');break;}
+      if(!adminAuthorized){
+        content=button('Authenticate',()=>run(async()=>{if(await nativeReauthenticate(token))await load();}));
+        break;
+      }
       content=<>
-        {field('Find an account',accountFilter,setAccountFilter,{autoCapitalize:'none'})}
-        {managed.filter(user=>user.username.includes(accountFilter.trim().toLowerCase())).slice(0,40).map(user=>
-          row(user.username,'@'+user.username,formatBytes(user.capacity)+' storage'+(user.locked?' · Locked':''),<>
-            <Image source={{uri:accountHost+'/account/admin/accounts/'+user.username+'/avatar',headers:{
-              Authorization:'Bearer '+token,'X-AuthNJS-Native':'account-manager',
-            }}} style={styles.adminAvatar}/>
-            {!user.protected&&<View style={styles.actions}>
-              {button(user.locked?'Unlock':'Lock account',()=>run(async()=>{
-                await api('admin/account-status',{username:user.username,action:user.locked?'unlock':'lock'});await load();
-              },user.locked?'Account unlocked.':'Account locked.'))}
-              {button('Sign out all devices',()=>confirm('Sign out all devices?','The account can sign in again unless it is locked.',()=>run(async()=>{
-                await api('admin/account-status',{username:user.username,action:'revoke-sessions'});
-              },'All devices signed out.')))}
-              {button('Delete account',()=>{setTarget(user.username);setTypedName('');})}
-            </View>}
-            {target===user.username&&<>
-              {paragraph('This removes the profile and credentials and signs out every device. Enter the username to confirm.')}
-              {field('Confirm username',typedName,setTypedName,{autoCapitalize:'none'})}
-              {button('Permanently delete account',()=>run(async()=>{
-                await api('admin/account-status',{username:target,action:'delete',confirmation:typedName});
-                setTarget('');await load();
-              },'Account deleted.'),busy||typedName!==target)}
-              {button('Cancel deletion',()=>setTarget(''))}
-            </>}
-          </>))}
+        {button('Authenticate',()=>run(async()=>{if(await nativeReauthenticate(token))await load();}))}
+        <NativeAdminUsers token={token} colors={colors}/>
         <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Username requests</Text>
         {usernameRequests.length===0&&paragraph('No confirmed requests.')}
         {usernameRequests.map(item=>row(item.id,'@'+item.previous+' → @'+item.proposed,'Confirmed by the account holder',

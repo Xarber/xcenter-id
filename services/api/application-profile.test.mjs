@@ -30,3 +30,23 @@ test('app profiles retain exact callbacks and verified status is limited to revi
     assert.equal(registry.saveDeveloper('developer','New Name',false).status,'unverified');
   }finally{registry.close();}
 });
+
+test('registered clients lose discovery and data eligibility while restricted or deleted',()=>{
+  const registry=openRegistry(':memory:');
+  try{
+    const app=registry.submit('owner','Native fixture','https://fixture.example.net/native',undefined,true);
+    assert.equal(registry.has('unregistered'),false);
+    assert.equal(registry.approve(app.id,'native-fixture'),true);
+    assert.equal(registry.moderate('other',app.id,'restrict'),false);
+    assert.equal(registry.moderate('owner',app.id,'restrict'),true);
+    assert.equal(registry.has('native-fixture'),false);
+    assert.equal(registry.publicDetails('native-fixture'),undefined);
+    assert.equal(registry.published().length,0);
+    assert.equal(registry.moderate('owner',app.id,'restore'),true);
+    assert.equal(registry.has('native-fixture'),true);
+    assert.equal(registry.moderate('owner',app.id,'delete'),true);
+    assert.equal(registry.has('native-fixture'),false);
+    assert.equal(registry.moderate('owner',app.id,'restore'),false);
+    assert.equal(registry.publicDetails('native-fixture'),undefined);
+  }finally{registry.close();}
+});

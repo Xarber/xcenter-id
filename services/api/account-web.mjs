@@ -1,3 +1,4 @@
+import { createAdminUsers } from './admin-users.mjs';
 import { createSupportRoutes } from './support-routes.mjs';
 import { createFriendRecordRoutes, openFriendRecords } from './friend-records.mjs';
 import { createFriendRoutes, openFriends } from './account-friends.mjs';
@@ -31,6 +32,7 @@ const accounts = createAccounts({
   outboundMail:createOutboundMail(mailConfig),
   canReceiveMail:!!mailConfig?.inboundDomains?.length,
   externalMail:!!mailConfig?.publicDelivery,
+  inboundVerification:!!mailConfig?.inboundVerification,
   profileKey: configuration ? Buffer.from(configuration.profileKey,'hex') : null,
   sendVerification: createVerificationMailer(mailConfig?.submission),
   origin: process.env.AUTHNJS_ACCOUNT_ORIGIN,
@@ -54,6 +56,7 @@ const reviewApps=createAdminAppRoutes({accounts,registry});
 const mail = mailConfig?.inboundDomains?.length ? openMailStore({ configuration:mailConfig,
   accountsPath:join(state,'accounts.sqlite'), mailPath:join(state,'mail.sqlite') }) : null;
 const support = createSupportRoutes({accounts,mail});
+const adminUsers=createAdminUsers({accounts,registry,mail});
 const provider = configuration ? createIdentityProvider({
   issuer: origin, database: join(state, 'oidc.sqlite'), accounts, configuration, mail:mailConfig?.publicDelivery?mail:null, registry,
 }) : null;
@@ -262,6 +265,11 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void support(req,res,path).catch(()=>{if(!res.headersSent)res.writeHead(500,{'Cache-Control':'no-store'});res.end();});
     return;
   }
+  const adminUsername=/^\/account\/admin\/users\/([a-z][a-z0-9]{2,23})$/.exec(path)?.[1];
+  if(adminUsername){
+    void adminUsers(req,res,adminUsername).catch(()=>{if(!res.headersSent)res.writeHead(500,{'Cache-Control':'no-store'});res.end();});
+    return;
+  }
   if(path==='/account/admin/apps'){
     void reviewApps(req,res);
     return;
@@ -270,9 +278,9 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void accounts.handle(req, res, path);
     return;
   }
-  const webPages = new Set(['/','/signin','/signup','/native-session','/dashboard','/profile','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/friends','/mail','/admin','/support']);
+  const webPages = new Set(['/','/signin','/signup','/native-session','/dashboard','/profile','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/friends','/mail','/admin','/support','/reauth']);
   const relative = webPages.has(path)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(path)||
-    /^\/mail\/[0-9a-f-]{36}$/.test(path) ? 'index.html' : path.slice(1);
+    /^\/(?:mail\/[0-9a-f-]{36}|admin\/users\/[a-z][a-z0-9]{2,23})$/.test(path) ? 'index.html' : path.slice(1);
   const valid = /^(?:index\.html|revision\.txt|manifest\.webmanifest|service-worker\.js|authnjs-[\w-]+\.(?:svg|png)|(?:_expo|assets)\/[\w@./-]+)$/.test(relative);
   if (!valid || relative.split('/').some((part) => part === '.' || part === '..') ||
       (req.method !== 'GET' && req.method !== 'HEAD')) {

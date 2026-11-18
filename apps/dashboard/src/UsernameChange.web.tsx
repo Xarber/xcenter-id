@@ -1,3 +1,6 @@
+import { IconAction } from './AdminUsers.web';
+import { Check, RefreshCw, X } from 'lucide-react';
+import Reauthenticate from './Reauthenticate.web';
 import { useEffect, useState } from 'react';
 import { api } from './web-account';
 import type { UsernameRequest } from './support-model';
@@ -16,6 +19,7 @@ export function UsernameChange() {
   useEffect(()=>{void load().catch(error=>setStatus(error.message));},[]);
   return <section className="xc-card xc-pad xc-stack">
     <h2>Username change</h2>
+    <details><summary>Confirm identity</summary><Reauthenticate complete={()=>setStatus('Identity confirmed.')}/></details>
     <p>Confirm the request here, then wait for an administrator to approve it. Approval changes your X-Center mailbox address.</p>
     {request?<div className="xc-stack"><strong>@{request.proposed}</strong>
       <p>{request.confirmed?'Waiting for administrator approval.':'Waiting for your confirmation.'}</p>
@@ -42,15 +46,15 @@ export function AdminUsernameChanges({refreshAccounts}:{refreshAccounts:()=>Prom
   useEffect(()=>{run(load);},[]);
   return <section className="xc-card xc-pad xc-stack">
     <h2>Username requests</h2>
-    <button className="xc-button xc-secondary xc-self-start" type="button" disabled={busy} onClick={()=>run(load)}>Refresh username requests</button>
+    <IconAction label="Refresh username requests" disabled={busy} onClick={()=>run(load)}><RefreshCw size={20}/></IconAction>
     {!requests.length&&!busy&&<p>No confirmed requests.</p>}
     {requests.map(request=><div key={request.id} className="xc-list-row">
       <strong>@{request.previous} → @{request.proposed}</strong>
-      <div className="xc-actions">{(['approve','reject'] as const).map(action=><button className="xc-button xc-secondary"
-        key={action} type="button" disabled={busy} onClick={()=>run(async()=>{
+      <div className="xc-actions">{(['approve','reject'] as const).map(action=><IconAction label={action==='approve'?'Approve change':'Decline request'}
+        key={action} disabled={busy} onClick={()=>run(async()=>{
           await api('admin/username-changes',{id:request.id,action});await Promise.all([load(),refreshAccounts()]);
           setStatus(action==='approve'?'Username changed.':'Request declined.');
-        })}>{action==='approve'?'Approve change':'Decline request'}</button>)}</div>
+        })}>{action==='approve'?<Check size={20}/>:<X size={20}/>}</IconAction>)}</div>
     </div>)}
     {status&&<p role="status">{status}</p>}
   </section>;

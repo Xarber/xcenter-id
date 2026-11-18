@@ -1,3 +1,4 @@
+import Reauthenticate from './Reauthenticate.web';
 import { SupportPage } from './Support.web';
 import FriendsPage from './FriendsPage.web';
 import { accountMessage } from './account-locale';
@@ -188,10 +189,10 @@ export default function WebApp(){
   const path=window.location.pathname.replace(/^\//,'')||'dashboard';
   const permissionRoute=/^permissions\/([A-Za-z0-9_-]{1,100})$/.exec(path);
   const mailRoute=/^mail\/[0-9a-f-]{36}$/.test(path);
-  const next=path==='native-session'?window.location.pathname+window.location.search:
+  const next=path==='native-session'||path==='reauth'?window.location.pathname+window.location.search:
     new URLSearchParams(window.location.search).get('continue')??(permissionRoute||mailRoute?'/'+path:'');
   const nativeReturn=/^\/native-session\?challenge=[A-Za-z0-9_-]{43}&state=[A-Za-z0-9_-]{43}$/;
-  const continuation=/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)||nativeReturn.test(next)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(next)||/^\/mail\/[0-9a-f-]{36}$/.test(next)?next:null;
+  const continuation=/^\/reauth\?request=[A-Za-z0-9_-]{43}$/.test(next)||/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)||nativeReturn.test(next)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(next)||/^\/mail\/[0-9a-f-]{36}$/.test(next)?next:null;
   const authDestination=continuation??'/dashboard';
   const emailToken=new URLSearchParams(window.location.hash.slice(1)).get('verify-email');
   async function load(){const result=await api('me');setAccount(result.account);setLocked(!!result.locked);}
@@ -238,7 +239,14 @@ export default function WebApp(){
       .catch(error=>setNotice(error.message)).finally(()=>setBusy(false));
   }
   if(account===undefined)return <div className="xc-loading"><Logo href="/"/><p role="status">Opening your account…</p></div>;
-  if(locked)return <main className="xc-setup"><Logo href="/"/><h1>Account locked</h1><p>Contact support if you need help.</p>
+  if(locked)return <main className="xc-setup"><Logo href="/"/><h1>Account locked</h1><SupportPage/>
+    {nativeReturn.test(path==='native-session'?window.location.pathname+window.location.search:continuation??'')&&
+      <button className="xc-button xc-secondary" disabled={busy} onClick={()=>{
+        const target=path==='native-session'?window.location.pathname+window.location.search:continuation!;
+        const params=new URL(target,window.location.origin).searchParams;setBusy(true);
+        void api('native/authorize',{challenge:params.get('challenge'),state:params.get('state')})
+          .then(result=>window.location.assign(result.location)).catch(error=>setNotice(error.message)).finally(()=>setBusy(false));
+      }}>Return to the app</button>}
     <button className="xc-button xc-secondary" onClick={()=>window.location.reload()}>Check again</button>
     <button className="xc-button xc-secondary" onClick={()=>void api('logout',{}).then(()=>window.location.assign('/signin')).catch(error=>setNotice(error.message))}>Sign out</button>
     {notice&&<p role="alert">{notice}</p>}</main>;
@@ -260,6 +268,10 @@ export default function WebApp(){
       {notice&&<p role="alert">{notice}</p>}
     </section></div>;
   }
+  if(path==='reauth')return <main className="xc-setup"><Logo href="/"/><Reauthenticate
+    request={new URLSearchParams(window.location.search).get('request')??undefined}
+    complete={()=>{const target=new URLSearchParams(window.location.search).get('continue');
+      window.location.assign(target&&/^\/native-session\?challenge=[A-Za-z0-9_-]{43}&state=[A-Za-z0-9_-]{43}$/.test(target)?target:'/admin');}}/></main>;
   const profile=account.profile;
   if(!profile) return <div className="xc-setup"><Logo href="/"/><div className="xc-page-title">
     <span className="xc-pill"><Fingerprint size={15}/> Passkey saved</span><h1>Set up your profile</h1>
@@ -271,7 +283,7 @@ export default function WebApp(){
   const name=profile.givenName+' '+profile.surname;
   const picture=profile.hasPicture?'/account/avatar':null;
   const permissionClient=permissionRoute?.[1];
-  const page=path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':mailRoute?'mail':path;
+  const page=path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':mailRoute?'mail':path.startsWith('admin/users/')?'admin':path;
   const [title,summary]=titles[page]??[accountMessage('overviewTitle','Account overview'),accountMessage('overviewSummary','Manage the details, devices, and apps connected to your X-Center ID.')];
   const shortcutIcons = {
     profile:[UserRound,'xc-sky'],security:[Fingerprint,'xc-mint'],

@@ -156,6 +156,13 @@ test('admin moderation and support enforce role, ownership and one mailbox reply
   assert.equal((await moderate('recent','lock')).status,200);
   assert.deepEqual(await (await get('me','member')).json(),{account:null,locked:true});
   assert.equal(service.grantAllowed('member','client','grant'),false);
+  assert.equal((await post('support','member',{subject:'Locked account appeal',text:'Please review my restriction.'})).status,201);
+  const owned=await (await get('support','member')).json();
+  assert.ok(owned.requests.some(item=>item.subject==='Locked account appeal'));
+  const appeal=mail.listSupport().find(item=>!item.external&&!item.replied);
+  assert.equal((await post('admin/support/'+appeal.id,'other',{text:'Appeal received.'})).status,200);
+  assert.ok((await (await get('support','member')).json()).requests.some(item=>item.reply?.includes('Appeal received.')));
+
   assert.equal((await moderate('recent','unlock')).status,200);
   assert.equal((await (await get('me','member')).json()).account.profile.username,'fixture');
   assert.equal((await post('username-change','member',{action:'request',username:'fixtureupdated'})).status,200);

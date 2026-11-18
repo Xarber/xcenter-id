@@ -41,7 +41,9 @@
     "administratorVerification": "implemented",
     "mailComposer": "implemented",
     "accountModeration": "implemented",
-    "supportInbox": "implemented"
+    "supportInbox": "implemented",
+    "inboundEmailVerification": "implemented",
+    "sessionReauthentication": "implemented"
   },
   "distribution": {
     "githubReleases": "pending authorization and verification"

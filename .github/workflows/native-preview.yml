@@ -152,8 +152,11 @@ jobs:
             "$apksigner" sign --ks "$AUTHNJS_SIGNING_FILE" --ks-key-alias "$ALIAS" \
               --ks-pass env:STORE_PASSWORD --key-pass env:KEY_PASSWORD \
               --out "$artifact" app/build/outputs/apk/release/app-release.apk
-            observed=$("$apksigner" verify --print-certs "$artifact" |
-              awk '/^Signer (#[0-9]+|\(minSdkVersion=.*\)) certificate SHA-256 digest:/ { print tolower($NF) }' |
+            "$apksigner" verify --verbose --print-certs "$artifact" > "$RUNNER_TEMP/apk-signature.txt"
+            cat "$RUNNER_TEMP/apk-signature.txt"
+            observed=$(awk 'tolower($0) ~ /^signer.*certificate sha-256 digest:/ {
+                sub(/^.*digest:[[:space:]]*/, ""); gsub(/[^0-9a-fA-F]/, ""); print tolower($0)
+              }' "$RUNNER_TEMP/apk-signature.txt" |
               sort -u)
             for arch in armeabi-v7a arm64-v8a x86 x86_64; do
               unzip -Z1 "$artifact" | awk -v dir="lib/$arch/" 'index($0, dir) == 1 { found=1 } END {exit !found}'
@@ -167,6 +170,7 @@ jobs:
             observed=$(sha256_certificate -jarfile "$artifact")
           fi
           if [[ "$observed" != "$EXPECTED_CERT_SHA256" ]]; then
+            printf 'Expected certificate SHA-256: %s\nObserved certificate SHA-256: %s\n' "$EXPECTED_CERT_SHA256" "$observed"
             echo "::error::The Android artifact certificate does not match this app"
             exit 1
           fi

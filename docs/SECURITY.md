@@ -24,3 +24,14 @@ External samples use distinct OAuth clients and origins. The identity provider p
 ## Dashboard dependencies
 
 The dashboard uses a scoped npm override to update the Expo fingerprint tooling's `minimatch` dependency to 11.0.1. The 17 November dependency audit identified a moderate denial-of-service advisory in the dependency tree. After updating, a clean install, dashboard audit, typecheck, unit tests, Expo compatibility check and local fingerprint generation passed. The API audit also reported zero known vulnerabilities. Keep the override until the upstream fingerprint package adopts a patched version. [GitHub Security Advisory](https://github.com/advisories/GHSA-g3hv-75wg-m249)
+
+## 18 November trust-boundary changes
+
+Administrator read and write routes require a confirmed administrator session. WebAuthn confirmation is scoped to the current session and enrolled account credentials. Native confirmation uses a short-lived, single-use, session-bound request and rejects a different browser account. Locked users receive support-only sessions, with separate authorization for requests and their own support history. App restrictions are checked by the registry, issuer and resource routes. Browser QA exercised wrong-client code exchange, replay and registration restriction.
+
+Inbound address verification requires raw-message DKIM and DMARC checks and the pending code, with atomic final assignment. See the mail runbook for provider assumptions and conservative compatibility limits. Raw Authentication-Results headers are untrusted input. Mailauth is pinned to 8.1.0. The API dependency audit passed after installation.
+
+
+### 18 November dependency audit limitation
+
+The dashboard npm audit reports high-severity picomatch ReDoS, GHSA-fc5q-39xc-vjpf / CVE-2026-112366 (upstream advisory updated 17 November). Its affected range includes the newest published 4.0.7; no patched release was available at inspection. Expo/Metro and their build-time glob callers propagate the finding. No forced React Native downgrade or audit bypass was applied. The production API dependency audit is clean. This is an unresolved stable-release quality gate, not evidence that arbitrary production requests can execute glob patterns. Recheck upstream remediation before stable publication.

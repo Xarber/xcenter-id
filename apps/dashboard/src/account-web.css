@@ -118,3 +118,5 @@ body{overflow-y:auto}
 .xc-compose-dialog form label{display:grid;gap:6px;font-weight:650}
 
 .xc-admin-avatar{object-fit:cover;border-radius:50%;background:var(--soft);flex:none}
+
+.xc-icon-action{width:44px;height:44px;padding:10px}.xc-admin-avatar{display:inline-flex;align-items:center;justify-content:center;overflow:hidden}

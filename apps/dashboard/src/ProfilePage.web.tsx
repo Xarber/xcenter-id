@@ -1,3 +1,4 @@
+import IncomingEmail from './IncomingEmail.web';
 import { UsernameChange } from './UsernameChange.web';
 import { accountMessage } from './account-locale';
 import { Camera, Check, CircleHelp, Mail, Save, UserRound } from 'lucide-react';
@@ -78,6 +79,7 @@ export default function ProfilePage({ account, update, complete }: {
         <button className="xc-button xc-secondary" disabled={busy}><Mail size={16}/> Verify email</button>
       </form>
     </section>}
+    {!complete&&<IncomingEmail updated={update}/>}
     {!complete&&<UsernameChange/>}
     {!complete&&<DeveloperIdentityPanel/>}
     {notice && <div className="xc-notice" role="status">{notice}</div>}
