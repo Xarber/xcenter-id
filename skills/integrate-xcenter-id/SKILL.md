@@ -1,11 +1,17 @@
 ---
 name: integrate-xcenter-id
-description: Integrate X-Center ID sign-in into web, backend, desktop, and mobile apps using OpenID Connect or the optional Expo SDK. Use for developer portal registration, callback ownership, code exchange, account mapping, and sign-in troubleshooting.
+description: Implement X-Center ID sign-in, private app sync and shared permissions in a target app on any stack. Use for developer portal registration, DNS ownership and activation, callback setup, account mapping, app storage and consent.
 ---
 
 # Integrate X-Center ID
 
-Preserve the target app's data, navigation and account recovery. Inspect its current authentication, backend, and platform before choosing an integration. Read [the integration contract](references/integration.md) for portal activation, native callbacks and verification. The issuer is https://id.xcenter.it. The maintained implementation currently lives in /Users/xarber/Productivity/apps/AuthNJS and its private Xarber/xcenter-id repository. Verify relevant contract details against current source when accessible, especially before enabling a new integration.
+## Run the integration
+
+Treat requests to use X-Center ID for sync or permissions as implementation requests. Work in the target app repository, trace its existing account and storage paths, and use the [integration contract](references/integration.md) and [capabilities](references/capabilities.md) to implement the requested changes. Preserve current data and account recovery. The production issuer is https://id.xcenter.it. The maintained provider source is in `/Users/xarber/Productivity/apps/AuthNJS` and `Xarber/xcenter-id` when accessible.
+
+1. **Check registration early.** Inspect existing configuration for the target product. Find its exact registration and status in the [Developer Portal](https://id.xcenter.it/developer) when signed-in access is available. A client ID in source is insufficient evidence. If missing, establish the app name, client type and exact owned HTTPS callback from its source or infrastructure. Use the portal to register or reuse the matching app and publish its supplied TXT challenge when the user has authorized those actions and access is available. Verify public DNS and use **Verify domain and activate**. If any step needs the user, ask promptly for the single concrete action, including the exact callback and live TXT challenge when known. Never invent a challenge or ask for secrets in chat.
+2. **Keep coding while activation is pending.** Implement the host app's normal sign-in or account link, secure product session, and requested sync and permission flows. Keep credentials in deployment configuration. Use a controlled test environment and leave production features gated until activation and the relevant access checks succeed.
+3. **Finish setup and verify.** For hosted data, confirm administrator **Verify app** separately from DNS activation, request `app_data` through user consent, and verify sync through the target app's normal entry points. Report portal/DNS state, code changed, verified flows and any exact external action still needed. Instructions alone are an appropriate result only when the user asked for guidance or the repository is inaccessible.
 
 Start with the [platform-neutral developer guide](https://id.xcenter.it/docs#manual). For web apps or products with a backend, use the target stack's OpenID Connect library with a confidential website registration. For standalone native clients with callback ownership, use a public registration and the system browser with a verified HTTPS callback. For unsigned apps or clients that cannot receive callbacks, use the [backend browser handoff](references/integration.md#unsigned-apps-and-clients-without-an-app-callback). Use the Expo SDK only when it fits the existing framework. The protocol and hosted API do not require any JavaScript or React Native dependency.
 
@@ -17,4 +23,4 @@ Bind code exchange and login completion to a single-use transaction created befo
 
 Verify cancellation, callback failure, process restart, wrong client, wrong callback, wrong PKCE verifier, replay, pending/revoked registration and unauthorized data access. Only report installation or device sign-in when actually executed. Document the installed files, portal identity, tested platforms and remaining activation steps in the target project. Registering a relying-party app does not authorize publishing it or changing another app.
 
-If the target app uses more than sign-in, read [capabilities and API examples](references/capabilities.md). Choose between the dedicated backend namespace, per-user app records, recipient sharing, and cross-app consent. Account-manager files, mail and administration remain dashboard features.
+For sync, use [the private sync and permissions workflow](references/capabilities.md#private-sync-and-permissions) to map each requested category to real app features, consent and storage. Account-manager files, mail and administration remain dashboard features.

@@ -1,3 +1,3 @@
 interface:
   display_name: "Integrate X-Center ID"
-  short_description: "Add registered X-Center ID sign-in to web, backend and native apps"
+  short_description: "Set up X-Center ID sign-in, private sync and permissions"

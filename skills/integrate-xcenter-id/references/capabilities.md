@@ -17,6 +17,13 @@ Start with the [sign-in contract](integration.md). Request only the scopes neede
 
 Use the discovery document's `userinfo_endpoint` after sign-in. Check that UserInfo's `sub` matches the validated ID token before using the profile. Send an `Authorization: Bearer …` header to the X-Center ID picture endpoint on the configured issuer's origin. In a web app, convert the returned image bytes to a blob URL and revoke it when replaced or on sign-out. Use your default avatar when `picture` is absent or the endpoint returns an error. Keep access tokens out of URLs.
 
+## Private sync and permissions
+
+1. Identify the requested data and existing local storage. For example, use separate private collections such as `visited_neighborhoods` and `insights`. Sync only the minimum fields the user agreed to share. Prefer an existing neighborhood ID or name and bounded timestamps over raw location traces. Keep `public` false and omit recipient ACLs for personal sync.
+2. Add a named, persistent, user-facing control for each requested category. Treat the issuer’s `app_data` scope as the prerequisite for the app’s private data access. It does not create per-collection OAuth scopes such as `visited_neighborhoods`. Enforce each category choice in the app and its backend before upload or merge. Keep local behavior available when sync is declined. Explain how to turn sync off and remove uploaded records.
+3. Wire changes through the app’s existing data entry points. Use stable record IDs and revision checks, handle offline retries and conflicts, and isolate caches and queues per signed-in account. Stop sync on logout or revoked consent. Never use the backend-wide key as a fallback for a user who declined.
+4. When the request is for **another app** to read those categories, configure shared collections on the publisher, declare the exact collections and labels on the requesting app, and use the issuer’s individual cross-app consent controls. Test opt-in, category denial, enabling later, offline retry, account switching and revoked access using synthetic records.
+
 ## Dedicated app storage
 
 Activate the registration and obtain app verification from an administrator. Open **Developer → your app → Manage app storage**. For backend-owned content such as app configuration or a catalog, generate a backend key after the passkey prompt. Save it once to the backend's secret store. Only the backend uses this key. Rotating or revoking it ends access for the old key. It cannot impersonate a user.
