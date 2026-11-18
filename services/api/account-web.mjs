@@ -1,3 +1,4 @@
+import {parseStorageVolumes,storageVolumeStatus} from './storage-volumes.mjs';
 import {createSupportMailer} from './service-mail.mjs';
 import {openMailLimits} from './mail-limits.mjs';
 import {openApplicationData} from './application-data.mjs';
@@ -48,6 +49,7 @@ const accounts = createAccounts({
 });
 const origin = process.env.AUTHNJS_ACCOUNT_ORIGIN;
 const state = process.env.AUTHNJS_DATA_DIR;
+const storageVolumes=parseStorageVolumes(process.env.AUTHNJS_STORAGE_VOLUMES);
 const friends = configuration ? openFriends(join(state,'accounts.sqlite'),accounts.available) : null;
 const friendRoutes = friends && createFriendRoutes({accounts,friends});
 const otherStorage=(owner)=>{
@@ -168,6 +170,13 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
       if (!res.headersSent) res.writeHead(502, { 'Cache-Control': 'no-store' });
       res.end('The sample application could not complete the request.');
     });
+    return;
+  }
+  if(path==='/account/admin/storage-volumes'){
+    const status=req.method!=='GET'?405:accounts.adminStatus(req)!==200?403:200;
+    res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(
+      status===200?{volumes:storageVolumeStatus(state,storageVolumes)}:{error:status===403?'Confirm administrator access.':'Method unavailable.'}
+    ));
     return;
   }
   if (dataApi && /^\/v1\/records\/saved-place(?:\/[0-9a-f-]{36})?$/.test(path)) {

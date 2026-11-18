@@ -1,3 +1,4 @@
+import AdminStorageVolumes from './AdminStorageVolumes.web';
 import AppIcon from './AppIcon.web';
 import Reauthenticate from './Reauthenticate.web';
 import { AdminAccounts, IconAction } from './AdminUsers.web';
@@ -329,6 +330,7 @@ function AdminContent() {
     <AdminAccounts/>
     <AdminUsernameChanges refreshAccounts={refresh}/>
     <AdminSupport/>
+    <AdminStorageVolumes/>
     <section className="xc-card xc-pad"><div className="xc-row-head"><BadgeCheck size={21}/><h2>Developer verification</h2></div>
       {developers.length===0&&<p className="xc-empty">No developer reviews.</p>}
       {developers.map(developer=><div className="xc-list-row xc-permission-row" key={developer.owner}>
