@@ -37,3 +37,6 @@ The subsequent batch passes 28 API tests, 4 dashboard tests, TypeScript, web exp
 New hosted-data regressions cover recipient ACLs, revocation, quota management authorization, backend-key isolation/revocation, private/public records, ciphertext at rest and authenticated publication flags. The Android signing parser was checked against the real failed-run output and extracts exactly the expected certificate hash; this is not a replacement for a new APK artifact check.
 
 The email-related source changes made before the explicit pause are preserved, but provider sending, DNS completion, production email activation and external delivery are not verified. Native runtime evidence and measured changed-code coverage remain open. A green manifest validator is not full UADS compliance.
+
+
+18 November mail batch: `npm test --prefix services/api` passed 30 tests. TLS IMAP checks use an isolated temporary certificate; SMTP transport tests disable TLS only on loopback. These establish owner isolation, active credential enforcement, flags/folders and bounded operations, not physical native behavior or complete mail-client protocol compatibility. Dashboard typecheck and four existing regressions passed. Independent external test arrival was confirmed by the user. Public mail-client connectivity, real inbound proof and installed native checks remain separate gates.

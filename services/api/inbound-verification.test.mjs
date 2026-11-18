@@ -10,6 +10,7 @@ import nodemailer from 'nodemailer';
 import {once} from 'node:events';
 import {createInboundServer} from './smtp-inbound.mjs';
 import {createAccounts} from './accounts.mjs';
+import {openMailSenderTrust} from './mail-sender-trust.mjs';
 import {openInboundVerification} from './inbound-verification.mjs';
 
 test('inbound verification authenticates signed sender, code, full body and single use',async()=>{
@@ -17,7 +18,7 @@ test('inbound verification authenticates signed sender, code, full body and sing
   const path=join(directory,'accounts.sqlite');
   createAccounts({database:path,origin:'https://id.example.test'});
   const db=new DatabaseSync(path);
-  db.exec("INSERT INTO accounts VALUES('owner','Fixture',0),('other','Other',0)");
+  db.exec("INSERT INTO accounts VALUES('owner','Fixture',0),('other','Other',0),('third','Third',0)");
   const {publicKey,privateKey}=generateKeyPairSync('rsa',{modulusLength:2048});
   const key=publicKey.export({type:'spki',format:'der'}).toString('base64');
   const resolve=async(name,type)=>{
@@ -46,6 +47,13 @@ test('inbound verification authenticates signed sender, code, full body and sing
     assert.equal(await inbox.receive(message,peer),false);
     assert.equal(await inbox.receive(Buffer.concat([Buffer.from('Authentication-Results: mail.xcenter.it; dmarc=pass; dkim=pass\r\n'),message]),peer),false);
     const good=await signed(message);
+    db.prepare('INSERT INTO verified_emails VALUES(?,?,?)').run('owner','sender@example.net',Date.now());
+    db.prepare('INSERT INTO account_flags(owner,verified,admin) VALUES(?,?,?)').run('owner',1,1);
+    const trust=openMailSenderTrust(path,{resolver:resolve});
+    assert.deepEqual(await trust(message,peer),{verified:false,admin:false});
+    assert.deepEqual(await trust(Buffer.concat([Buffer.from('Authentication-Results: mail.xcenter.it; dmarc=pass; dkim=pass\r\n'),message]),peer),{verified:false,admin:false});
+    assert.deepEqual(await trust(good,peer),{verified:true,admin:true});
+    db.prepare('DELETE FROM verified_emails').run();
     assert.equal(await inbox.receive(Buffer.from(good.toString().replace('sender@example.net','other@example.net')),peer),false);
     assert.equal(await inbox.receive(Buffer.from(good.toString().replace('Verification code:','Tampered code:')),peer),false);
     const expiration=db.prepare('SELECT expires FROM inbound_verifications WHERE owner=?').get('owner').expires;
@@ -60,12 +68,14 @@ test('inbound verification authenticates signed sender, code, full body and sing
     // A fresh signed proof may transfer a verified address; requesting a code alone cannot.
     const transfer=inbox.start('other','sender@example.net');assert.equal(transfer.ok,true);
     assert.equal(db.prepare('SELECT owner FROM verified_emails WHERE address=?').get('sender@example.net').owner,'owner');
+    const competing=inbox.start('third','sender@example.net');assert.equal(competing.ok,true);
     const transferUrl=new URL(transfer.mailto);
     const {message:transferMessage}=await transport.sendMail({from:'sender@example.net',to:transferUrl.pathname,
       subject:transferUrl.searchParams.get('subject'),text:transferUrl.searchParams.get('body')});
     assert.equal(await inbox.receive(await signed(transferMessage),peer),true);
     assert.equal(db.prepare('SELECT owner FROM verified_emails WHERE address=?').get('sender@example.net').owner,'other');
     assert.equal(await inbox.receive(good,peer),false);
+    assert.equal(inbox.pending('third'),null);assert.equal(inbox.result('third').status,'superseded');
     db.prepare('UPDATE inbound_verification_rates SET created=0 WHERE owner=?').run('other');
     const second=new URL(inbox.start('other','other@example.net').mailto);
     const {message:raw}=await transport.sendMail({from:'other@example.net',to:second.pathname,

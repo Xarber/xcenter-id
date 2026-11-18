@@ -116,7 +116,8 @@ test('admin moderation and support enforce role, ownership and one mailbox reply
   const mail=openMailStore({accountsPath:database,mailPath:join(dir,'mail.sqlite'),configuration:{
     inboundDomains:['mail.xcenter.it'],supportAddresses:['support@id.xcenter.it'],storageKey:'ab'.repeat(32),
   }});
-  const support=createSupportRoutes({accounts:service,mail});
+  const externalReplies=[];
+  const support=createSupportRoutes({accounts:service,mail,sendExternal:async(...args)=>externalReplies.push(args)});
   const server=createServer((req,res)=>void (req.url.includes('/support')?support(req,res,req.url):service.handle(req,res,req.url)));
   server.listen(0,'127.0.0.1');
   await once(server,'listening');
@@ -148,8 +149,12 @@ test('admin moderation and support enforce role, ownership and one mailbox reply
   assert.equal(mail.resolveRecipient('support@xcenter.it'),null);
   assert.equal(mail.receive(['support@id.xcenter.it'],Buffer.from('From: fixture@mail.xcenter.it\r\nSubject: Synthetic inbound\r\n\r\nHello.')),true);
   const external=mail.listSupport().find(item=>item.external);
+  assert.equal((await mail.readSupport(external.id)).canReply,true);
+  assert.equal((await post('admin/support/'+external.id,'old',{text:'Denied'})).status,403);
+  assert.equal((await post('admin/support/'+external.id,'recent',{text:'External reply'})).status,200);
+  assert.equal(externalReplies.length,1);assert.equal(externalReplies[0][1],'fixture@mail.xcenter.it');
   assert.equal((await mail.readSupport(external.id)).canReply,false);
-  assert.equal((await post('admin/support/'+external.id,'recent',{text:'Denied'})).status,409);
+  assert.equal((await post('admin/support/'+external.id,'recent',{text:'Duplicate'})).status,409);
   assert.equal((await moderate('member','lock')).status,403);
   assert.equal((await moderate('old','lock')).status,403);
   assert.equal((await moderate('recent','lock',undefined,'adminuser')).status,422);
@@ -183,7 +188,7 @@ test('admin moderation and support enforce role, ownership and one mailbox reply
   assert.equal((await moderate('recent','delete','fixtureupdated','fixtureupdated')).status,200);
   assert.equal(service.identity('member'),undefined);
   assert.equal((await post('signup/options','member',{username:'fixture'})).status,409);
-  assert.equal(db.prepare('SELECT count(*) AS total FROM account_admin_events').get().total,5);
+  assert.equal(db.prepare('SELECT count(*) AS total FROM account_admin_events').get().total,6);
 });
 
 test('live admin delegation, user verification and public profile flags enforce server trust boundaries',async()=>{

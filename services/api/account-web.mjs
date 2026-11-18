@@ -1,3 +1,4 @@
+import {createSupportMailer} from './service-mail.mjs';
 import {openMailLimits} from './mail-limits.mjs';
 import {openApplicationData} from './application-data.mjs';
 import { createAdminUsers } from './admin-users.mjs';
@@ -33,6 +34,7 @@ const configuration = process.env.AUTHNJS_OIDC_CONFIG ? JSON.parse(readFileSync(
 const mailLimits=openMailLimits(join(process.env.AUTHNJS_DATA_DIR,'accounts.sqlite'),mailConfig?.externalLimits);
 const accounts = createAccounts({
   outboundMail:createOutboundMail(mailConfig,{limits:mailLimits,
+    allowSender:(owner,from)=>accounts.mailboxSender(owner,from),
     deliverLocal:(recipient,raw,from)=>mail?.receive([recipient],raw,accounts.badgeForAddress(from)),
   }),
   appBrand:client=>registry.brand(client),
@@ -60,8 +62,8 @@ const accountFiles = configuration ? createAccountFiles({
 const registry = openRegistry(join(state, 'apps.sqlite'));
 const reviewApps=createAdminAppRoutes({accounts,registry});
 const mail = mailConfig?.inboundDomains?.length ? openMailStore({ configuration:mailConfig,
-  accountsPath:join(state,'accounts.sqlite'), mailPath:join(state,'mail.sqlite') }) : null;
-const support = createSupportRoutes({accounts,mail});
+  accountService:accounts,accountsPath:join(state,'accounts.sqlite'), mailPath:join(state,'mail.sqlite') }) : null;
+const support = createSupportRoutes({accounts,mail,sendExternal:createSupportMailer(mailConfig?.submission,mailLimits)});
 const adminUsers=createAdminUsers({accounts,registry,mail});
 let provider;
 const applicationData=configuration?openApplicationData({path:join(state,'app-data.sqlite'),registry,accounts,
@@ -274,9 +276,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     return;
   }
   if (path === '/account/mail/aliases' || path.startsWith('/account/mail/aliases/')) {
-    try {
-      if (!handleMailAliases(req,res,path,accounts,mail)) res.writeHead(404,{'Cache-Control':'no-store'}).end();
-    } catch { if (!res.headersSent) res.writeHead(500); res.end(); }
+    void handleMailAliases(req,res,path,accounts,mail).then(handled=>{if(!handled)res.writeHead(404,{'Cache-Control':'no-store'}).end();}).catch(()=>{if(!res.headersSent)res.writeHead(500);res.end();});
     return;
   }
   if (path === '/account/inbox' || path.startsWith('/account/inbox/')) {
@@ -302,7 +302,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void accounts.handle(req, res, path);
     return;
   }
-  const webPages = new Set(['/docs','/','/signin','/signup','/native-session','/dashboard','/profile','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/friends','/mail','/admin','/support','/reauth']);
+  const webPages = new Set(['/mail-clients','/docs','/','/signin','/signup','/native-session','/dashboard','/profile','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/friends','/mail','/admin','/support','/reauth']);
   const relative = webPages.has(path)||/^\/developer\/storage\/[0-9a-f-]{36}$/.test(path)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(path)||
     /^\/(?:mail\/[0-9a-f-]{36}|admin\/users\/[a-z][a-z0-9]{2,23})$/.test(path) ? 'index.html' : path.slice(1);
   const valid = /^(?:index\.html|revision\.txt|manifest\.webmanifest|service-worker\.js|authnjs-[\w-]+\.(?:svg|png)|(?:_expo|assets)\/[\w@./-]+)$/.test(relative);

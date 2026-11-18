@@ -156,7 +156,7 @@ jobs:
               --out "$artifact" app/build/outputs/apk/release/app-release.apk
             "$apksigner" verify --verbose --print-certs "$artifact" > "$RUNNER_TEMP/apk-signature.txt"
             cat "$RUNNER_TEMP/apk-signature.txt"
-            observed=$(awk -f ../../scripts/apk-certificate.awk "$RUNNER_TEMP/apk-signature.txt" | sort -u)
+            observed=$(awk -f "$GITHUB_WORKSPACE/scripts/apk-certificate.awk" "$RUNNER_TEMP/apk-signature.txt" | sort -u)
             for arch in armeabi-v7a arm64-v8a x86 x86_64; do
               unzip -Z1 "$artifact" | awk -v dir="lib/$arch/" 'index($0, dir) == 1 { found=1 } END {exit !found}'
             done

@@ -1,3 +1,4 @@
+import MailClients from './MailClients.web';
 import ApplicationStorage from './ApplicationStorage.web';
 import DeveloperDocumentation from './DeveloperDocumentation.web';
 import PreferenceControls from './PreferenceControls.web';
@@ -29,6 +30,7 @@ const sections = [
 ] as const;
 function LayersIcon(props:{size?:number}){return <Grid2X2 {...props}/>;}
 const titles:Record<string,[string,string]> = {
+  'mail-clients':['Mail clients','Manage access for your email applications.'],
   support:['Support','Send feedback or get help with your X-Center ID.'],
   profile:['Your profile','Manage the personal details associated with your X-Center ID.'],
   devices:['Your devices','Review where you are signed in.'],
@@ -332,6 +334,7 @@ export default function WebApp(){
   else if(page==='devices')content=<DevicesPage/>;
   else if(page==='friends')content=<FriendsPage/>;
   else if(page==='files'||page==='storage')content=<FilesPage key={page} summary={page==='storage'}/>;
+  else if(page==='mail-clients')content=<MailClients/>;
   else if(page==='mail')content=<MailPage account={account}/>;
   else if(page==='security')content=<Security account={account} update={load} addPasskey={()=>passkey('add')}/>;
   else if(page==='support')content=<SupportPage/>;
@@ -342,6 +345,7 @@ export default function WebApp(){
     <div className="xc-list-row"><div><strong>Developer portal</strong><p>Register or review your applications.</p></div><a className="xc-button xc-secondary" href="/developer"><Code2 size={16}/> Developer apps</a></div>
   </section></>;
   else if(page==='settings')content=<><PreferenceControls value={preferences} change={changePreferences}/><section className="xc-card xc-pad">
+    <div className="xc-list-row"><span>Mail app access</span><a className="xc-button xc-secondary" href="/mail-clients">Manage mail clients</a></div>
     <div className="xc-list-row"><span>Feedback and support</span><a className="xc-button xc-secondary" href="/support">Contact support</a></div>
     <div className="xc-list-row"><div className="xc-row-head"><CircleHelp size={22}/><div><strong>Introduction</strong><p>See how your X-Center ID works.</p></div></div><button className="xc-button xc-secondary" onClick={()=>setIntro(true)}>View introduction</button></div>
     <div className="xc-list-row"><div><strong>App version</strong><p>X-Center ID for web</p></div><button className="xc-button xc-secondary" onClick={()=>{
@@ -394,7 +398,7 @@ export default function WebApp(){
     </main>
     <nav className="xc-bottom" aria-label="Main screens">{[
       ['dashboard','Account',UserRound],['apps','Apps',Grid2X2],['settings','Settings',Settings],...(account.admin?[['admin','Admin',ShieldCheck]]:[]),
-    ].map(([id,label,Icon])=>{const ItemIcon=Icon as typeof UserRound;const selected=id==='dashboard'?!['apps','permissions','developer','settings','support','admin'].includes(page):id==='apps'?['apps','permissions','developer'].includes(page):id==='settings'?['settings','support'].includes(page):page==='admin';return <a key={String(id)} href={'/'+id} aria-current={selected?'page':undefined}><ItemIcon size={22}/><span>{String(label)}</span></a>;})}</nav>
+    ].map(([id,label,Icon])=>{const ItemIcon=Icon as typeof UserRound;const selected=id==='dashboard'?!['apps','permissions','developer','settings','support','mail-clients','admin'].includes(page):id==='apps'?['apps','permissions','developer'].includes(page):id==='settings'?['settings','support','mail-clients'].includes(page):page==='admin';return <a key={String(id)} href={'/'+id} aria-current={selected?'page':undefined}><ItemIcon size={22}/><span>{String(label)}</span></a>;})}</nav>
     {intro&&<Intro close={()=>setIntro(false)}/>}
   </div>;
 }

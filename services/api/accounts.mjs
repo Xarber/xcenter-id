@@ -1,3 +1,4 @@
+import {openMailCredentials} from './mail-credentials.mjs';
 import { openInboundVerification } from './inbound-verification.mjs';
 import { openEmailSignIn } from './email-signin.mjs';
 import { openNativeSession } from './native-session.mjs';
@@ -99,6 +100,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       address TEXT PRIMARY KEY, verified INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS account_restrictions(owner TEXT PRIMARY KEY REFERENCES accounts(id),
       status TEXT NOT NULL CHECK(status IN ('locked','deleted'))) STRICT;
+    CREATE TABLE IF NOT EXISTS mailbox_aliases(local TEXT PRIMARY KEY,owner TEXT NOT NULL REFERENCES accounts(id),client TEXT,
+      active INTEGER NOT NULL DEFAULT 1,created INTEGER NOT NULL,UNIQUE(owner,client)) STRICT;
     CREATE TABLE IF NOT EXISTS account_flags(owner TEXT PRIMARY KEY REFERENCES accounts(id),
       verified INTEGER NOT NULL DEFAULT 0, admin INTEGER NOT NULL DEFAULT 0, public_fields TEXT NOT NULL DEFAULT '[]') STRICT;
     CREATE TABLE IF NOT EXISTS retired_usernames(username TEXT PRIMARY KEY) STRICT;
@@ -112,6 +115,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     CREATE TABLE IF NOT EXISTS native_confirmations(code TEXT PRIMARY KEY, hash TEXT NOT NULL REFERENCES account_sessions(hash) ON DELETE CASCADE,
       expires INTEGER NOT NULL) STRICT;
   `);
+  const mailCredentials=openMailCredentials(database);
   const inbound=openInboundVerification(database,{enabled:inboundVerification});
   const native = openNativeSession(db);
   const emailSignIn=openEmailSignIn(db,{send:sendVerification,secret:profileKey??randomBytes(32)});
@@ -156,6 +160,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   const reservedOwner = q('SELECT owner FROM signup_usernames WHERE username=? AND expires>?');
   const reservedUsername = q('SELECT username FROM signup_usernames WHERE owner=? AND expires>?');
   function ensureAvailable(name, owner) {
+    requireCondition(!q('SELECT 1 FROM mailbox_aliases WHERE local=?').get(name),409,'This username is unavailable.');
     requireCondition(!q('SELECT 1 FROM retired_usernames WHERE username=?').get(name),409,'This username is unavailable.');
     const existing = usernameOwner.get(name)?.owner ?? reservedOwner.get(name,now())?.owner;
     requireCondition(!existing || existing === owner,409,'This username is unavailable.');
@@ -292,6 +297,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       } };
     }
 
+    if(req.method==='GET'&&pathname==='/account/mail/clients'){requireCondition(active,401,'Sign in first.');return {clients:mailCredentials.list(active.owner)};}
     if(req.method==='GET'&&pathname==='/account/email/incoming'){
       requireCondition(active,401,'Sign in first.');
       return {enabled:inbound.enabled,pending:inbound.pending(active.owner),result:inbound.result(active.owner)};
@@ -413,7 +419,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         if(action==='delete'){
           q('INSERT INTO retired_usernames VALUES(?)').run(username);
           for(const table of ['passkeys','connected_apps','app_disconnects','account_entitlements','account_storage_caps',
-            'account_email_addresses','inbound_verification_results','account_flags','identity_profiles','signup_usernames','verified_emails','email_verifications','username_change_requests',
+            'mail_credentials','account_email_addresses','inbound_verification_results','account_flags','identity_profiles','signup_usernames','verified_emails','email_verifications','username_change_requests',
             'inbound_verifications','inbound_verification_rates']){
             q('DELETE FROM '+table+' WHERE owner=?').run(target);
           }
@@ -521,6 +527,9 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       if (!result.ok) throw new AccountError(result.status,result.error);
       return result;
     }
+    if(pathname==='/account/mail/clients'){requireCondition(active,401,'Sign in first.');recent(active);
+      if(input.action==='create')return mailCredentials.create(active.owner,input.label);
+      requireCondition(input.action==='revoke'&&typeof input.id==='string',422,'Choose a mail client.');mailCredentials.revoke(active.owner,input.id);return {ok:true};}
     if(pathname==='/account/email/remove'){
       requireCondition(active,401,'Sign in first.');recent(active);
       requireCondition(typeof input.email==='string'&&input.email.length<=254,422,'Choose an email address.');
@@ -741,6 +750,32 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         passkeys:keys.all(owner).length,
         apps:q('SELECT client,label,updated FROM connected_apps WHERE owner=? ORDER BY updated DESC').all(owner)};
     },
+    createMailboxAlias(owner,candidate,client=null){
+      requireCondition(available(owner)&&profile(owner),403,'Account unavailable.');
+      requireCondition(q('SELECT premium_mail FROM account_entitlements WHERE owner=?').get(owner)?.premium_mail===1,403,'Premium private addresses are not enabled for your account.');
+      if(client){const existing=q('SELECT local,active FROM mailbox_aliases WHERE owner=? AND client=?').get(owner,client);if(existing)return existing.active?existing.local+'@mail.xcenter.it':null;}
+      const chosen=candidate||'alias'+randomBytes(7).toString('hex');
+      const result=validateUsername(chosen,reservedNames);requireCondition(!result.error,422,result.error);
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        requireCondition(q('SELECT count(*) AS n FROM mailbox_aliases WHERE owner=?').get(owner).n<30,409,'Private address limit reached.');
+        requireCondition(!usernameOwner.get(result.username)&&!reservedOwner.get(result.username,now())&&!q('SELECT 1 FROM retired_usernames WHERE username=?').get(result.username)&&!q('SELECT 1 FROM mailbox_aliases WHERE local=?').get(result.username),409,'This address is unavailable.');
+        q('INSERT INTO mailbox_aliases VALUES(?,?,?,1,?)').run(result.username,owner,client,now());
+        db.exec('COMMIT');return result.username+'@mail.xcenter.it';
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    },
+    setMailboxAlias(owner,local,enabled){
+      requireCondition(typeof enabled==='boolean'&&available(owner),422,'Choose an address state.');
+      if(enabled)requireCondition(q('SELECT premium_mail FROM account_entitlements WHERE owner=?').get(owner)?.premium_mail===1,403,'Premium private addresses are unavailable.');
+      return q('UPDATE mailbox_aliases SET active=? WHERE owner=? AND local=?').run(Number(enabled),owner,local).changes===1;
+    },
+    mailboxSender(owner,address){
+      const current=profile(owner)?.username+'@mail.xcenter.it';
+      if(!available(owner))return false;
+      if(address===current)return true;
+      const local=/^([a-z][a-z0-9]{2,23})@mail\.xcenter\.it$/.exec(address)?.[1];
+      return !!local&&!!q('SELECT 1 FROM mailbox_aliases WHERE owner=? AND local=? AND active=1').get(owner,local);
+    },
     setMailLimits(owner,limits){
       requireCondition(outboundMail?.limits,503,'Mail limits unavailable.');
       outboundMail.limits.set(owner,limits);
@@ -758,7 +793,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     badgeForAddress(address) {
       const user=q('SELECT owner FROM verified_emails WHERE address=?').get(address?.toLowerCase());
       const local=/^([a-z][a-z0-9]{2,23})@mail\.xcenter\.it$/.exec(address?.toLowerCase()??'');
-      const owner=user?.owner??(local?usernameOwner.get(local[1])?.owner:null);
+      const owner=user?.owner??(local?(usernameOwner.get(local[1])?.owner??q('SELECT owner FROM mailbox_aliases WHERE local=? AND active=1').get(local[1])?.owner):null);
       if(!owner||!available(owner))return {verified:false,admin:false};
       return {verified:q('SELECT verified FROM account_flags WHERE owner=?').get(owner)?.verified===1,admin:isAdmin({owner})};
     },
@@ -797,7 +832,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       try {
         const current = profile(owner);
         if (current?.username !== from || usernameOwner.get(to) || reservedOwner.get(to,now()) ||
-          q('SELECT 1 FROM retired_usernames WHERE username=?').get(to)) {
+          q('SELECT 1 FROM retired_usernames WHERE username=?').get(to)||q('SELECT 1 FROM mailbox_aliases WHERE local=?').get(to)) {
           db.exec('ROLLBACK');
           return false;
         }

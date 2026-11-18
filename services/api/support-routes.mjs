@@ -19,7 +19,7 @@ async function input(req) {
   try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{return null;}
 }
 
-export function createSupportRoutes({accounts,mail}) {
+export function createSupportRoutes({accounts,mail,sendExternal}) {
   return async (req,res,path)=>{
     const route=paths.exec(path);
     if(!route)return answer(res,404,{error:'Support route unavailable.'});
@@ -52,6 +52,14 @@ export function createSupportRoutes({accounts,mail}) {
     const content=await message(admin?'Reply from X-Center Support':subject,text);
     if(!permits())return answer(res,403,{error:'Sign in again to continue.'});
     if(admin){
+      const details=await mail.readSupport(id);
+      if(details?.external){
+        if(!sendExternal)return answer(res,503,{error:'External support replies are unavailable.'});
+        if(accounts.adminStatus(req,true)!==200)return answer(res,403,{error:'Confirm administrator access.'});
+        const destination=await mail.claimExternalSupport(id);if(!destination)return answer(res,409,{error:'Already submitted or unavailable. Check delivery status before retrying.'});
+        try{await sendExternal(current.owner,destination.address,destination.subject,text);mail.externalSupportResult(id,true);accounts.auditAdmin(req,id,'external-support-reply');return answer(res,200,{ok:true});}
+        catch{mail.externalSupportResult(id,false);return answer(res,503,{error:'Delivery is not confirmed. Check provider activity before sending another reply.'});}
+      }
       return mail.replySupport(id,content)?answer(res,200,{ok:true}):
         answer(res,409,{error:'This request was already answered, or its mailbox is unavailable.'});
     }

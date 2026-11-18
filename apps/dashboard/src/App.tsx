@@ -20,7 +20,7 @@ const pages = [
   ['devices','Devices','phone-portrait-outline'],['security','Sign-in & security','key-outline'],
   ['apps','Apps','apps-outline'],['permissions','Permissions','shield-checkmark-outline'],
   ['storage','Data usage','server-outline'],['files','Files','folder-open-outline'],['friends','Friends','people-outline'],['mail','Mail','mail-outline'],
-  ['settings','Settings','settings-outline'],['support','Support','help-circle-outline'],['admin','Admin','shield-outline'],['developer','Developer apps','code-slash-outline'],
+  ['mail-clients','Mail clients','mail-open-outline'],['settings','Settings','settings-outline'],['support','Support','help-circle-outline'],['admin','Admin','shield-outline'],['developer','Developer apps','code-slash-outline'],
 ] as const satisfies ReadonlyArray<readonly [string,string,Icon]>;
 const copy:Record<string,string> = {
   dashboard:'Review your passkeys, profile, and connected apps.', profile:'Edit your photo, name, birthday, and email.',
@@ -163,6 +163,7 @@ function NativeAccount() {
           <View style={styles.preferenceChoices}>{(['system','light','dark'] as const).map(value=><Pressable key={value} accessibilityRole="radio" accessibilityState={{checked:preferences.theme===value}} onPress={()=>preference({...preferences,theme:value})} style={[styles.button,{backgroundColor:preferences.theme===value?colors.soft:colors.panel}]}><Text style={{color:colors.ink}}>{value}</Text></Pressable>)}</View>
           <Text style={{color:colors.ink,fontWeight:'700'}}>Language</Text>
           <View style={styles.preferenceChoices}>{languages.map(([id,label])=><Pressable key={id} accessibilityRole="radio" accessibilityState={{checked:preferences.language===id}} onPress={()=>preference({...preferences,language:id})} style={[styles.button,{backgroundColor:preferences.language===id?colors.soft:colors.panel}]}><Text style={{color:colors.ink}}>{label}</Text></Pressable>)}</View>
+          {action('Mail app access','mail-open-outline',()=>setTab(pages.find(page=>page[0]==='mail-clients')!))}
           {action('Support','help-circle-outline',()=>setTab(pages.find(page=>page[0]==='support')!))}
           {action('Developer documentation','book-outline',()=>void openBrowserAsync(accountHost+'/docs'))}
           {action('View introduction' ,'information-circle-outline',()=>setIntro(true))}
@@ -183,7 +184,7 @@ function NativeAccount() {
     </ScrollView>
     {token&&account&&<View accessibilityRole="tablist" style={{flexDirection:'row',borderTopWidth:1,borderColor:colors.soft,backgroundColor:colors.panel,paddingVertical:8}}>
       {(['dashboard','apps','settings',...(account.admin?['admin']:[])]).map(id=>{const page=pages.find(page=>page[0]===id)!;
-        const selected=id==='dashboard'?!['apps','permissions','developer','settings','support','admin'].includes(tab[0]):id==='apps'?['apps','permissions','developer'].includes(tab[0]):id==='settings'?['settings','support'].includes(tab[0]):tab[0]==='admin';
+        const selected=id==='dashboard'?!['apps','permissions','developer','settings','support','mail-clients','admin'].includes(tab[0]):id==='apps'?['apps','permissions','developer'].includes(tab[0]):id==='settings'?['settings','support','mail-clients'].includes(tab[0]):tab[0]==='admin';
         return <Pressable key={id} accessibilityRole="tab" accessibilityState={{selected}} onPress={()=>{setTab(page);setDeveloper(false);setSampleMode(false);taps.current=0;}}
           style={{flex:1,alignItems:'center',justifyContent:'center',minHeight:52,gap:3,backgroundColor:selected?colors.soft:colors.panel,borderRadius:12}}>
           <Ionicons name={page[2]} size={23} color={selected?colors.accent:colors.muted}/><Text style={{color:selected?colors.accent:colors.muted,fontSize:12}}>{id==='dashboard'?'Account':accountMessage(id,page[1])}</Text>

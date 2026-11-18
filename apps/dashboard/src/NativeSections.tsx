@@ -1,3 +1,4 @@
+import MailClients from './MailClients';
 import AppIcon from './AppIcon';
 import PublicProfile from './PublicProfile';
 import {isSampleClient} from './application-identity';
@@ -31,7 +32,7 @@ type Grant = {source:string;destination:string;expires:number};
 type SampleGrant = {source:string;destination:string;sourceName:string;app:string;shared:boolean;expires:number|null};
 type App = {client:string;name:string};
 type Theme = {background:string;panel:string;ink:string;muted:string;accent:string;soft:string};
-export type NativeSection = 'dashboard'|'profile'|'devices'|'security'|'apps'|'developer'|'permissions'|'storage'|'files'|'friends'|'mail'|'support'|'admin';
+export type NativeSection = 'mail-clients'|'dashboard'|'profile'|'devices'|'security'|'apps'|'developer'|'permissions'|'storage'|'files'|'friends'|'mail'|'support'|'admin';
 
 type Props = {
   section:NativeSection;
@@ -86,6 +87,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [selectedMail,setSelectedMail]=useState<string[]>([]);
   const [detailsPanel,setDetailsPanel]=useState('');
   const [editingProfile,setEditingProfile]=useState(!account.profile);
+  const [premiumAliases,setPremiumAliases]=useState(false);const [aliasName,setAliasName]=useState('');const [creatingAlias,setCreatingAlias]=useState(false);
   const [aliases,setAliases]=useState<PrivateAddress[]>([]);
   const [openMail,setOpenMail]=useState<{id:string;message:MailMessage}|null>(null);
   const [confirmMailDeletion,setConfirmMailDeletion]=useState(false);
@@ -111,6 +113,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [keyName,setKeyName]=useState('');
   const [email,setEmail]=useState('');
   const [compose,setCompose]=useState(false);
+  const [sender,setSender]=useState('');
   const [recipient,setRecipient]=useState('');
   const [subject,setSubject]=useState('');
   const [mailText,setMailText]=useState('');
@@ -151,7 +154,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
     }
     if(section==='mail'&&account.canReceiveMail){
       const [inbox,addresses]=await Promise.all([api('inbox'),api('mail/aliases')]);
-      setMessages(inbox.messages);setInboxCursor(inbox.nextCursor??null);setAliases(addresses.aliases);
+      setMessages(inbox.messages);setInboxCursor(inbox.nextCursor??null);setAliases(addresses.aliases);setPremiumAliases(addresses.premium);
     }
   }
   useEffect(()=>{void load().catch(report);},[section,folder,token]);
@@ -204,6 +207,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
 
   let content:ReactNode;
   switch(section) {
+    case 'mail-clients':content=<MailClients token={token} colors={colors}/>;break;
     case 'dashboard':
       content=<>
         <View style={[styles.overviewHero,{backgroundColor:colors.soft}]}>
@@ -472,7 +476,10 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           setMessages(previous=>[...previous,...page.messages]);setInboxCursor(page.nextCursor);
         }))}
         {account.externalMailLimits&&paragraph('External mail: '+account.externalMailLimits.usedToday+' / '+(account.externalMailLimits.daily??'unlimited')+' today · '+account.externalMailLimits.usedMonth+' / '+(account.externalMailLimits.monthly??'unlimited')+' this month')}
+        {premiumAliases&&button('Create private email address',()=>setCreatingAlias(!creatingAlias))}
+        {creatingAlias&&<>{field('Address name (optional)',aliasName,setAliasName,{autoCapitalize:'none',maxLength:24})}{paragraph('Uses @mail.xcenter.it, just like a regular address. Leave blank to generate a name.')}{button('Create address',()=>run(async()=>{await api('mail/aliases',{name:aliasName||undefined});setCreatingAlias(false);setAliasName('');await load();},'Private address created.'))}</>}
         {aliases.length>0&&<Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>{accountMessage('privateAddresses','Hide My Email addresses')}</Text>}
+        {aliases.filter(item=>!item.active).map(item=>button('Turn on '+item.address,()=>run(async()=>{await api('mail/aliases/'+item.address,{active:true},'PUT');await load();} )))}
         {aliases.map(item=>row(item.address,item.address,item.active?'On · '+(item.premium?'Premium address':'Private address'):'Off · Not receiving mail',
           item.active&&button(accountMessage('disableAddress','Disable address'),()=>confirm('Disable this address?','Future messages to this address will be rejected.',
             ()=>run(async()=>{await api('mail/aliases/'+item.address,{},'DELETE');await load();},'Private address disabled.'),
@@ -484,6 +491,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
             {button(accountMessage('cancel','Cancel'),()=>{setStatus('');setCompose(false);})}
           </View>
           {!account.externalMailSubmission&&paragraph('You can send to X-Center mailboxes.')}
+          {paragraph('From: '+(sender||account.mailbox))}
+          {aliases.some(item=>item.active&&item.premium)&&<>{button('Use primary address',()=>setSender(''))}{aliases.filter(item=>item.active&&item.premium).map(item=><View key={item.address}>{button(item.address,()=>setSender(item.address))}</View>)}</>}
           {field(accountMessage('recipient','Recipient'),recipient,setRecipient,{keyboardType:'email-address',autoCapitalize:'none',editable:!busy})}
           {field(accountMessage('subject','Subject'),subject,setSubject,{maxLength:120,editable:!busy})}
           {field(accountMessage('message','Message'),mailText,setMailText,{multiline:true,maxLength:30_000,editable:!busy})}
@@ -495,7 +504,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
               if(file)setAttachment(file);
             }))}
           {button(accountMessage('sendEmail','Send email'),()=>run(async()=>{
-            await api('mail/send',{to:recipient,subject,text:mailText,formatted,attachment});
+            await api('mail/send',{from:sender||undefined,to:recipient,subject,text:mailText,formatted,attachment});
             setRecipient('');setSubject('');setMailText('');setFormatted(false);setAttachment(undefined);
             setCompose(false);
           },'Mail accepted for delivery.'),busy||!recipient.trim()||!subject.trim()||!mailText.trim())}

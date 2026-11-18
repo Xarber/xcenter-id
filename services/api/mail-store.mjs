@@ -6,7 +6,7 @@ import { convert } from 'html-to-text';
 const supportOwner='@xcenter-support';
 const externalSupportOwner='@xcenter-support-email';
 
-export function openMailStore({ accountsPath, mailPath, configuration }) {
+export function openMailStore({ accountsPath, mailPath, configuration,accountService }) {
   const key = Buffer.from(configuration.storageKey ?? '', 'hex');
   if (key.length !== 32) throw new Error('Mail storage requires a 32-byte key');
   const domains = new Set(configuration.inboundDomains ?? []);
@@ -20,6 +20,9 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
   const db = new DatabaseSync(mailPath);
   db.exec(`
     PRAGMA busy_timeout = 3000;
+    CREATE TABLE IF NOT EXISTS mail_items(uid INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT UNIQUE NOT NULL,folder TEXT NOT NULL DEFAULT 'INBOX',flags TEXT NOT NULL DEFAULT '[]') STRICT;
+    CREATE TABLE IF NOT EXISTS mail_metadata(name TEXT PRIMARY KEY,value INTEGER NOT NULL) STRICT;
+    INSERT OR IGNORE INTO mail_metadata VALUES('uidvalidity',CAST(strftime('%s','now') AS INTEGER));
     CREATE TABLE IF NOT EXISTS inbox_trust(id TEXT PRIMARY KEY,verified INTEGER NOT NULL,admin INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS aliases (id TEXT PRIMARY KEY, owner TEXT NOT NULL, client TEXT NOT NULL,
       active INTEGER NOT NULL DEFAULT 1, UNIQUE(owner,client)) STRICT;
@@ -32,8 +35,10 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
     CREATE TABLE IF NOT EXISTS support_requests(id TEXT PRIMARY KEY, owner TEXT NOT NULL,
       created INTEGER NOT NULL, replied INTEGER) STRICT;
     CREATE INDEX IF NOT EXISTS support_requests_owner ON support_requests(owner,created);
+    CREATE TABLE IF NOT EXISTS support_external_deliveries(id TEXT PRIMARY KEY,status TEXT NOT NULL,updated INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS support_replies(request TEXT PRIMARY KEY, reply TEXT NOT NULL) STRICT;
   `);
+  db.exec("INSERT OR IGNORE INTO mail_items(id) SELECT id FROM inbox ORDER BY received,id;");
   const alias = db.prepare('SELECT id FROM aliases WHERE owner=? AND client=? AND active=1');
   const insertAlias = db.prepare('INSERT INTO aliases (id,owner,client) VALUES (?,?,?) ON CONFLICT(owner,client) DO NOTHING');
   const resolveAlias = db.prepare('SELECT owner FROM aliases WHERE id=? AND active=1');
@@ -52,8 +57,8 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
   const username = accounts.prepare('SELECT username FROM identity_profiles WHERE owner=?');
   const add = db.prepare('INSERT INTO inbox VALUES (?,?,?,?,?)');
   const count = db.prepare('SELECT total(size) AS bytes,count(*) AS messages FROM inbox WHERE owner=?');
-  const list = db.prepare('SELECT id,received,size FROM inbox WHERE owner=? ORDER BY received DESC,id LIMIT 101');
-  const older = db.prepare(`SELECT id,received,size FROM inbox WHERE owner=? AND (received<? OR (received=? AND id>?))
+  const list = db.prepare("SELECT id,received,size FROM inbox WHERE owner=? AND id IN (SELECT id FROM mail_items WHERE folder='INBOX') ORDER BY received DESC,id LIMIT 101");
+  const older = db.prepare(`SELECT id,received,size FROM inbox WHERE owner=? AND id IN (SELECT id FROM mail_items WHERE folder='INBOX') AND (received<? OR (received=? AND id>?))
     ORDER BY received DESC,id LIMIT 101`);
   const remove = db.prepare('DELETE FROM inbox WHERE owner=? AND id=?');
   const get = db.prepare('SELECT * FROM inbox WHERE owner=? AND id=?');
@@ -67,9 +72,10 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
     if (!domains.has(domain)) return null;
     if (domain === 'hme.xcenter.it' || (domain === 'mail.xcenter.it' && local.includes('.'))) {
       const owner=(domain==='hme.xcenter.it'?resolveAlias:resolvePremium).get(local)?.owner;
-      return owner&&username.get(owner)?owner:null;
+      return owner&&username.get(owner)&&!accounts.prepare('SELECT 1 FROM account_restrictions WHERE owner=?').get(owner)?owner:null;
     }
-    return lookup.get(local)?.owner ?? null;
+    const owner=lookup.get(local)?.owner??accounts.prepare('SELECT owner FROM mailbox_aliases WHERE local=? AND active=1').get(local)?.owner;
+    return owner&&username.get(owner)&&!accounts.prepare('SELECT 1 FROM account_restrictions WHERE owner=?').get(owner)?owner:null;
   }
 
   function context(id,owner) { return Buffer.from(JSON.stringify(['authnjs.mail.v1',id,owner])); }
@@ -83,6 +89,7 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
     const ciphertext = Buffer.concat([cipher.update(content),cipher.final()]);
     add.run(id,owner,Date.now(),content.length,Buffer.concat([nonce,cipher.getAuthTag(),ciphertext]));
     if(trust?.verified||trust?.admin)db.prepare('INSERT INTO inbox_trust VALUES(?,?,?)').run(id,Number(!!trust.verified),Number(!!trust.admin));
+    db.prepare('INSERT INTO mail_items(id) VALUES(?)').run(id);
     return id;
   }
   function retrieve(owner,id) {
@@ -116,6 +123,8 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
     },
     premiumAlias(owner,client) {
       if (!domains.has('mail.xcenter.it')) return null;
+      const previous=premiumAlias.get(owner,client);
+      if(!previous&&accountService)return accountService.createMailboxAlias(owner,null,client);
       for (let retry=0;retry<4;retry++) {
         const current=premiumAlias.get(owner,client);
         if(current) return premiumRevoked.get(current.id)?null:current.id+'@mail.xcenter.it';
@@ -128,11 +137,25 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
       const entries=(rows,domain,premium)=>rows.map(({id,client,active})=>({
         address:id+'@'+domain,client,active:!!active,premium,
       }));
-      return [...entries(standardForOwner.all(owner),'hme.xcenter.it',false),...entries(premiumForOwner.all(owner),'mail.xcenter.it',true)];
+      const dashboard=accounts.prepare("SELECT local AS id,coalesce(client,'dashboard') AS client,active FROM mailbox_aliases WHERE owner=? ORDER BY created DESC").all(owner);
+      return [...entries(dashboard,'mail.xcenter.it',true),...entries(standardForOwner.all(owner),'hme.xcenter.it',false),...entries(premiumForOwner.all(owner),'mail.xcenter.it',true)];
+    },
+    setAlias(owner,address,enabled){
+      const parts=/^([a-z0-9.-]{1,63})@(hme\.xcenter\.it|mail\.xcenter\.it)$/.exec(address);
+      if(!parts||typeof enabled!=='boolean')return false;
+      if(parts[2]==='mail.xcenter.it'){
+        if(enabled&&!accountService?.premiumEligible(owner))return false;
+        if(accountService?.setMailboxAlias(owner,parts[1],enabled))return true;
+        if(!premiumAlias.get(owner,parts[1])&&!db.prepare('SELECT 1 FROM premium_aliases WHERE owner=? AND id=?').get(owner,parts[1]))return false;
+        if(enabled)db.prepare('DELETE FROM revoked_premium_aliases WHERE id=?').run(parts[1]);else revokePremium.run(parts[1],owner);
+        return true;
+      }
+      return db.prepare('UPDATE aliases SET active=? WHERE id=? AND owner=?').run(Number(enabled),parts[1],owner).changes===1;
     },
     revokeAlias(owner,address) {
       const parts=/^([a-z0-9.-]{1,63})@(hme\.xcenter\.it|mail\.xcenter\.it)$/.exec(address);
       if (!parts) return false;
+      if(parts[2]==='mail.xcenter.it'&&accountService?.setMailboxAlias(owner,parts[1],false))return true;
       const result=(parts[2]==='hme.xcenter.it'?revokeStandard:revokePremium).run(parts[1],owner);
       return result.changes===1;
     },
@@ -184,8 +207,17 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
         (value.from?.text??'Unverified sender').slice(0,250),
         text:(value.text??(value.html?convert(value.html,{selectors:[{selector:'img',format:'skip'},
           {selector:'a',options:{ignoreHref:true}}]}):'')).slice(0,20_000),
-        canReply:!!sender&&!row.replied,external:!row};
+        canReply:row?!!sender&&!row.replied:!db.prepare('SELECT 1 FROM support_external_deliveries WHERE id=?').get(id)&&value.from?.value?.length===1,external:!row};
     },
+    async claimExternalSupport(id){
+      const raw=retrieve(externalSupportOwner,id);if(!raw)return null;
+      const parsed=await simpleParser(raw,{skipImageLinks:true,skipTextToHtml:true,skipHtmlToText:true});
+      if(parsed.from?.value.length!==1)return null;
+      const address=parsed.from.value[0].address;
+      if(!address||!db.prepare("INSERT OR IGNORE INTO support_external_deliveries VALUES(?,'sending',?)").run(id,Date.now()).changes)return null;
+      return {address,subject:('Re: '+(parsed.subject??'Support')).replace(/[\r\n\0]/g,' ').slice(0,120)};
+    },
+    externalSupportResult:(id,ok)=>db.prepare('UPDATE support_external_deliveries SET status=?,updated=? WHERE id=?').run(ok?'sent':'uncertain',Date.now(),id),
     replySupport(id,content) {
       return transaction(()=>{
         const row=db.prepare('SELECT owner,replied FROM support_requests WHERE id=?').get(id);
@@ -215,6 +247,12 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
       }).deleted;
     },
     retrieve,
+    imapValidity:()=>db.prepare("SELECT value FROM mail_metadata WHERE name='uidvalidity'").get().value,
+    imapNext:()=>Number(db.prepare("SELECT seq FROM sqlite_sequence WHERE name='mail_items'").get()?.seq??0)+1,
+    imapList:(owner,folder)=>db.prepare('SELECT m.uid,m.flags,i.id,i.received,i.size FROM mail_items m JOIN inbox i ON i.id=m.id WHERE i.owner=? AND m.folder=? ORDER BY m.uid LIMIT 1000').all(owner,folder).map(row=>({...row,flags:JSON.parse(row.flags)})),
+    imapFlags(owner,id,flags){return db.prepare('UPDATE mail_items SET flags=? WHERE id=? AND id IN(SELECT id FROM inbox WHERE owner=?)').run(JSON.stringify(flags),id,owner).changes===1;},
+    imapMove(owner,id,folder){return transaction(()=>{const row=db.prepare('SELECT m.flags FROM mail_items m JOIN inbox i ON i.id=m.id WHERE i.owner=? AND i.id=?').get(owner,id);if(!row)return false;db.prepare('DELETE FROM mail_items WHERE id=?').run(id);db.prepare('INSERT INTO mail_items(id,folder,flags) VALUES(?,?,?)').run(id,folder,row.flags);return true;});},
+    imapAppend(owner,folder,raw){return transaction(()=>{const id=deliver(owner,raw);if(!id)return false;db.prepare('UPDATE mail_items SET folder=? WHERE id=?').run(folder,id);return id;});},
     close() { accounts.close(); db.close(); },
   };
 }

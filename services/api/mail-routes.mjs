@@ -34,15 +34,27 @@ function download(res, filename, content) {
   }).end(content);
 }
 
-export function handleMailAliases(req,res,path,accounts,mail) {
+export async function handleMailAliases(req,res,path,accounts,mail) {
   if (!mail || !path.startsWith('/account/mail/aliases')) return false;
   const session = accounts.current(req);
   if (!session) { json(res,{error:'Sign in to manage your private addresses.'},401); return true; }
   if (req.method==='GET' && path==='/account/mail/aliases') {
-    json(res,{aliases:mail.aliases(session.owner)});
+    json(res,{aliases:mail.aliases(session.owner),premium:accounts.premiumEligible?.(session.owner)??false});
     return true;
   }
+  if(req.method==='POST'&&path==='/account/mail/aliases'){
+    if(!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent'){json(res,{error:'Invalid origin.'},403);return true;}
+    let text='';try{for await(const chunk of req.iterator({destroyOnReturn:false})){text+=chunk.toString();if(text.length>1024){req.resume();json(res,{error:'Request too large.'},413);return true;}}
+      const input=JSON.parse(text);const address=accounts.createMailboxAlias(session.owner,input.name);json(res,{address},201);
+    }catch(error){json(res,{error:error.status?error.message:'Could not create this address.'},error.status??422);}return true;
+  }
   const address=/^\/account\/mail\/aliases\/([a-z0-9.-]+@(?:hme\.|mail\.)xcenter\.it)$/.exec(path)?.[1];
+  if(address&&req.method==='PUT'){
+    if(!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent'){json(res,{error:'Invalid origin.'},403);return true;}
+    let text='';try{for await(const chunk of req.iterator({destroyOnReturn:false})){text+=chunk.toString();if(text.length>256){req.resume();json(res,{error:'Request too large.'},413);return true;}}
+      const input=JSON.parse(text);if(typeof input.active!=='boolean'||!mail.setAlias(session.owner,address,input.active))json(res,{error:'Address unavailable.'},422);else json(res,{ok:true});
+    }catch{json(res,{error:'Could not change this address.'},422);}return true;
+  }
   if (!address || req.method!=='DELETE') json(res,{error:'Method not allowed.'},405);
   else if (!accounts.allowsMutation(req) || req.headers['x-authnjs-request']!=='account-consent') {
     json(res,{error:'Invalid origin.'},403);

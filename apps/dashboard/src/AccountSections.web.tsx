@@ -139,10 +139,12 @@ export function MailPage({ account }:{account:Account}) {
   const [loaded,setLoaded]=useState<{id:string;message:MailMessage}|null>(null);
   const open=loaded?.id===messageId?loaded:null;
   const [confirmDelete,setConfirmDelete]=useState(false);
+  const [premiumAliases,setPremiumAliases]=useState(false);const [aliasName,setAliasName]=useState('');const [creatingAlias,setCreatingAlias]=useState(false);
   const [aliases,setAliases]=useState<PrivateAddress[]>([]);
   const [confirmAlias,setConfirmAlias]=useState('');
   const [compose,setCompose]=useState(false);
   const [draft,setDraft]=useState({to:'',subject:'',text:''});
+  const [sender,setSender]=useState('');
   const [busy,setBusy]=useState(false);
   const [formatted,setFormatted]=useState(false);
   const [attachment,setAttachment]=useState<{name:string;content:string}|undefined>();
@@ -152,7 +154,7 @@ export function MailPage({ account }:{account:Account}) {
     setMessages(result.messages);setInboxCursor(result.nextCursor??null);
   }).catch(error=>setStatus(notice(error)));},[]);
   useEffect(()=>{
-    if(account.canReceiveMail)void api('mail/aliases').then(result=>setAliases(result.aliases)).catch(()=>{});
+    if(account.canReceiveMail)void api('mail/aliases').then(result=>{setAliases(result.aliases);setPremiumAliases(result.premium);}).catch(()=>{});
   },[account.canReceiveMail]);
   useEffect(()=>{if(compose&&!dialog.current?.open)dialog.current?.showModal();},[compose]);
   useEffect(()=>{
@@ -239,10 +241,12 @@ export function MailPage({ account }:{account:Account}) {
       }).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
     }}>{accountMessage('olderEmail','Load older email')}</button>}
     {!messageId&&account.externalMailLimits&&<p>External email allowance: {account.externalMailLimits.usedToday} / {account.externalMailLimits.daily??'unlimited'} today · {account.externalMailLimits.usedMonth} / {account.externalMailLimits.monthly??'unlimited'} this month.</p>}
+    {!messageId&&premiumAliases&&<section className="xc-card xc-pad"><button className="xc-button xc-secondary" onClick={()=>setCreatingAlias(!creatingAlias)}>Create private email address</button>{creatingAlias&&<form className="xc-stack" onSubmit={event=>{event.preventDefault();setBusy(true);void api('mail/aliases',{name:aliasName||undefined}).then(()=>api('mail/aliases')).then(result=>{setAliases(result.aliases);setAliasName('');setCreatingAlias(false);setStatus('Private address created.');}).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));}}><label>Address name (optional)<input value={aliasName} maxLength={24} pattern="[a-zA-Z][a-zA-Z0-9]{2,23}" onChange={e=>setAliasName(e.target.value)}/></label><p>Uses @mail.xcenter.it, just like a regular account address. Leave the name blank to generate one.</p><button className="xc-button xc-primary" disabled={busy}>Create address</button></form>}</section>}
     {!messageId&&aliases.length>0&&<details>
       <summary>{accountMessage('privateAddresses','Hide My Email addresses')} · {aliases.filter(item=>item.active).length} On / {aliases.filter(item=>!item.active).length} Off</summary><p>On forwards incoming mail to your inbox. Off stops new deliveries to that address.</p>
       {aliases.map(item=><div className="xc-list-row" key={item.address}>
         <div><strong>{item.address}</strong><p>{item.active?'On · '+(item.premium?'Premium address':'Private address'):'Off · Not receiving mail'}</p></div>
+        {!item.active&&<button className="xc-button xc-secondary" disabled={busy} onClick={()=>{setBusy(true);void api('mail/aliases/'+item.address,{active:true},'PUT').then(()=>api('mail/aliases')).then(r=>setAliases(r.aliases)).catch(e=>setStatus(notice(e))).finally(()=>setBusy(false));}}>Turn on</button>}
         {item.active&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
           if(confirmAlias!==item.address){setConfirmAlias(item.address);return;}
           setBusy(true);
@@ -263,12 +267,13 @@ export function MailPage({ account }:{account:Account}) {
       </div>
       <form className="xc-stack" onSubmit={event=>{
         event.preventDefault();setBusy(true);setDeliveryError('');
-        void api('mail/send',{...draft,formatted,attachment}).then(()=>{
+        void api('mail/send',{...draft,from:sender||undefined,formatted,attachment}).then(()=>{
           setFormatted(false);setAttachment(undefined);
           setDraft({to:'',subject:'',text:''});setCompose(false);setStatus('Message accepted for delivery.');
         }).catch(error=>setDeliveryError(notice(error))).finally(()=>setBusy(false));
       }}>
         {!account.externalMailSubmission&&<p>Send to a X-Center mailbox.</p>}
+        <label>From<select value={sender} onChange={event=>setSender(event.target.value)}><option value="">{account.mailbox}</option>{aliases.filter(item=>item.active&&item.premium).map(item=><option key={item.address} value={item.address}>{item.address}</option>)}</select></label>
         <label>{accountMessage('recipient','Recipient')}<input type="email" autoFocus required value={draft.to} onChange={event=>setDraft({...draft,to:event.target.value})}/></label>
         <label>{accountMessage('subject','Subject')}<input required maxLength={120} value={draft.subject} onChange={event=>setDraft({...draft,subject:event.target.value})}/></label>
         <label>{accountMessage('message','Message')}<textarea aria-label={accountMessage('message','Message')} required rows={5} value={draft.text} onChange={event=>setDraft({...draft,text:event.target.value})}/></label>

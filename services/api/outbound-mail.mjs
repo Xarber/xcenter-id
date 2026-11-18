@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer';
 
 const recipientPattern = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i;
 
-export function createOutboundMail(config,{limits,deliverLocal}={}) {
+export function createOutboundMail(config,{limits,deliverLocal,allowSender}={}) {
   if (!config?.userSubmission && !config?.localDelivery) return null;
   const domain = config.mailboxDomain ?? 'mail.xcenter.it';
   if(!['mail.xcenter.it','xcenter.it'].includes(domain)||!config.inboundDomains?.includes(domain)){
@@ -39,6 +39,8 @@ export function createOutboundMail(config,{limits,deliverLocal}={}) {
       const client=config.inboundDomains.includes(destination)&&local?local:upstream;
       if(!client)return {status:503,error:'Sending to external email addresses is unavailable.'};
       const external=!config.inboundDomains.includes(destination);
+      const from=typeof input.from==='string'?input.from.toLowerCase():username+'@'+domain;
+      if(from!==username+'@'+domain&&!allowSender?.(owner,from))return {status:403,error:'Sender is unavailable.'};
       if(external&&limits&&!limits.reserve(owner))return {status:429,error:'Your external mail allowance or the service free-plan allowance has been reached.'};
       const now = Date.now();
       if (now-minute >= 60_000) { minute=now; total=0; }
@@ -53,7 +55,6 @@ export function createOutboundMail(config,{limits,deliverLocal}={}) {
       rate.count++;
       total++;
       try {
-        const from = username+'@'+domain;
         if(!external&&deliverLocal){
           const composer=nodemailer.createTransport({streamTransport:true,buffer:true,disableFileAccess:true,disableUrlAccess:true});
           const raw=await composer.sendMail({from,to:recipient,subject,...content});

@@ -18,7 +18,7 @@ test('SMTP accepts registered destinations and aliases, rejects relay and isolat
   const accountsPath = join(dir,'accounts.sqlite');
   const mailPath = join(dir,'mail.sqlite');
   const accounts = new DatabaseSync(accountsPath);
-  accounts.exec("CREATE TABLE identity_profiles(owner TEXT,username TEXT); INSERT INTO identity_profiles VALUES ('alex-owner','alex');");
+  accounts.exec("CREATE TABLE identity_profiles(owner TEXT,username TEXT); CREATE TABLE mailbox_aliases(local TEXT,owner TEXT,client TEXT,active INTEGER,created INTEGER); CREATE TABLE account_restrictions(owner TEXT,status TEXT); INSERT INTO identity_profiles VALUES ('alex-owner','alex');");
   accounts.close();
   const store = openMailStore({ accountsPath, mailPath, configuration:{
     inboundDomains:['mail.xcenter.it','hme.xcenter.it'], supportAddresses:['support@id.xcenter.it','support@xcenter.it'],
@@ -65,7 +65,7 @@ test('SMTP accepts registered destinations and aliases, rejects relay and isolat
     await assert.rejects(send('alex@xcenter.it'),{responseCode:550});
     assert.equal(store.listSupport().length,2);
     assert.ok(store.listSupport().every(item=>item.external));
-    assert.equal((await store.readSupport(store.listSupport()[0].id)).canReply,false);
+    assert.equal((await store.readSupport(store.listSupport()[0].id)).canReply,true);
     assert.ok(!readFileSync(mailPath).includes(Buffer.from('ciphertext check')));
     for (let i=0;i<100;i++) assert.equal(store.receive(['alex@mail.xcenter.it'],Buffer.from('fixture')),true);
     const timestamps = new DatabaseSync(mailPath);

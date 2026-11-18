@@ -230,3 +230,20 @@ Hosted API tests additionally verify private recipient messaging and withdrawal,
 Build gate reconciliation: non-email implementation/preparation is complete. Email setup and premium-alias changes are explicitly paused by the user. New native preview is now the next applicable build verification; it will remain a private preview from testing. Production deployment is intentionally deferred because the current source also preserves email behavior changes from before the pause; deploying this combined revision would activate paused email work. Prior production remains d4de743 API/Web and 8bd6b7c SMTP. The next safe rollout must explicitly reconcile the paused email configuration and database migrations, take seven checked database snapshots (including app-data.sqlite after its creation), and retain prior versions.
 
 Final source receipt: feature batch `b6b4f84`, APK parser `65031be` and sparse-checkout fix `2a92156` are pushed to `origin/testing`. Confirmed remote preview [44325257679](https://github.com/Xarber/xcenter-id/actions/runs/44325257679) uses exact source `2a92156e0d3fd4a676c02af112f68720b4e931c9`; Android APK/AAB jobs have started and both iOS variants are queued. Do not infer build completion. Final web export passed. No new production deployment, stable release or distribution metadata publication occurred. All remaining email work stays explicitly paused; native runtime and remote artifact results remain dependent verification.
+
+
+### Email resumption
+
+The user explicitly resumed all email work. Resume AUTHN-039 and AUTHN-062/063/065/066: finish approved sender-domain verification and protected relay credentials; test external delivery; implement dashboard-created regular-format premium aliases with shared username reservation; finish the unverified-address transfer workflow and sender trust badges; then authenticated external mail-client submission and mailbox access. Production rollout and a fresh native preview follow independent implementation and verification. Preserve the prior email-pause history.
+
+
+### Resumed mail implementation checkpoint
+
+AUTHN-039/062/063/065/066 are implemented in source with runtime verification outstanding. Thirty API regressions passed, including actual loopback SMTP authentication/sender isolation and TLS IMAP fetch/folder/flag/append/revocation, signed versus forged-header sender badges, competing inbound verification and premium namespace collision/reservation. Dashboard typecheck passed. The user confirmed the external relay test arrived. Mail client public ports and dedicated id.xcenter.it DNS were explicitly approved; DNS is published and router rules await verified saving after a control timeout. SMTP2GO tracking is Off. Existing production source remains d4de743 API/Web and 8bd6b7c ingress until staged rollout passes.
+
+Preview 44325257679: simulator succeeded; iOS device canceled (cause unestablished), APK failed because the script path was relative to android/, AAB still running at inspection. The script now uses GITHUB_WORKSPACE. Reapply the build start gate after current mail preparation, then launch a fresh private preview. No stable release or distribution claim.
+
+Storage inspection: SharedData has about 870 MB free; root about 2.08 GB. No disposable X-Center ID cache large enough to resolve this was found. Another project's temporary build storage is large but has not been altered. Preserve all retained release dependencies and existing backup guard. Targeted checked snapshots can use root; the nightly shared-volume backup guard remains blocked by space. Record rollout-specific recovery evidence before cutover.
+
+
+Both approved router rules are now saved and visibly Active: TCP465→192.168.1.30:465 and TCP993→192.168.1.30:993, all source addresses. No DMZ or unrelated rule changed. Source checks and preparation for the current batch are complete; the smallest web export is now required for real browser verification and staging. Private native preview follows this integration. Pending hardware/real-mail-client tests and provider/inbound round-trip evidence are recorded dependencies. Existing backup limitation remains explicit.
