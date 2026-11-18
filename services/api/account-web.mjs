@@ -243,7 +243,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     const ok = accounts.allowsMutation(req) && req.headers['x-authnjs-request'] === 'developer-portal' &&
       owner && registry.revokeOwned(owner,revocationId);
     res.writeHead(ok ? 200 : 403, {'Content-Type':'application/json','Cache-Control':'no-store'});
-    res.end(JSON.stringify({ok:!!ok}));
+    res.end(JSON.stringify(ok?{ok:true}:{error:'This registration could not be deleted.'}));
     return;
   }
   const verificationId = /^\/account\/developer\/apps\/([0-9a-f-]{36})\/verify$/.exec(path)?.[1];

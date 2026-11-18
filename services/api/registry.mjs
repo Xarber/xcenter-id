@@ -16,13 +16,13 @@ export function openRegistry(path) {
     CREATE TABLE IF NOT EXISTS app_profiles(id TEXT PRIMARY KEY, description TEXT NOT NULL, repository TEXT NOT NULL, callbacks TEXT NOT NULL, verified INTEGER NOT NULL DEFAULT 0) STRICT;
     CREATE TABLE IF NOT EXISTS developer_profiles(owner TEXT PRIMARY KEY,name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unverified') STRICT;
   `);
-  const add = db.prepare('INSERT INTO clients (id, developer, name, callback) SELECT ?, ?, ?, ? WHERE (SELECT count(*) FROM clients WHERE developer = ?) < 30');
+  const add = db.prepare("INSERT INTO clients (id, developer, name, callback) SELECT ?, ?, ?, ? WHERE (SELECT count(*) FROM clients WHERE developer = ? AND status <> 'revoked') < 30");
   const list = db.prepare(`SELECT c.id,c.name,c.callback,c.client,c.status,b.developer_name AS developerName,b.icon,p.description,p.repository,p.callbacks,p.verified,EXISTS(SELECT 1 FROM client_native n WHERE n.id=c.id) AS native FROM clients c
     LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN app_profiles p ON p.id=c.id WHERE c.developer=? ORDER BY c.name,c.id`);
   const lookup = db.prepare('SELECT c.*,p.description,p.repository,p.callbacks,p.verified,EXISTS(SELECT 1 FROM client_native n WHERE n.id=c.id) AS native FROM clients c LEFT JOIN app_profiles p ON p.id=c.id WHERE c.id=? AND c.developer=?');
   const active = db.prepare("SELECT 1 FROM clients WHERE client = ? AND status = 'active' AND id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)");
   const approve = db.prepare("UPDATE clients SET client = ?, status = 'active' WHERE id = ? AND status = 'pending'");
-  const revoke = db.prepare("UPDATE clients SET status = 'revoked' WHERE id = ? AND status = 'active'");
+  const revoke = db.prepare("UPDATE clients SET status = 'revoked' WHERE id = ? AND status IN ('pending','active')");
 
   const setBrand=db.prepare(`INSERT INTO client_brand VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET
     developer_name=excluded.developer_name,icon=excluded.icon`);
@@ -56,7 +56,7 @@ export function openRegistry(path) {
     },
     saveApp(owner,id,profile){
       const previous=appView(lookup.get(id,owner));
-      if(!previous)return null;
+      if(!previous||previous.status==='revoked')return null;
       if(previous.status!=='pending'&&new URL(previous.callback).origin!==new URL(profile.callbacks[0]).origin)return null;
       db.exec('BEGIN IMMEDIATE');
       try{
@@ -108,8 +108,9 @@ export function openRegistry(path) {
     },
     moderate(owner,id,action){
       const app=lookup.get(id,owner);
-      if(!app||app.status!=='active')return false;
+      if(!app)return false;
       if(action==='delete')return revoke.run(id).changes===1;
+      if(app.status!=='active')return false;
       db.prepare('INSERT INTO app_restrictions VALUES(?,?) ON CONFLICT(id) DO UPDATE SET restricted=excluded.restricted')
         .run(id,Number(action==='restrict'));
       return true;
@@ -119,7 +120,7 @@ export function openRegistry(path) {
     lookup: (owner,id) => appView(lookup.get(id,owner)),
     list: (developer) => list.all(developer).map(appView),
     published: () => db.prepare("SELECT client,name FROM clients WHERE status='active' AND id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1) ORDER BY name,client LIMIT 200").all(),
-    revokeOwned: (owner,id) => db.prepare("UPDATE clients SET status='revoked' WHERE developer=? AND id=? AND status='active'").run(owner,id).changes === 1,
+    revokeOwned: (owner,id) => db.prepare("UPDATE clients SET status='revoked' WHERE developer=? AND id=? AND status IN ('pending','active')").run(owner,id).changes === 1,
     has: (client) => Boolean(active.get(client)),
     approve: (id, client) => approve.run(client, id).changes === 1,
     revoke: (id) => revoke.run(id).changes === 1,

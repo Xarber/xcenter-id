@@ -1,3 +1,4 @@
+import { openRegistry } from "./registry.mjs";
 import { once } from 'node:events';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -158,4 +159,22 @@ test('developer submissions cannot activate apps or assume a confidential client
     registry.close();
     store.close();
   }
+});
+
+test('deleting an app is restricted to its owner or its account administrator',()=>{
+  const registry=openRegistry(':memory:');
+  try{
+    const pending=registry.submit('owner','Pending','https://example.test/pending');
+    assert.equal(registry.revokeOwned('other',pending.id),false);
+    assert.equal(registry.revokeOwned('owner',pending.id),true);
+    assert.equal(registry.approve(pending.id,'deleted-client'),false);
+    assert.equal(registry.saveApp('owner',pending.id,{name:'Changed',callbacks:[pending.callback]}),null);
+    const active=registry.submit('owner','Active','https://example.test/active');
+    assert.equal(registry.approve(active.id,'active-client'),true);
+    assert.equal(registry.moderate('other',active.id,'delete'),false);
+    assert.equal(registry.moderate('owner',active.id,'delete'),true);
+    assert.equal(registry.has('active-client'),false);
+    const next=registry.submit('owner','Another pending','https://example.test/again');
+    assert.equal(registry.moderate('owner',next.id,'delete'),true);
+  }finally{registry.close();}
 });

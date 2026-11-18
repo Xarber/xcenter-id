@@ -1,4 +1,4 @@
-import { ArrowLeft, BadgeCheck, ChevronRight, Grid2X2, ImagePlus, Plus, X } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, ChevronRight, Database, Grid2X2, ImagePlus, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { developerApi, readAppIcon, type AppRegistration } from './developer-web';
 
@@ -9,16 +9,17 @@ export default function DeveloperPortal({back}:{back:()=>void}){
   const [apps,setApps]=useState<AppRegistration[]|null>(null);
   const [selection,setSelection]=useState<AppRegistration|'create'|null>(null);
   const [draft,setDraft]=useState<Draft>(blank);
+  const [deleteConfirm,setDeleteConfirm]=useState(false);
   const [notice,setNotice]=useState('');
   const [busy,setBusy]=useState(false);
   const [secret,setSecret]=useState<{clientId:string;clientSecret?:string}|null>(null);
   async function load(){
     const result=await developerApi('apps');
-    setApps(result.apps);
+    setApps(result.apps.filter((app:AppRegistration)=>app.status!=='revoked'));
   }
   useEffect(()=>{void load().catch(error=>setNotice(error.message));},[]);
   function edit(item:AppRegistration|'create'|null){
-    setSelection(item);setNotice('');setSecret(null);
+    setSelection(item);setDeleteConfirm(false);setNotice('');setSecret(null);
     setDraft(item&&item!=='create'?{...item,callbacks:item.callbacks??[item.callback]}:blank());
   }
   function work(job:()=>Promise<void>){
@@ -37,7 +38,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
   if(!selection)return <div className="xc-stack">
     <div className="xc-portal-toolbar"><h2>Registered apps</h2>
       <button className="xc-button xc-primary" onClick={()=>edit('create')} disabled={!apps}><Plus size={18}/> Register an app</button></div>
-    <a href="/profile#developer-profile">Manage your developer profile</a>
+    <a href="/profile/developer">Manage your developer profile</a>
     {apps?.map(item=><button type="button" className="xc-card xc-permission-link xc-portal-app" onClick={()=>edit(item)} key={item.id}>
       <span className="xc-symbol xc-lavender">{item.icon?<img src={'data:image/png;base64,'+item.icon} alt=""/>:<Grid2X2 size={20}/>}</span>
       <span className="xc-permission-name"><strong>{item.name}</strong><span>{item.verified?'Verified · ':''}{item.native?'Native app':'Website'} · {item.status}</span></span>
@@ -51,7 +52,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
 
   const existing=selection==='create'?null:selection;
   return <div className="xc-stack">
-    {selection!=='create'&&<a href={'/developer/storage/'+selection.id}>Manage application database</a>}
+    {existing?.status==='active'&&existing.verified&&<a className="xc-button xc-secondary xc-self-start" href={'/developer/storage/'+existing.id}><Database size={17}/> Manage app storage</a>}
     <button type="button" className="xc-button xc-secondary xc-self-start" onClick={()=>edit(null)} disabled={busy}><ArrowLeft size={16}/> Registered apps</button>
     <div className="xc-row-head"><h2>{existing?.name??'Register an app'}</h2>
       {existing?.verified&&<span className="xc-pill"><BadgeCheck size={15}/> Verified</span>}</div>
@@ -98,13 +99,16 @@ export default function DeveloperPortal({back}:{back:()=>void}){
     </div>}
     {secret&&<div className="xc-info" role="status"><strong>Save the credentials securely</strong><code>{secret.clientId}</code>
       {secret.clientSecret&&<code>{secret.clientSecret}</code>}<button className="xc-button xc-secondary" onClick={()=>setSecret(null)}>Hide credentials</button></div>}
-    {existing?.status==='active'&&<div className="xc-actions">
-      <small>Client ID <code>{existing.client}</code></small>
-      <button type="button" className="xc-button xc-secondary" disabled={busy}
-        onClick={()=>{if(window.confirm('Disable sign-in and data access for this app?'))work(async()=>{
+    {existing&&existing.status!=='revoked'&&<div className="xc-stack">
+      {existing.client&&<small>Client ID <code>{existing.client}</code></small>}
+      {deleteConfirm?<><p>Delete {existing.name}? This ends X-Center ID sign-in and API access for this registration. Stored records are retained.</p>
+        <div className="xc-actions"><button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>work(async()=>{
           await developerApi('apps/'+existing.id+'/revoke',{});
-          setSelection({...existing,status:'revoked'});await load();setNotice('App revoked.');
-        });}}>Revoke app access</button>
+          setApps(current=>current?.filter(app=>app.id!==existing.id)??null);
+          edit(null);setNotice('App deleted.');
+        })}><Trash2 size={17}/> Confirm app deletion</button>
+        <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>setDeleteConfirm(false)}>Cancel</button></div></>:
+        <button type="button" className="xc-button xc-secondary xc-self-start" disabled={busy} onClick={()=>setDeleteConfirm(true)}><Trash2 size={17}/> Delete app</button>}
     </div>}
     {notice&&<p role="status">{notice}</p>}
   </div>;

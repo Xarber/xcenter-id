@@ -1,11 +1,13 @@
 ---
 name: integrate-xcenter-id
-description: Integrate X-Center ID sign-in into an existing React Native or Expo app with accounts, including developer portal registration, callback ownership, code exchange and account mapping. Use for X-Center ID integrations and their authentication failures.
+description: Integrate X-Center ID sign-in into web, backend, desktop, and mobile apps using OpenID Connect or the optional Expo SDK. Use for developer portal registration, callback ownership, code exchange, account mapping, and sign-in troubleshooting.
 ---
 
 # Integrate X-Center ID
 
-Preserve the target app's data, navigation and account recovery. Inspect its current authentication, backend and installed Expo/React Native versions before selecting an adapter. Read [the integration contract](references/integration.md) for portal activation, native callbacks and verification. The issuer is https://id.xcenter.it. The maintained implementation currently lives in /Users/xarber/Productivity/apps/AuthNJS and its private Xarber/xcenter-id repository. Verify relevant contract details against current source when accessible, especially before enabling a new integration.
+Preserve the target app's data, navigation and account recovery. Inspect its current authentication, backend, and platform before choosing an integration. Read [the integration contract](references/integration.md) for portal activation, native callbacks and verification. The issuer is https://id.xcenter.it. The maintained implementation currently lives in /Users/xarber/Productivity/apps/AuthNJS and its private Xarber/xcenter-id repository. Verify relevant contract details against current source when accessible, especially before enabling a new integration.
+
+Start with the [platform-neutral developer guide](https://id.xcenter.it/docs#manual). For web apps or products with a backend, use the target stack's OpenID Connect library with a confidential website registration. For standalone native clients, use a public registration and the system browser with a verified HTTPS callback. Use the Expo SDK only when it fits the existing framework. The protocol and hosted API do not require any JavaScript or React Native dependency.
 
 Use the shared AccountEntry or RegisteredAppSignIn component where its installed framework versions are compatible. A reusable sign-in view only supplies the entry point. Finish the host app's code exchange, validated account session, logout, secure persistence and error handling. For native apps without Expo modules, adapt the system browser and PKCE flow through a supported installed library. Do not upgrade an app's framework just to import this package.
 

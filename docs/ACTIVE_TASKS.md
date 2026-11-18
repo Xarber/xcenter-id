@@ -272,3 +272,6 @@ New private native preview [44335880160](https://github.com/Xarber/xcenter-id/ac
 The earlier native build stopped before runner allocation because GitHub rejected the account's billing setup. No replacement native build was submitted for this batch.
 
 Dashboard follow-up: AUTHN-067–070 source is deployed as 310186a. Isolated Chrome exercised registered-client authorization, linked apps and permissions, onboarding, friend invitation, profile navigation and inline checkbox layout. Thirty-one API tests, four dashboard tests, typecheck and Expo Web export passed. Live discovery, revision and the rendered manual guide passed. A development integration can now be attempted. A real app's callback ownership, token exchange and unlink behavior must still be tested for that app. Native release builds and publication review remain pending.
+
+- App registration management follow-up: developer deletion for pending and active registrations; separate account and global admin inventories; database icon action for eligible apps. Record rollout and browser evidence after verification.
+- The installed integration skill and tracked copy cover framework-neutral OIDC and link to the manual developer guide, alongside the optional Expo adapter.

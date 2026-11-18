@@ -1,5 +1,5 @@
 import {useEffect,useState,type ReactNode} from 'react';
-import {ArrowLeft,Check,LockKeyhole,LogOut,Mail,Settings2,ShieldCheck,Trash2,Unlock,UserRound,X} from 'lucide-react';
+import {ArrowLeft,BadgeCheck,Check,Database,LockKeyhole,LogOut,Mail,Settings2,ShieldCheck,Trash2,Unlock,UserRound,X} from 'lucide-react';
 import {api} from './web-account';
 import {formatBytes} from './storage-summary';
 import type {ManagedAccount} from './support-model';
@@ -41,11 +41,12 @@ export function AdminAccounts(){
     void work().catch(error=>setStatus(error.message)).finally(()=>setBusy(false));
   }
   useEffect(()=>{run(load);},[name]);
-  async function mutate(path:string,data:object){
-    await api(path,data);setAction('');setConfirmation('');setText('');await load();setStatus('Saved.');
+  async function mutate(path:string,data:{action?:string}&Record<string,unknown>){
+    await api(path,data);setAction('');setConfirmation('');setText('');await load();setStatus(data.action==='delete'?'App deleted.':'Saved.');
   }
   const user=details?.account;
-  return <section className="xc-card xc-pad xc-stack">
+  const registrations=details?.registered.filter(app=>app.status!=='revoked')??[];
+  return <><section className="xc-card xc-pad xc-stack">
     {name?<><a className="xc-button xc-secondary xc-self-start" href="/admin" aria-label="All accounts" title="All accounts"><ArrowLeft size={20}/></a>
       {user&&<>
         <div className="xc-row-head"><AdminAvatar username={user.username} hasPicture={user.hasPicture}/><div><h2>{user.name}</h2><p>@{user.username} · {user.locked?'Locked':'Active'}</p></div></div>
@@ -88,20 +89,20 @@ export function AdminAccounts(){
         <h3>Connected apps</h3>
         {!user.apps.length&&<p>No connected apps.</p>}
         {user.apps.map(app=><p key={app.client}>{app.label}</p>)}
-        <h3>Registered apps</h3>
-        {!details.registered.length&&<p>No registered apps.</p>}
-        {details.registered.map(app=><div key={app.id} className="xc-list-row">
+        <section className="xc-stack"><div className="xc-row-head"><BadgeCheck size={21}/><h2>Registered apps</h2></div>
+        {!registrations.length&&<p>No registered apps.</p>}
+        {registrations.map(app=><div key={app.id} className="xc-list-row xc-permission-row">
           <div><strong>{app.name}</strong><p>{app.status}{app.restricted?' · Restricted':''}</p><p>{new URL(app.callback).hostname}</p></div>
-          <div className="xc-actions"><IconAction label={app.verified?'Remove app verification':'Verify app'} disabled={busy} onClick={()=>run(()=>mutate('admin/apps',{type:'app',id:app.id,verified:!app.verified}))}><ShieldCheck size={20}/></IconAction><a href={'/developer/storage/'+app.id}>Manage app storage</a></div>
-          {app.status==='active'&&<div className="xc-actions">
-            <IconAction label={app.restricted?'Restore app':'Restrict app'} disabled={busy} onClick={()=>run(()=>mutate('admin/users/'+user.username,
-              {action:app.restricted?'restore':'restrict',app:app.id}))}>{app.restricted?<Unlock size={20}/>:<LockKeyhole size={20}/>}</IconAction>
+          <div className="xc-actions"><IconAction label={app.verified?'Remove app verification':'Verify app'} disabled={busy} onClick={()=>run(()=>mutate('admin/apps',{type:'app',id:app.id,verified:!app.verified}))}><ShieldCheck size={20}/></IconAction>{app.status==='active'&&app.verified&&!app.restricted&&<a className="xc-button xc-secondary" href={'/developer/storage/'+app.id+'?account='+user.username}><Database size={17}/> Manage app storage</a>}</div>
+          {<div className="xc-actions">
+            {app.status==='active'&&<IconAction label={app.restricted?'Restore app':'Restrict app'} disabled={busy} onClick={()=>run(()=>mutate('admin/users/'+user.username,
+              {action:app.restricted?'restore':'restrict',app:app.id}))}>{app.restricted?<Unlock size={20}/>:<LockKeyhole size={20}/>}</IconAction>}
             <IconAction label="Delete registered app" disabled={busy} onClick={()=>{setAction('app-'+app.id);setConfirmation('');}}><Trash2 size={20}/></IconAction>
           </div>}
           {action==='app-'+app.id&&<div className="xc-stack"><p>Delete this registration and stop its future sign-ins?</p>
             <IconAction label="Confirm app deletion" disabled={busy} onClick={()=>run(()=>mutate('admin/users/'+user.username,{action:'delete',app:app.id,confirmation:app.id}))}><Check size={20}/></IconAction>
             <IconAction label="Cancel app deletion" disabled={busy} onClick={()=>setAction('')}><X size={20}/></IconAction></div>}
-        </div>)}
+        </div>)}</section>
       </>}
     </>:<><h2>Accounts</h2><label>Find an account<input type="search" value={filter} onChange={event=>setFilter(event.target.value)}/></label>
       {users.filter(user=>user.username.includes(filter.toLowerCase().trim())).map(user=>
@@ -110,5 +111,5 @@ export function AdminAccounts(){
           {user.locked&&<LockKeyhole size={18} aria-label="Locked"/>}
         </a>)}</>}
     {status&&<p role="status">{status}</p>}
-  </section>;
+  </section></>;
 }

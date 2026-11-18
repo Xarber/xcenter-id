@@ -7,7 +7,7 @@ import { accountMessage } from './account-locale';
 import type { Friend } from './friends-model';
 import type { MailMessage, PrivateAddress } from './mail-message';
 import { formatBytes, storageCategories } from './storage-summary';
-import { Bold, Italic, Paperclip, UserRound, Grid2X2, BadgeCheck, Download, File, FileUp, Folder, FolderPlus, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
+import { Database, Bold, Italic, Paperclip, UserRound, Grid2X2, BadgeCheck, Download, File, FileUp, Folder, FolderPlus, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { api, fileAsBase64, type Account } from './web-account';
 
@@ -340,9 +340,10 @@ function AdminContent() {
     </section>
     <section className="xc-card xc-pad"><div className="xc-row-head"><BadgeCheck size={21}/><h2>Registered apps</h2></div>
       {apps.length===0&&<p className="xc-empty">No registered developer apps.</p>}
-      {apps.map(app=><div className="xc-list-row xc-permission-row" key={app.id}>
+      {apps.filter(app=>app.status!=='revoked').map(app=><div className="xc-list-row xc-permission-row" key={app.id}>
         <div><strong>{app.name}</strong><p>{app.developerName??'Developer'} · {app.status}</p>
           <p>{new URL(app.callback).hostname}</p>{app.repository&&<a href={app.repository} rel="noreferrer" target="_blank">Review repository</a>}</div>
+        {app.status==='active'&&app.verified&&<a className="xc-button xc-secondary" href={'/developer/storage/'+app.id}><Database size={17}/> Manage app storage</a>}
         {app.status!=='revoked'&&<IconAction label={app.verified?'Remove verification':'Verify app'} disabled={busy}
           onClick={()=>save('admin/apps',{type:'app',id:app.id,verified:!app.verified},'App verification updated.')}><BadgeCheck size={20}/></IconAction>}
       </div>)}
@@ -381,5 +382,5 @@ export function AdminPage(){
   const [error,setError]=useState('');
   useEffect(()=>{void api('admin/access').then(result=>setAuthorized(result.authorized)).catch(error=>setError(error.message)).finally(()=>setLoading(false));},[]);
   if(loading)return <p role="status">Checking administrator access…</p>;
-  return authorized?<AdminContent/>:<><Reauthenticate complete={()=>setAuthorized(true)}/>{error&&<p role="alert">{error}</p>}</>;
+  return authorized?(/^\/admin\/users\//.test(location.pathname)?<AdminAccounts/>:<AdminContent/>):<><Reauthenticate complete={()=>setAuthorized(true)}/>{error&&<p role="alert">{error}</p>}</>;
 }

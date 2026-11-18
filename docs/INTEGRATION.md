@@ -12,3 +12,5 @@ The installed **Integrate X-Center ID** skill and its repository source under `s
 
 
 The public developer documentation route is `/docs`. Package distribution currently uses `npm pack ./packages/expo` from an authorized checkout and installation of that archive into the target app; no public npm publication is claimed. `authorizeNative` and RegisteredAppSignIn accept supported `scopes`, a transaction `nonce` and `promptConsent` for incremental access. Existing defaults remain openid-only. Backend-based apps must create and retain their transaction and nonce before authorizing. The hosted API contract and its backend-key boundary are in [HOSTED_DATA.md](HOSTED_DATA.md).
+
+The integration skill supports non-Expo projects through the [manual OpenID Connect guide](https://id.xcenter.it/docs#manual). Use a library for your platform and choose a backend-owned confidential flow or a public native flow with a verified HTTPS callback. Expo is an optional adapter. Developers can delete pending and active registrations in the portal. Deletion revokes that registration and hides it from the inventory while retaining stored records and its identity tombstone.

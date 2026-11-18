@@ -99,10 +99,10 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
     try {
       const result = await request('/'+id+'/revoke', {method:'POST',headers:{'X-AuthNJS-Request':'developer-portal'}});
       if (!result.ok) throw new Error();
-      setApps((previous) => (previous ?? []).map((app) => app.id === id ? { ...app, status:'revoked' } : app));
+      setApps(previous=>(previous??[]).filter(app=>app.id!==id));
       setCredentials(null);
-      setNotice('App access revoked.');
-    } catch { setNotice('Could not revoke this app.'); }
+      setNotice('App deleted.');
+    } catch { setNotice('Could not delete this app.'); }
     finally { setSaving(false); setRevoking(null); }
   }
 
@@ -162,7 +162,7 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
       {native&&<Text style={{color:ink}}>Use a verified HTTPS Universal Link or Android App Link as your callback. Native clients use PKCE.</Text>}
       {branding()}
       {action('Submit for review', () => { void submit(); }, saving || !name.trim() || !callback.trim())}</> }
-      {apps.map((app) => <View key={app.id} style={[styles.item, { borderColor: border }]}>
+      {apps.filter(app=>app.status!=='revoked').map((app) => <View key={app.id} style={[styles.item, { borderColor: border }]}>
         <Text style={{ color: ink, fontWeight: '700' }}>{app.name}</Text>
         <Text style={{ color: ink }}>{app.status} · {app.native?'Native':'Web'}{app.client ? ' · ' + app.client : ''}</Text>
         {app.developerName&&<Text style={{color:ink}}>Developer: {app.developerName}</Text>}
@@ -171,11 +171,11 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
           {action('Cancel editing',()=>{setEditing(null);setDeveloperName('');setIcon(null);},saving)}</>
           :action('Edit branding',()=>{setEditing(app.id);setDeveloperName(app.developerName??'');setIcon(app.icon??null);},saving))}
         {app.status==='active'&&action('Manage application database',()=>setStorage(app.id))}
-        {app.status === 'active' && (revoking === app.id ? <>
-          <Text style={{color:ink}}>This immediately disables sign-in and data access for this client.</Text>
-          {action('Confirm revoke', () => { void revoke(app.id); }, saving)}
+        {app.status !== 'revoked' && (revoking === app.id ? <>
+          <Text style={{color:ink}}>This disables sign-in and API access. Stored records are retained.</Text>
+          {action('Confirm app deletion', () => { void revoke(app.id); }, saving)}
           {action('Cancel', () => setRevoking(null), saving)}
-        </> : action('Revoke app', () => setRevoking(app.id), saving))}
+        </> : action('Delete app', () => setRevoking(app.id), saving))}
         {app.status === 'pending' && <>
           <Text selectable style={{ color: ink }}>Name: {'_xcenter-id.' + new URL(app.callback).hostname}</Text>
           <Text selectable style={{ color: ink }}>TXT: {'xcenter-id=' + app.id}</Text>

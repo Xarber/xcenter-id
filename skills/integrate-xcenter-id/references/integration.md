@@ -8,7 +8,17 @@ Registration starts pending. Publish TXT at _xcenter-id.<callback-host> with the
 
 A DNS challenge proves control of the callback domain. It does not establish which installed mobile app receives the callback. Configure Apple Associated Domains and the apple-app-site-association file with the app's team ID and bundle ID, and Android intent filters and assetlinks.json with its package name and release certificate digest. Verify association on an installed development or release build. Sharing a callback with another product defeats product isolation.
 
-## Shared package
+## Framework-neutral setup
+
+Use the [manual developer guide](https://id.xcenter.it/docs#manual) and its HTTPS examples. For Python, Go, Swift, Kotlin, or any other stack, choose an OpenID Connect library that supports issuer discovery, S256 PKCE, state, nonce and ID-token validation. There is no X-Center package to install for this path.
+
+1. Register a Website backend for a server-owned HTTPS callback. A browser-only frontend can use a backend to own this exchange and create the product session. Use a Native registration only for a public client with an OS-verified HTTPS callback the product controls.
+2. Discover `https://id.xcenter.it/.well-known/openid-configuration`. Before opening authorization, create a short-lived transaction holding state, nonce, exact callback, expected client ID and original verifier.
+3. Use the discovered authorization endpoint with `response_type=code`, `scope=openid`, and S256 PKCE. On return, validate state, redeem the code once at the discovered token endpoint and verify the ID token with the issuer's signing keys.
+4. Authenticate a confidential client's exchange using HTTP Basic on the backend. For a registered public native client, use its client ID and PKCE. Map the verified issuer and pairwise subject to the product's account and issue the product's own session.
+5. For delegated reads, use the returned bearer access token against discovered UserInfo or the documented hosted data route when the app is active, verified and authorized for `app_data`. Treat failure after unlink or deletion as lost access.
+
+## Optional Expo package
 
 The package under packages/expo is @authnjs/expo. It currently targets React 19, React Native >=0.83 <0.89 and Expo 58 authentication modules. Read its package.json and installed target versions. Install from a local checkout or an authorized privately packed artifact. Do not embed a private repository access token into the target app or a package URL.
 
@@ -22,7 +32,7 @@ For a registered public native client, send client_id, code, code_verifier, exac
 
 Use the issuer's .well-known/openid-configuration. Pin the issuer and validate endpoint origins. Exact registered redirect paths, S256 verifier checks and state verification are mandatory. Every ID token is bound to its client audience. The issuer uses pairwise subjects, so product A and product B receive different subjects for the same person.
 
-The identity provider uses opaque access tokens. Third-party native clients cannot use the account manager's /account/native/exchange or /account/login/code to obtain privileged account-manager sessions. The registered API accepts confidential active app tokens with app_data scope for that app's records. Cross-app reads additionally require an owner-approved, unexpired grant. Giving product B the same display name, username or client ID as product A does not create product A credentials or its callback ownership.
+The identity provider uses opaque access tokens. Third-party native clients cannot use the account manager's /account/native/exchange or /account/login/code to obtain privileged account-manager sessions. The registered API accepts supported active-client access tokens with app_data scope for verified app records. Cross-app reads additionally require an owner-approved, unexpired grant. Giving product B the same display name, username or client ID as product A does not create product A credentials or its callback ownership.
 
 ## Host app checks
 

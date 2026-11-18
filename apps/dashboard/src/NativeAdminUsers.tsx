@@ -91,11 +91,11 @@ export default function NativeAdminUsers({token,colors}:{token:string;colors:Col
         <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Connected apps</Text>
         {user.apps.map(app=><Text key={app.client} style={{color:colors.ink}}>{app.label}</Text>)}
         <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Registered apps</Text>
-        {details.registered.map(app=><View key={app.id} style={{gap:8}}>
+        {details.registered.filter(app=>app.status!=='revoked').map(app=><View key={app.id} style={{gap:8}}>
           <Text style={{color:colors.ink}}>{app.name} · {app.status}{app.restricted?' · Restricted':''}</Text>
-          <View style={{flexDirection:'row',gap:8,flexWrap:'wrap'}}>{icon(app.verified?'Remove app verification':'Verify app','checkmark-circle-outline',()=>run(async()=>{await api('admin/apps',{type:'app',id:app.id,verified:!app.verified});}))}{icon('App storage','server-outline',()=>setStorageApp(app.id))}</View>
-          {app.status==='active'&&<View style={{flexDirection:'row',gap:10}}>
-            {icon(app.restricted?'Restore app':'Restrict app',app.restricted?'lock-open-outline':'lock-closed-outline',()=>run(async()=>{
+          <View style={{flexDirection:'row',gap:8,flexWrap:'wrap'}}>{icon(app.verified?'Remove app verification':'Verify app','checkmark-circle-outline',()=>run(async()=>{await api('admin/apps',{type:'app',id:app.id,verified:!app.verified});}))}{app.status==='active'&&app.verified&&!app.restricted&&icon('Manage app storage','server-outline',()=>setStorageApp(app.id))}</View>
+          {<View style={{flexDirection:'row',gap:10}}>
+            {app.status==='active'&&icon(app.restricted?'Restore app':'Restrict app',app.restricted?'lock-open-outline':'lock-closed-outline',()=>run(async()=>{
               await api('admin/users/'+user.username,{action:app.restricted?'restore':'restrict',app:app.id});
             }))}
             {icon('Delete app','trash-outline',()=>Alert.alert('Delete this app?','Future sign-in through this registration will stop.',[
