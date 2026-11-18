@@ -141,7 +141,7 @@ body{overflow-y:auto}
 .xc-mailbox .xc-row-head>div{min-width:0}.xc-mailbox h2,.xc-mailbox .xc-list-row strong{overflow-wrap:anywhere}
 
 /* Keep selection controls in the row with a full-size label hit target. */
-label:has(> input:is([type=checkbox],[type=radio])){display:flex;align-items:center;gap:.7rem;min-height:44px;cursor:pointer}
+label:has(> input:is([type=checkbox],[type=radio])){display:flex;flex-direction:row;align-items:center;gap:.7rem;min-height:44px;cursor:pointer}
 input:is([type=checkbox],[type=radio]){inline-size:1.2rem;block-size:1.2rem;min-width:1.2rem;margin:0;flex:none;accent-color:var(--blue)}
 .xc-list-row>div,.xc-row-head>div{min-width:0;overflow-wrap:anywhere}
 .xc-list-row>.xc-actions{flex-wrap:wrap}
