@@ -81,3 +81,6 @@ Premium addresses now share the regular username namespace and are created on de
 External support replies require an administrator, recent confirmation and an existing intake message; recipients cannot be supplied arbitrarily. A persisted claim prevents duplicate sends. Ambiguous delivery remains marked uncertain and requires provider inspection before retrying. Replies use support@id.xcenter.it and the same external allowance. support@xcenter.it requires forwarding from its existing iCloud mailbox; changing apex MX is not part of this setup.
 
 Provider settings: [SMTP2GO relay documentation](https://developers.smtp2go.com/docs/smtp-relay). Protocol reference: [IMAP4rev1](https://www.rfc-editor.org/info/rfc3501/); this implementation is a tested subset and does not claim full conformance.
+
+
+Production activation passed: API 5c3187f, Web c27d386, SMTP and client listeners 5c3187f. Public TLS greetings were observed on465/993. A real SMTP2GO→public MX→support inbox round-trip passed, supplementing the user-confirmed outgoing iCloud delivery. Existing accounts can now use the configured relay with persisted per-user and global limits. Mail-client credential creation remains passkey-confirmed; actual third-party mail-app login is not yet verified. See [production recovery](operations/XCENTER_ID_PRODUCTION.md).
