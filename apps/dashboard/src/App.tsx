@@ -1,10 +1,12 @@
+import {languages,parsePreferences,preferencesKey} from './preferences';
+import {setAccountLanguage} from './account-locale';
 import NativeSupport from './NativeSupport';
 import { accountMessage } from './account-locale';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { openBrowserAsync } from 'expo-web-browser';
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
-import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, AppState, Modal, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AccountEntry } from '@authnjs/expo';
 import { sample } from './sample';
@@ -31,7 +33,15 @@ const copy:Record<string,string> = {
 const pref = 'authnjs.dashboard.onboarding.v1';
 
 function NativeAccount() {
-  const dark=useColorScheme()==='dark';
+  const [reducedMotion,setReducedMotion]=useState(true);
+  useEffect(()=>{void AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion);const subscription=AccessibilityInfo.addEventListener('reduceMotionChanged',setReducedMotion);return ()=>subscription.remove();},[]);
+  const systemTheme=useColorScheme();
+  const [preferences,setPreferences]=useState(()=>parsePreferences(null));
+  const [sidebar,setSidebar]=useState(false);
+  setAccountLanguage(preferences.language);
+  useEffect(()=>{void AsyncStorage.getItem(preferencesKey).then(raw=>{const value=parsePreferences(raw);setAccountLanguage(value.language);setPreferences(value);});},[]);
+  function preference(value:typeof preferences){setAccountLanguage(value.language);setPreferences(value);void AsyncStorage.setItem(preferencesKey,JSON.stringify(value));}
+  const dark=preferences.theme==='dark'||preferences.theme==='system'&&systemTheme==='dark';
   const colors=dark?{background:'#101522',panel:'#192132',ink:'#f3f6ff',muted:'#b1c1dc',accent:'#9ebcff',soft:'#23355d'}
     :{background:'#f6f8fc',panel:'#fff',ink:'#141b2e',muted:'#526078',accent:'#214fbe',soft:'#e9f0ff'};
   const [tab,setTab]=useState<(typeof pages)[number]>(pages[0]);
@@ -113,17 +123,22 @@ function NativeAccount() {
   }
   return <SafeAreaView style={[styles.screen,{backgroundColor:colors.background}]}>
     <View style={styles.header}>
+      {token&&account&&<Pressable accessibilityLabel="Open page sidebar" accessibilityRole="button" onPress={()=>setSidebar(true)} style={{padding:10}}><Ionicons name="menu-outline" size={26} color={colors.accent}/></Pressable>}
       <Ionicons name="id-card-outline" color={colors.accent} size={28}/>
       <Text style={[styles.brand,{color:colors.ink}]}>X-Center ID</Text>
     </View>
-    {token&&account&&<View><ScrollView horizontal showsHorizontalScrollIndicator accessibilityRole="tablist" contentContainerStyle={styles.tabs}>
-      {pages.filter(page=>page[0]!=='developer'&&(page[0]!=='admin'||account?.admin)).map(page=><Pressable key={page[0]} accessibilityRole="tab" accessibilityState={{selected:page===tab}}
-        style={[styles.tab,page===tab&&{backgroundColor:colors.soft}]}
-        onPress={()=>{setTab(page);setDeveloper(false);setSampleMode(false);taps.current=0;if(timer.current)clearTimeout(timer.current);}}>
-        <Ionicons name={page[2]} size={20} color={page===tab?colors.accent:colors.muted}/>
-        <Text style={{color:page===tab?colors.accent:colors.muted,fontWeight:page===tab?'700':'600'}}>{accountMessage(page[0],page[1])}</Text>
-      </Pressable>)}
-    </ScrollView></View>}
+    {token&&account&&<Modal visible={sidebar} transparent animationType={reducedMotion?'none':'fade'} onRequestClose={()=>setSidebar(false)}>
+      <SafeAreaView style={{flex:1,flexDirection:'row',backgroundColor:'#0006'}}>
+        <View style={{width:280,maxWidth:'85%',backgroundColor:colors.panel,padding:14}}>
+          {action('Close sidebar','close-outline',()=>setSidebar(false))}
+          <ScrollView>{pages.filter(page=>page[0]!=='admin'||account.admin).map(page=><Pressable key={page[0]} accessibilityRole="button"
+            onPress={()=>{setTab(page);setSidebar(false);setDeveloper(false);setSampleMode(false);}}
+            style={{minHeight:48,flexDirection:'row',gap:12,alignItems:'center',paddingHorizontal:12,borderRadius:10,backgroundColor:tab[0]===page[0]?colors.soft:colors.panel}}>
+            <Ionicons name={page[2]} size={21} color={colors.accent}/><Text style={{color:colors.ink}}>{accountMessage(page[0],page[1])}</Text>
+          </Pressable>)}</ScrollView>
+        </View><Pressable style={{flex:1}} accessibilityLabel="Close sidebar" onPress={()=>setSidebar(false)}/>
+      </SafeAreaView>
+    </Modal>}
     <ScrollView contentContainerStyle={styles.content}>
       {intro?<View style={[styles.card,{backgroundColor:colors.panel}]}>
         <Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>Your X-Center ID</Text>
@@ -144,7 +159,13 @@ function NativeAccount() {
           <><Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>{accountMessage(tab[0],tab[1])}</Text>
           <Text style={{color:colors.muted}}>{tab[0]==='dashboard'?accountMessage('overviewSummary',copy.dashboard):copy[tab[0]]}</Text>
           {tab[0]==='settings'?<View style={[styles.card,{backgroundColor:colors.panel}]}>
-          {action('View introduction','information-circle-outline',()=>setIntro(true))}
+          <Text style={{color:colors.ink,fontWeight:'700'}}>Theme</Text>
+          <View style={styles.preferenceChoices}>{(['system','light','dark'] as const).map(value=><Pressable key={value} accessibilityRole="radio" accessibilityState={{checked:preferences.theme===value}} onPress={()=>preference({...preferences,theme:value})} style={[styles.button,{backgroundColor:preferences.theme===value?colors.soft:colors.panel}]}><Text style={{color:colors.ink}}>{value}</Text></Pressable>)}</View>
+          <Text style={{color:colors.ink,fontWeight:'700'}}>Language</Text>
+          <View style={styles.preferenceChoices}>{languages.map(([id,label])=><Pressable key={id} accessibilityRole="radio" accessibilityState={{checked:preferences.language===id}} onPress={()=>preference({...preferences,language:id})} style={[styles.button,{backgroundColor:preferences.language===id?colors.soft:colors.panel}]}><Text style={{color:colors.ink}}>{label}</Text></Pressable>)}</View>
+          {action('Support','help-circle-outline',()=>setTab(pages.find(page=>page[0]==='support')!))}
+          {action('Developer documentation','book-outline',()=>void openBrowserAsync(accountHost+'/docs'))}
+          {action('View introduction' ,'information-circle-outline',()=>setIntro(true))}
           {action('Version 0.1.0','code-slash-outline',()=>{
             if(++taps.current===3){setDeveloper(true);taps.current=0;}
             if(timer.current)clearTimeout(timer.current);
@@ -160,6 +181,14 @@ function NativeAccount() {
         {error&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{error}</Text>}</>}
       </>}
     </ScrollView>
+    {token&&account&&<View accessibilityRole="tablist" style={{flexDirection:'row',borderTopWidth:1,borderColor:colors.soft,backgroundColor:colors.panel,paddingVertical:8}}>
+      {(['dashboard','apps','settings',...(account.admin?['admin']:[])]).map(id=>{const page=pages.find(page=>page[0]===id)!;
+        const selected=id==='dashboard'?!['apps','permissions','developer','settings','support','admin'].includes(tab[0]):id==='apps'?['apps','permissions','developer'].includes(tab[0]):id==='settings'?['settings','support'].includes(tab[0]):tab[0]==='admin';
+        return <Pressable key={id} accessibilityRole="tab" accessibilityState={{selected}} onPress={()=>{setTab(page);setDeveloper(false);setSampleMode(false);taps.current=0;}}
+          style={{flex:1,alignItems:'center',justifyContent:'center',minHeight:52,gap:3,backgroundColor:selected?colors.soft:colors.panel,borderRadius:12}}>
+          <Ionicons name={page[2]} size={23} color={selected?colors.accent:colors.muted}/><Text style={{color:selected?colors.accent:colors.muted,fontSize:12}}>{id==='dashboard'?'Account':accountMessage(id,page[1])}</Text>
+        </Pressable>;})}
+    </View>}
   </SafeAreaView>;
 }
 
@@ -169,6 +198,7 @@ const styles=StyleSheet.create({
   screen:{flex:1},
   header:{flexDirection:'row',alignItems:'center',gap:10,paddingHorizontal:20,paddingVertical:15},
   brand:{fontSize:22,fontWeight:'800',letterSpacing:-.7},
+  preferenceChoices:{flexDirection:'row',flexWrap:'wrap',gap:6},
   tabs:{gap:7,paddingHorizontal:14,paddingVertical:8},
   tab:{paddingHorizontal:13,paddingVertical:11,borderRadius:13,minHeight:48,gap:7,flexDirection:'row',alignItems:'center'},
   content:{width:'100%',maxWidth:720,alignSelf:'center',paddingHorizontal:18,paddingVertical:26,gap:14},

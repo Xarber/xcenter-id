@@ -1,3 +1,4 @@
+import ApplicationStorage from './ApplicationStorage';
 import { getDocumentAsync } from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { accountHost } from './native-account';
@@ -9,7 +10,7 @@ import Animated, { Easing, FadeIn, ReduceMotion } from 'react-native-reanimated'
 type Registration = { id: string; name: string; callback: string; status: string; native?:boolean; client?: string; developerName?:string; icon?:string|null };
 const entering = FadeIn.duration(180).easing(Easing.bezier(0.23, 1, 0.32, 1)).reduceMotion(ReduceMotion.System);
 
-export default function DeveloperPortal({ back,token }: { back: () => void;token?:string }) {
+export default function DeveloperPortal({ back,token,colors }: { back: () => void;token?:string;colors?:{ink:string;accent:string;muted:string;soft:string} }) {
   const endpoint=(token?accountHost:'')+'/account/developer/apps';
   function request(path='',init:RequestInit={}){
     return fetch(endpoint+path,{...init,credentials:token?'omit':'same-origin',headers:{
@@ -19,9 +20,11 @@ export default function DeveloperPortal({ back,token }: { back: () => void;token
     }});
   }
   const dark = useColorScheme() === 'dark';
-  const ink = dark ? '#f4f7ff' : '#142438';
-  const accent = dark ? '#b9d0ff' : '#1b469b';
+  const ink = colors?.ink??(dark ? '#f4f7ff' : '#142438');
+  const accent = colors?.accent??(dark ? '#b9d0ff' : '#1b469b');
   const border = dark ? '#5a7192' : '#62738c';
+  const [creating,setCreating]=useState(false);
+  const [storage,setStorage]=useState('');
   const [apps, setApps] = useState<Registration[] | null>(null);
   const [notice, setNotice] = useState('Checking developer access…');
   const [name, setName] = useState('');
@@ -142,12 +145,14 @@ export default function DeveloperPortal({ back,token }: { back: () => void;token
     </Pressable>;
   }
 
+  if(storage&&token)return <ApplicationStorage id={storage} token={token} colors={colors??{ink,accent,muted:border,soft:dark?'#23355d':'#e9f0ff'}} back={()=>setStorage('')}/>;
   return <Animated.View entering={entering} style={styles.content}>
     {action('Back to X-Center ID', back)}
     <Text accessibilityRole="header" style={[styles.title, { color: ink }]}>Developer apps</Text>
     <Text style={{ color: ink }}>Register an exact HTTPS callback, then verify your domain to activate sign-in.</Text>
     {apps && <>
-      {!editing&&<>
+      {action(creating?'Cancel registration':'Register a new app',()=>setCreating(!creating))}
+      {!editing&&creating&&<>
       <Text style={{ color: ink }}>Application name</Text>
       <TextInput accessibilityLabel="Application name" style={[styles.input, { color: ink, borderColor: border }]} value={name} onChangeText={setName} maxLength={80} />
       <Text style={{ color: ink }}>HTTPS callback address</Text>
@@ -165,6 +170,7 @@ export default function DeveloperPortal({ back,token }: { back: () => void;token
           {action('Save branding',()=>void saveBrand(app.id),saving)}
           {action('Cancel editing',()=>{setEditing(null);setDeveloperName('');setIcon(null);},saving)}</>
           :action('Edit branding',()=>{setEditing(app.id);setDeveloperName(app.developerName??'');setIcon(app.icon??null);},saving))}
+        {app.status==='active'&&action('Manage application database',()=>setStorage(app.id))}
         {app.status === 'active' && (revoking === app.id ? <>
           <Text style={{color:ink}}>This immediately disables sign-in and data access for this client.</Text>
           {action('Confirm revoke', () => { void revoke(app.id); }, saving)}

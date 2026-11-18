@@ -20,6 +20,7 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
   const db = new DatabaseSync(mailPath);
   db.exec(`
     PRAGMA busy_timeout = 3000;
+    CREATE TABLE IF NOT EXISTS inbox_trust(id TEXT PRIMARY KEY,verified INTEGER NOT NULL,admin INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS aliases (id TEXT PRIMARY KEY, owner TEXT NOT NULL, client TEXT NOT NULL,
       active INTEGER NOT NULL DEFAULT 1, UNIQUE(owner,client)) STRICT;
     CREATE TABLE IF NOT EXISTS premium_aliases (id TEXT PRIMARY KEY, owner TEXT NOT NULL, client TEXT NOT NULL,
@@ -72,7 +73,7 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
   }
 
   function context(id,owner) { return Buffer.from(JSON.stringify(['authnjs.mail.v1',id,owner])); }
-  function deliver(owner,content) {
+  function deliver(owner,content,trust) {
     const used = count.get(owner);
     if (used.bytes + content.length > 64 * 1024 * 1024 || used.messages >= 1000) return null;
     const id = randomUUID();
@@ -81,6 +82,7 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
     cipher.setAAD(context(id,owner));
     const ciphertext = Buffer.concat([cipher.update(content),cipher.final()]);
     add.run(id,owner,Date.now(),content.length,Buffer.concat([nonce,cipher.getAuthTag(),ciphertext]));
+    if(trust?.verified||trust?.admin)db.prepare('INSERT INTO inbox_trust VALUES(?,?,?)').run(id,Number(!!trust.verified),Number(!!trust.admin));
     return id;
   }
   function retrieve(owner,id) {
@@ -134,10 +136,10 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
       const result=(parts[2]==='hme.xcenter.it'?revokeStandard:revokePremium).run(parts[1],owner);
       return result.changes===1;
     },
-    receive(recipients, content) {
+    receive(recipients, content,trust) {
       const unique = [...new Set(recipients.map(resolveRecipient))];
       if (!unique.length || unique.includes(null)) return false;
-      return transaction(()=>unique.every(owner=>deliver(owner,content)));
+      return transaction(()=>unique.every(owner=>deliver(owner,content,trust)));
     },
     submitSupport(owner,content) {
       return transaction(()=>{
@@ -164,7 +166,8 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
           text:parsed?.text??'',reply:response?.text??null};
       }));
     },
-    notice(owner,content) {return !!deliver(owner,content);},
+    notice(owner,content) {return !!deliver(owner,content,{admin:true});},
+    trust(owner,id){return get.get(owner,id)?db.prepare('SELECT verified,admin FROM inbox_trust WHERE id=?').get(id)??{verified:0,admin:0}:{verified:0,admin:0};},
     listSupport() {
       const listRequests=db.prepare(`SELECT i.id,i.received,r.replied,r.owner IS NULL AS external
         FROM inbox i LEFT JOIN support_requests r ON i.id=r.id
@@ -187,7 +190,7 @@ export function openMailStore({ accountsPath, mailPath, configuration }) {
       return transaction(()=>{
         const row=db.prepare('SELECT owner,replied FROM support_requests WHERE id=?').get(id);
         if(!row||row.replied||!username.get(row.owner)||!retrieve(supportOwner,id))return false;
-        const reply=deliver(row.owner,content);
+        const reply=deliver(row.owner,content,{admin:true});
         if(!reply)return false;
         db.prepare('INSERT INTO support_replies VALUES(?,?)').run(id,reply);
         db.prepare('UPDATE support_requests SET replied=? WHERE id=?').run(Date.now(),id);

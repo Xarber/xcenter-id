@@ -4,7 +4,7 @@ import nodemailer from 'nodemailer';
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 const addressPattern = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i;
 
-export function createVerificationMailer(config) {
+export function createVerificationMailer(config,limits) {
   if (!config) return null;
   const from = config.from?.toLowerCase();
   if (!/^[a-z0-9-]+@(?:management\.|mail\.)?xcenter\.it$/.test(from ?? '') ||
@@ -18,11 +18,14 @@ export function createVerificationMailer(config) {
     connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 12000,
     disableFileAccess: true, disableUrlAccess: true,
   });
-  return ({ address, link, code }) => transport.sendMail({
+  return async ({ address, link, code }) => {
+    if(limits&&!limits.reserve('~verification-'+digest(address.toLowerCase())))throw new Error('Verification sending allowance reached');
+    return transport.sendMail({
     from: { name: 'X-Center ID', address: from }, to: address,
     subject: code?'Your X-Center ID sign-in code':'Verify your email for X-Center ID',
     text: code?'Use this code to sign in to X-Center ID: '+code+'\nIt expires in 5 minutes.': 'Verify ownership of this address by opening the link and signing in to your X-Center ID account. The link expires in 20 minutes.\n\n' + link,
   });
+  };
 }
 
 export function openEmailVerification(db, { send, origin }) {

@@ -1,3 +1,4 @@
+import {openMailSenderTrust} from './mail-sender-trust.mjs';
 import { openInboundVerification } from './inbound-verification.mjs';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,7 +9,7 @@ import { openMailStore } from './mail-store.mjs';
 const maxMessage = 2 * 1024 * 1024;
 function smtpError(responseCode, message) { return Object.assign(new Error(message),{ responseCode }); }
 
-export function createInboundServer({ store, tls = {}, name, verification }) {
+export function createInboundServer({ store, tls = {}, name, verification, senderTrust }) {
   const server = new SMTPServer({
     ...tls, name, banner:'X-Center ID inbound mail', disabledCommands:['AUTH', ...(tls.disabledCommands ?? [])],
     size:maxMessage, maxClients:40, socketTimeout:30_000,
@@ -34,7 +35,8 @@ export function createInboundServer({ store, tls = {}, name, verification }) {
           const incoming=verification?.enabled&&recipients.includes(verification.recipient);
           const ordinary=recipients.filter(address=>!incoming||address!==verification.recipient);
           if(incoming)await verification.receive(raw,{ip:session.remoteAddress,helo:session.hostNameAppearsAs,sender:session.envelope.mailFrom?.address??''});
-          const delivered = !ordinary.length||store.receive(ordinary,raw);
+          const trust=ordinary.length&&senderTrust?await senderTrust(raw,{ip:session.remoteAddress,helo:session.hostNameAppearsAs,sender:session.envelope.mailFrom?.address??''}).catch(()=>null):null;
+          const delivered = !ordinary.length||store.receive(ordinary,raw,trust);
           callback(delivered ? null : smtpError(452,'Mailbox temporarily unavailable'));
         } catch {
           callback(smtpError(451,'Mailbox temporarily unavailable'));
@@ -52,7 +54,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const verification=openInboundVerification(join(directory,'accounts.sqlite'),{enabled:!!configuration.inboundVerification});
   const { tlsKeyFile, tlsCertificateFile } = configuration;
   if (!tlsKeyFile || !tlsCertificateFile) throw new Error('Configure an SMTP STARTTLS certificate and key');
-  const server = createInboundServer({ store, verification, name:'mail.xcenter.it',
+  const server = createInboundServer({ store, verification, senderTrust:openMailSenderTrust(join(directory,'accounts.sqlite'),
+    {admins:(process.env.AUTHNJS_ADMIN_ACCOUNT_IDS??'').split(',').filter(Boolean)}), name:'mail.xcenter.it',
     tls:{ key:readFileSync(tlsKeyFile),cert:readFileSync(tlsCertificateFile) } });
   server.on('error',error => {
     const code=typeof error.code==='string'&&/^E[A-Z_]{2,24}$/.test(error.code)?error.code:'UNKNOWN';

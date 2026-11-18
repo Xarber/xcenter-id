@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { validateApplicationProfile } from './application-profile.mjs';
 import { openRegistry } from './registry.mjs';
 
-test('app profiles retain exact callbacks and verified status is limited to reviewable apps',async()=>{
+test('app profiles retain exact callbacks and admin verification is independent from callback activation',async()=>{
   const primary='https://app.example.test/auth/callback';
   const extra='https://app.example.test/mobile/callback';
   const profile=await validateApplicationProfile({name:'County Atlas',description:'A map',callbacks:[primary,extra,primary],repository:'https://github.com/example/atlas'});
@@ -13,7 +13,8 @@ test('app profiles retain exact callbacks and verified status is limited to revi
   const registry=openRegistry(':memory:');
   try{
     const item=registry.submit('developer',profile.name,primary,profile,false,profile);
-    assert.equal(registry.verifyApp(item.id,true),false);
+    assert.equal(registry.verifyApp(item.id,true),true);
+    assert.equal(registry.has('atlas'),false);
     assert.equal(registry.saveDeveloper('developer','Atlas Team',true),null);
     assert.equal(registry.approve(item.id,'atlas'),true);
     assert.deepEqual(registry.publicDetails('atlas').callbacks,[primary,extra]);

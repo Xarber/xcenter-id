@@ -23,3 +23,12 @@ Signed-in members can send feedback from Support. Locked accounts retain support
 SMTP intake accepts only exact addresses listed in the protected `supportAddresses` mail setting. Supported values are `support@id.xcenter.it` and `support@xcenter.it`. An SMTP message appears as unverified email in the shared admin inbox, even when its From header names an X-Center account. Admins see plaintext without remote images or active HTML. SMTP intake has a separate storage quota from authenticated feedback. Incoming support abuse, including external inbox saturation, is a residual risk to monitor.
 
 Enable `support@id.xcenter.it` only with working public MX resolution and independently verified mail delivery. The apex MX for `xcenter.it` serves iCloud. Preserve it and use an authorized mailbox-level forward to the support subdomain if the existing provider supports forwarding that address. External SMTP replies need working, authorized outbound delivery and a sender policy. The current implementation delivers replies to signed-in requesters' X-Center mailboxes.
+
+
+## Administrator roles and verification
+
+Operator IDs in the protected deployment environment remain root administrators. Recently confirmed administrators can grant or remove another account's persisted administrator role; they cannot remove an operator root or alter their own administrator role. Role checks are live on every privileged request and changes are audited. Ordinary navigation/foreground refresh reflects a role change without signing out.
+
+User verification is a separate account flag, not an email ownership proof and not administrator access. Administrators can set it from any active user's detail page. They can also verify pending or active app registrations independently of a developer-review request; that badge never activates a callback or permits an unknown/pending/restricted/revoked client to sign in. Domain activation remains mandatory.
+
+Action buttons now retain icons and visible action names, with a disclosure explaining lock, sign-out-all, deletion, premium aliases and distinct privileges. Both account and app storage support B, KB, MB, GB and TB. Account quotas may range from 1 MB to 100 TB and are logical caps, not disk reservations. Hosted app capacity cannot fall below its current usage.

@@ -35,3 +35,14 @@ Inbound address verification requires raw-message DKIM and DMARC checks and the 
 ### 18 November dependency audit limitation
 
 The dashboard npm audit reports high-severity picomatch ReDoS, GHSA-fc5q-39xc-vjpf / CVE-2026-112366 (upstream advisory updated 17 November). Its affected range includes the newest published 4.0.7; no patched release was available at inspection. Expo/Metro and their build-time glob callers propagate the finding. No forced React Native downgrade or audit bypass was applied. The production API dependency audit is clean. This is an unresolved stable-release quality gate, not evidence that arbitrary production requests can execute glob patterns. Recheck upstream remediation before stable publication.
+
+
+## Hosted data and privilege expansion (18 November)
+
+The new hosted-document interface is restricted to active verified registrations. User access uses provider-validated opaque OAuth tokens with app_data; service keys are separately hashed, app-specific and never become account-manager sessions. SQL statements are parameterized, identifiers are bounded, payloads/ACLs/quotas are enforced, and a low-disk guard protects the host. AES-GCM binds the app, owner, collection, record ID, revision, publication flag and reader ACL. Shared/public IDs use app-bound HMAC identifiers rather than exposing the stable account ID.
+
+Recipient sharing permits reads only. Cross-app access additionally needs publisher collection opt-in and an exact user grant; it excludes another user's records and incoming private messages. Unlink and publisher withdrawal revoke applicable grants. Account/app restriction checks are evaluated server-side, independently of navigation visibility. The threat model includes forged client IDs, stolen user tokens, backend-key leakage, row/ACL tampering, cross-user enumeration, stale writes, malicious JSON and quota exhaustion. Native callback ownership and physical key verification remain separate required evidence.
+
+Public profiles default to private and publish only chosen name/photo fields. Verified email and exact birthday remain excluded. Dynamic administrator delegation requires recent authentication, origin validation, protected-root checks and audit records. A hidden Developer Options gesture is not used as a security boundary.
+
+Mailbox and relay changes made before the explicit email pause are preserved in source, but relay activation and remaining email-specific verification are paused. Sender badges are based on server provenance or independently validated aligned DKIM/DMARC, never From text or supplied Authentication-Results. The receiver update is not considered deployed merely because its source exists.

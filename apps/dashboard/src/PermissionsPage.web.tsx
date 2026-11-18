@@ -1,3 +1,5 @@
+import {isSampleClient} from './application-identity';
+import HostedDataPermissions from './HostedDataPermissions.web';
 import { ArrowDownLeft, ArrowLeft, ArrowUpRight, ChevronRight, FolderKey, Grid2X2, LockKeyhole, MapPin, NotebookPen, ShieldCheck, X } from 'lucide-react';
 import { useEffect,useState } from 'react';
 import { api } from './web-account';
@@ -21,10 +23,10 @@ export default function PermissionsPage({client}: {client?:string}) {
   async function load(){
     const [registered,linked,assigned,example]=await Promise.all([api('apps'),api('connected-apps'),api('data-grants'),api('sample-grants')]);
     setState({
-      apps:registered.apps,
-      linked:linked.apps.map((app:{client:string;label:string})=>({client:app.client,name:app.label})),
+      apps:registered.apps.filter((app:App)=>!isSampleClient(app.client)),
+      linked:linked.apps.filter((app:{client:string})=>!isSampleClient(app.client)).map((app:{client:string;label:string})=>({client:app.client,name:app.label})),
       grants:assigned.grants.filter((grant:Grant)=>grant.dataset==='saved-place.v1'),
-      samples:example.permissions,
+      samples:[],
     });
   }
 
@@ -53,7 +55,7 @@ export default function PermissionsPage({client}: {client?:string}) {
   const linked=new Set(state.linked.map(app=>app.client));
   const byName=(a:App,b:App)=>Number(linked.has(b.client))-Number(linked.has(a.client))||a.name.localeCompare(b.name);
 
-  if(!client)return <section className="xc-permission-directory" aria-label="Apps">
+  if(!client)return <><HostedDataPermissions/><section className="xc-permission-directory" aria-label="Apps">
     {[...directory.values()].sort(byName).map(app=>{
       const Icon=appIcon(app.client);
       const sample=state.samples.some(item=>item.destination===app.client);
@@ -67,7 +69,7 @@ export default function PermissionsPage({client}: {client?:string}) {
       </a>;
     })}
     {directory.size===0&&<div className="xc-empty">No apps are available to manage.</div>}
-  </section>;
+  </section></>;
 
   const selected=directory.get(client);
   const back=<a className="xc-permission-back" href="/permissions"><ArrowLeft size={16} aria-hidden="true"/> All apps</a>;
@@ -106,7 +108,7 @@ export default function PermissionsPage({client}: {client?:string}) {
   }
 
   return <>
-    {back}
+    {back}<HostedDataPermissions client={client}/>
     <section className="xc-card xc-pad xc-permission-heading">
       <span className="xc-symbol xc-lavender"><Icon size={24} aria-hidden="true"/></span>
       <div><h2>{selected.name}</h2><p>{linked.has(client)?'Linked to your X-Center ID':'Manage what this app can share or access.'}</p></div>

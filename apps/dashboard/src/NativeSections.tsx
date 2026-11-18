@@ -1,8 +1,12 @@
+import AppIcon from './AppIcon';
+import PublicProfile from './PublicProfile';
+import {isSampleClient} from './application-identity';
+import HostedDataPermissions from './HostedDataPermissions';
 import IncomingEmail from './IncomingEmail';
 import NativeAdminUsers from './NativeAdminUsers';
 import NativeSupport from './NativeSupport';
 import type { SupportMessage, SupportRequest, UsernameRequest } from './support-model';
-import { accountMessage } from './account-locale';
+import { accountMessage,accountLocale } from './account-locale';
 import { placeLabel, type Friend, type SharedFile, type FriendRecordIndex, type ShareablePlace } from './friends-model';
 import { Ionicons } from '@expo/vector-icons';
 import { accountGreeting, accountShortcuts, accountStatus } from './account-overview';
@@ -19,7 +23,7 @@ import type { Account } from './web-account';
 import DeveloperPortal from './DeveloperPortal';
 
 type Device = {id:string;label:string;created:number;current:boolean};
-type ConnectedApp = {client:string;label:string};
+type ConnectedApp = {client:string;label:string;icon?:string};
 type Entry = {id:string;name:string;size:number};
 type Files = {folders:Entry[];files:Entry[];breadcrumbs:Entry[];categories:Record<string,number>;used:number;limit:number};
 type Mail = {id:string;received:number;size:number};
@@ -80,6 +84,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [inboxCursor,setInboxCursor]=useState<string|null>(null);
   const [selectingMail,setSelectingMail]=useState(false);
   const [selectedMail,setSelectedMail]=useState<string[]>([]);
+  const [detailsPanel,setDetailsPanel]=useState('');
+  const [editingProfile,setEditingProfile]=useState(!account.profile);
   const [aliases,setAliases]=useState<PrivateAddress[]>([]);
   const [openMail,setOpenMail]=useState<{id:string;message:MailMessage}|null>(null);
   const [confirmMailDeletion,setConfirmMailDeletion]=useState(false);
@@ -129,11 +135,11 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       setUsernameRequests((await api('admin/username-changes')).requests);
     }
     if(section==='devices')setDevices((await api('devices')).devices);
-    if(section==='apps')setApps((await api('connected-apps')).apps);
+    if(section==='apps')setApps((await api('connected-apps')).apps.filter((app:{client:string})=>!isSampleClient(app.client)));
     if(section==='permissions'){
       const [active,samples,registered]=await Promise.all([api('data-grants'),api('sample-grants'),api('apps')]);
       setGrants(active.grants.filter((entry:Grant & {dataset:string})=>entry.dataset==='saved-place.v1'));
-      setSampleGrants(samples.permissions);
+      setSampleGrants([]);
       setPublished(registered.apps);
     }
     if(section==='files'||section==='storage')setFiles(await api(filesPath));
@@ -168,7 +174,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
     };
     if(section==='admin'&&adminIcons[label])return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={work}
       style={[styles.fileAction,{backgroundColor:colors.soft,opacity:disabled?0.6:1}]}>
-      <Ionicons name={adminIcons[label]} size={22} color={colors.accent}/>
+      <Ionicons name={adminIcons[label]} size={22} color={colors.accent}/><Text style={{fontSize:12,color:colors.accent}}>{label}</Text>
     </Pressable>;
     return <Pressable accessibilityRole="button" disabled={disabled} onPress={work}
       style={({pressed})=>[styles.button,{backgroundColor:colors.soft,opacity:pressed||disabled?.6:1}]}>
@@ -209,12 +215,12 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           style={({pressed})=>[styles.overviewShortcut,{borderColor:colors.soft,opacity:pressed?0.7:1}]}>
           <Text style={[styles.label,{color:colors.ink}]}>{label}</Text>{paragraph(description)}
         </Pressable>)}
-        {row('account-status',accountMessage('accountStatus','Account status'),accountStatus(account.passkeys.length,account.emails.length))}
+        {row('account-status',accountMessage('accountStatus','Account status'),accountStatus(account.passkeys.length,account.emails.filter(email=>email.verified).length))}
       </>;
       break;
     case 'profile':
       content=<>{paragraph(account.profile?'@'+account.profile.username:'Complete your profile to finish creating your account.')}
-        {(picture||(picture===undefined&&account.profile?.hasPicture))&&<Image accessibilityLabel="Profile photo" style={styles.avatar}
+        {editingProfile?<>{(picture||(picture===undefined&&account.profile?.hasPicture))&&<Image accessibilityLabel="Profile photo" style={styles.avatar}
           source={picture?{uri:'data:image/jpeg;base64,'+picture}:{
             uri:accountHost+'/account/avatar',
             headers:{Authorization:'Bearer '+token,'X-AuthNJS-Native':'account-manager'},cache:'reload',
@@ -226,8 +232,10 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         {field('Given name',givenName,setGiven,{maxLength:64,autoComplete:'given-name'})}
         {field('Surname',surname,setSurname,{maxLength:64,autoComplete:'family-name'})}
         {<BirthdayPicker value={birthday} onChange={setBirthday} ink={colors.ink} accent={colors.accent}/>}
-        {button('Save profile',()=>run(()=>mutate('profile',{givenName,surname,birthday,picture}),'Profile saved.'))}
-        {account.profile&&<>
+        {button('Save profile',()=>run(async()=>{await mutate('profile',{givenName,surname,birthday,picture});setEditingProfile(false);},'Profile saved.'))}
+        {account.profile&&button('Cancel editing',()=>setEditingProfile(false))}</>:<>{paragraph(givenName+' '+surname)}{paragraph(birthday?new Date(birthday+'T12:00:00Z').toLocaleDateString(accountLocale(),{timeZone:'UTC'}):'Birthday not set')}{button('Edit profile',()=>setEditingProfile(true))}</>}
+        {button('Change username',()=>setDetailsPanel(detailsPanel==='username'?'':'username'))}
+        {account.profile&&detailsPanel==='username'&&<>
           <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Username change</Text>
           {button('Confirm identity',()=>run(async()=>{await nativeReauthenticate(token);},'Identity confirmed.'))}
           {paragraph('Confirm your request here. An administrator must approve the change, including your mailbox address.')}
@@ -240,10 +248,10 @@ export default function NativeSections({ section,token,account,colors,reload,exp
             {button('Request change',()=>run(()=>mutate('username-change',{action:'request',username:newUsername})),busy||!newUsername.trim())}
           </>}
         </>}
-        {account.emails.map(item=>row(item.address,item.address,'Verified email'))}
-        {field('New email address',email,setEmail,{keyboardType:'email-address',autoCapitalize:'none',autoComplete:'email'})}
-        {button('Send verification email',()=>run(()=>mutate('email',{email}),'Check your email to verify this address.'))}
-        <IncomingEmail token={token} updated={reload} colors={colors}/></>;
+        {account.emails.map(item=>row(item.address,item.address,item.verified?'Verified email':'Unverified · Cannot be used'))}
+        {button('Manage email addresses',()=>setDetailsPanel(detailsPanel==='email'?'':'email'))}
+        {detailsPanel==='email'&&<IncomingEmail token={token} updated={reload} colors={colors}/>}
+        <PublicProfile token={token} colors={colors}/></>;
       break;
     case 'devices':
       content=devices.map(device=>row(device.id,device.label,device.current?'This device':'Signed in '+date(device.created),
@@ -263,20 +271,22 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       break;
     case 'apps':
       content=<>{apps.length===0&&paragraph('No linked apps yet.')}
-        {apps.map(app=>row(app.client,app.label,'Linked to X-Center ID',button('Unlink app',()=>confirm('Unlink '+app.label+'?',
-          'This ends its active access and removes its sharing permissions.',
-          ()=>run(()=>mutate('connected-apps/unlink',{client:app.client}),'App unlinked.')))))}
+        {apps.map(app=><View key={app.client} style={{gap:10,borderBottomWidth:1,borderColor:colors.soft,paddingVertical:12}}><View style={{flexDirection:'row',gap:12,alignItems:'center'}}>
+          <AppIcon icon={app.icon} color={colors.accent}/>
+          <Text style={{color:colors.ink,fontWeight:'700'}}>{app.label}</Text></View>
+          {button('Manage permissions',()=>navigate('permissions'))}
+          {button('Unlink app',()=>confirm('Unlink '+app.label+'?','This ends its active access and removes its sharing permissions.',()=>run(()=>mutate('connected-apps/unlink',{client:app.client}),'App unlinked.')))}</View>)}
         {button('Manage developer apps',()=>navigate('developer'))}</>;
       break;
     case 'developer':
-      content=<DeveloperPortal back={()=>navigate('apps')} token={token}/>;
+      content=<DeveloperPortal back={()=>navigate('apps')} token={token} colors={colors}/>;
       break;
     case 'permissions': {
       const appName=(id:string)=>published.find(app=>app.client===id)?.name??id;
       const grantText=(expires:number)=>expires===Number.MAX_SAFE_INTEGER?'Until revoked':'Expires '+date(expires);
       const change=(route:string,grant:Pick<Grant,'source'|'destination'>,method:string,persistent=false)=>
         run(()=>mutate(route,{...grant,persistent,expires:Date.now()+86_400_000},method),method==='DELETE'?'Access revoked.':'Access allowed.');
-      content=<>{grants.map(grant=>row(grant.source+grant.destination,appName(grant.source)+' → '+appName(grant.destination),
+      content=<><HostedDataPermissions token={token} colors={colors}/>{grants.map(grant=>row(grant.source+grant.destination,appName(grant.source)+' → '+appName(grant.destination),
         'Saved places · '+grantText(grant.expires),button('Revoke access',()=>change('data-grants',grant,'DELETE'))))}
         {published.length>1&&<>{paragraph('Choose the app that owns the records')}{published.map(app=><View key={app.client}>
           {button((source===app.client?'✓ ':'')+app.name,()=>{setSource(app.client);setDestination('');})}</View>)}
@@ -417,6 +427,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         {openMail&&<MailScreen colors={colors} close={()=>{if(!busy){setOpenMail(null);setConfirmMailDeletion(false);}}}>
           {button(accountMessage('backToInbox','Back to inbox'),()=>{setOpenMail(null);setConfirmMailDeletion(false);})}
           {row(openMail.id,openMail.message.subject||accountMessage('noSubject','(No subject)'),openMail.message.from)}
+          {openMail.message.badges?.verified&&paragraph('✓ Verified sender')}{openMail.message.badges?.admin&&paragraph('◆ Administrator')}
           {paragraph(openMail.message.text)}
           {openMail.message.attachments.map(file=><View key={file.index}>
             {paragraph(file.name+' · '+formatBytes(file.size))}
@@ -460,8 +471,9 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           const page=await api('inbox?cursor='+encodeURIComponent(inboxCursor));
           setMessages(previous=>[...previous,...page.messages]);setInboxCursor(page.nextCursor);
         }))}
+        {account.externalMailLimits&&paragraph('External mail: '+account.externalMailLimits.usedToday+' / '+(account.externalMailLimits.daily??'unlimited')+' today · '+account.externalMailLimits.usedMonth+' / '+(account.externalMailLimits.monthly??'unlimited')+' this month')}
         {aliases.length>0&&<Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>{accountMessage('privateAddresses','Hide My Email addresses')}</Text>}
-        {aliases.map(item=>row(item.address,item.address,item.active?(item.premium?'Premium address':'Private address'):'Disabled',
+        {aliases.map(item=>row(item.address,item.address,item.active?'On · '+(item.premium?'Premium address':'Private address'):'Off · Not receiving mail',
           item.active&&button(accountMessage('disableAddress','Disable address'),()=>confirm('Disable this address?','Future messages to this address will be rejected.',
             ()=>run(async()=>{await api('mail/aliases/'+item.address,{},'DELETE');await load();},'Private address disabled.'),
           ))))}

@@ -1,3 +1,5 @@
+import {openMailLimits} from './mail-limits.mjs';
+import {openApplicationData} from './application-data.mjs';
 import { createAdminUsers } from './admin-users.mjs';
 import { createSupportRoutes } from './support-routes.mjs';
 import { createFriendRecordRoutes, openFriendRecords } from './friend-records.mjs';
@@ -28,13 +30,17 @@ if(mailConfig&&process.env.AUTHNJS_LOCAL_SMTP_HOST){
   mailConfig.localDelivery={host:process.env.AUTHNJS_LOCAL_SMTP_HOST};
 }
 const configuration = process.env.AUTHNJS_OIDC_CONFIG ? JSON.parse(readFileSync(process.env.AUTHNJS_OIDC_CONFIG, 'utf8')) : null;
+const mailLimits=openMailLimits(join(process.env.AUTHNJS_DATA_DIR,'accounts.sqlite'),mailConfig?.externalLimits);
 const accounts = createAccounts({
-  outboundMail:createOutboundMail(mailConfig),
+  outboundMail:createOutboundMail(mailConfig,{limits:mailLimits,
+    deliverLocal:(recipient,raw,from)=>mail?.receive([recipient],raw,accounts.badgeForAddress(from)),
+  }),
+  appBrand:client=>registry.brand(client),
   canReceiveMail:!!mailConfig?.inboundDomains?.length,
   externalMail:!!mailConfig?.publicDelivery,
   inboundVerification:!!mailConfig?.inboundVerification,
   profileKey: configuration ? Buffer.from(configuration.profileKey,'hex') : null,
-  sendVerification: createVerificationMailer(mailConfig?.submission),
+  sendVerification: createVerificationMailer(mailConfig?.submission,mailLimits),
   origin: process.env.AUTHNJS_ACCOUNT_ORIGIN,
   database: join(process.env.AUTHNJS_DATA_DIR, 'accounts.sqlite'),
 });
@@ -57,8 +63,13 @@ const mail = mailConfig?.inboundDomains?.length ? openMailStore({ configuration:
   accountsPath:join(state,'accounts.sqlite'), mailPath:join(state,'mail.sqlite') }) : null;
 const support = createSupportRoutes({accounts,mail});
 const adminUsers=createAdminUsers({accounts,registry,mail});
-const provider = configuration ? createIdentityProvider({
-  issuer: origin, database: join(state, 'oidc.sqlite'), accounts, configuration, mail:mailConfig?.publicDelivery?mail:null, registry,
+let provider;
+const applicationData=configuration?openApplicationData({path:join(state,'app-data.sqlite'),registry,accounts,
+  key:Buffer.from(hkdfSync('sha256',Buffer.from(configuration.profileKey,'hex'),'','xcenter.appdata.v1',32)),
+  authenticate:token=>provider?.dataAccess(token,{native:true}),
+}):null;
+provider = configuration ? createIdentityProvider({
+  issuer: origin, database: join(state, 'oidc.sqlite'), accounts, configuration, mail:mailConfig?.publicDelivery?mail:null, registry,applicationData,
 }) : null;
 const store = configuration ? openStore(join(state, 'sample-data.sqlite'), Buffer.from(configuration.sampleKey, 'hex')) : null;
 const friendRecordRoutes = friends && store && createFriendRecordRoutes({ accounts, records:openFriendRecords({
@@ -68,7 +79,7 @@ const friendRecordRoutes = friends && store && createFriendRecordRoutes({ accoun
 }) });
 const sampleOrigins=new Set(configuration?.clients.filter(client=>['notes-external','trips-external'].includes(client.client_id))
   .map(client=>new URL(client.redirect_uris[0]).origin)??[]);
-const samples = provider && store ? createSamples({ issuer: origin, configuration, provider, accounts, store }) : null;
+const samples = provider && store ? createSamples({ issuer: origin, configuration:process.env.AUTHNJS_PUBLIC_SAMPLE_APPS==='true'?configuration:{...configuration,clients:configuration.clients.filter(client=>!['notes-external','trips-external'].includes(client.client_id))}, provider, accounts, store }) : null;
 const samplePermissions = store ? createSamplePermissions({store,accounts,origin,clients:configuration?.clients.map(client=>client.client_id)}) : null;
 const developerClient = 'account-developer-session';
 const developer = createApiHandler({
@@ -136,6 +147,19 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   const path = target.pathname;
   const forwardedOrigin='https://'+req.headers['x-forwarded-host'];
   const externalSample=sampleOrigins.has(forwardedOrigin)&&req.headers['x-forwarded-proto']==='https';
+  if(applicationData&&(/^\/(?:public|v1)\/apps\//.test(path)||path.startsWith('/account/app-storage/')||path==='/account/app-data-permissions')){
+    void applicationData.handle(req,res,target);return;
+  }
+  const publicAvatar=/^\/public\/profiles\/([a-z][a-z0-9]{2,23})\/avatar$/.exec(path)?.[1];
+  if(publicAvatar){const picture=req.method==='GET'?accounts.publicProfileAvatar(publicAvatar):null;
+    res.writeHead(picture?200:404,{'Content-Type':picture?'image/jpeg':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}).end(picture?Buffer.from(picture,'base64'):'{}');return;}
+  const publicUser=/^\/public\/profiles\/([a-z][a-z0-9]{2,23})$/.exec(path)?.[1];
+  if(publicUser){
+    const person=req.method==='GET'?accounts.publicProfile(publicUser):null;
+    res.writeHead(person?200:404,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}).end(JSON.stringify(person??{error:'Profile unavailable.'}));return;
+  }
+  if(externalSample&&process.env.AUTHNJS_PUBLIC_SAMPLE_APPS!=='true'){res.writeHead(404,{'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'}).end('Development sample disabled.');return;}
+  if(path==='/samples'&&!accounts.current(req)){res.writeHead(302,{'Location':'/signin','Cache-Control':'no-store'}).end();return;}
   if (samples && (externalSample || path === '/samples' || path.startsWith('/samples/'))) {
     const sampleUrl=new URL(target.pathname+target.search,externalSample?forwardedOrigin:origin);
     void samples(req, res, sampleUrl).catch(() => {
@@ -199,7 +223,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
       if(typeof client!=='string'||client.length>100)return answer(422,{error:'Choose a connected app.'});
       const unlinked = await provider.unlink(identity.owner,client);
       if(!unlinked && !accounts.isDisconnected(identity.owner,client))return answer(404,{error:'App is already unlinked.'});
-      store?.revokeApp(identity.owner,client);
+      store?.revokeApp(identity.owner,client);applicationData?.revokeApp(identity.owner,client);
       return answer(200,{ok:true});
     })().catch(()=>answer(400,{error:'Could not unlink the app.'}));
     return;
@@ -278,8 +302,8 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void accounts.handle(req, res, path);
     return;
   }
-  const webPages = new Set(['/','/signin','/signup','/native-session','/dashboard','/profile','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/friends','/mail','/admin','/support','/reauth']);
-  const relative = webPages.has(path)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(path)||
+  const webPages = new Set(['/docs','/','/signin','/signup','/native-session','/dashboard','/profile','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/friends','/mail','/admin','/support','/reauth']);
+  const relative = webPages.has(path)||/^\/developer\/storage\/[0-9a-f-]{36}$/.test(path)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(path)||
     /^\/(?:mail\/[0-9a-f-]{36}|admin\/users\/[a-z][a-z0-9]{2,23})$/.test(path) ? 'index.html' : path.slice(1);
   const valid = /^(?:index\.html|revision\.txt|manifest\.webmanifest|service-worker\.js|authnjs-[\w-]+\.(?:svg|png)|(?:_expo|assets)\/[\w@./-]+)$/.test(relative);
   if (!valid || relative.split('/').some((part) => part === '.' || part === '..') ||

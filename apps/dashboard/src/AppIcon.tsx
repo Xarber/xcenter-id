@@ -1,0 +1,2 @@
+import {useState} from 'react';import {Image} from 'react-native';import {Ionicons} from '@expo/vector-icons';
+export default function AppIcon({icon,color}:{icon?:string|null;color:string}){const [failed,setFailed]=useState(false);return icon&&!failed?<Image onError={()=>setFailed(true)} source={{uri:'data:image/png;base64,'+icon}} style={{width:40,height:40,borderRadius:10}}/>:<Ionicons name="apps-outline" size={36} color={color}/>;}

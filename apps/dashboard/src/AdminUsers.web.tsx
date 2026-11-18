@@ -8,7 +8,7 @@ export function IconAction({label,children,onClick,disabled=false,type='button'}
   label:string;children:ReactNode;onClick?:()=>void;disabled?:boolean;type?:'button'|'submit';
 }){
   return <button type={type} className="xc-button xc-secondary xc-icon-action" aria-label={label} title={label}
-    disabled={disabled} onClick={onClick}>{children}</button>;
+    disabled={disabled} onClick={onClick}>{children}<span>{label}</span></button>;
 }
 
 export function AdminAvatar({username,hasPicture}:{username:string;hasPicture?:boolean}){
@@ -17,8 +17,8 @@ export function AdminAvatar({username,hasPicture}:{username:string;hasPicture?:b
     <img width={44} height={44} alt="" src={'/account/admin/accounts/'+username+'/avatar'} onError={()=>setFailed(true)}/>:
     <UserRound size={24} aria-hidden="true"/>}</span>;
 }
-type Details=ManagedAccount&{name:string;created:number;devices:number;passkeys:number;apps:{client:string;label:string}[]};
-type Registered={id:string;name:string;status:string;restricted:boolean;callback:string};
+type Details=ManagedAccount&{externalMailLimits?:{daily:number|null;monthly:number|null;usedToday:number;usedMonth:number};admin:boolean;rootAdmin:boolean;verified:boolean;name:string;created:number;devices:number;passkeys:number;apps:{client:string;label:string}[]};
+type Registered={verified:boolean;id:string;name:string;status:string;restricted:boolean;callback:string};
 export function AdminAccounts(){
   const [users,setUsers]=useState<ManagedAccount[]>([]);
   const [details,setDetails]=useState<{account:Details;registered:Registered[]}|null>(null);
@@ -29,6 +29,8 @@ export function AdminAccounts(){
   const [action,setAction]=useState('');
   const [text,setText]=useState('');
   const [capacity,setCapacity]=useState('');
+  const [mailDaily,setMailDaily]=useState('');const [mailMonthly,setMailMonthly]=useState('');
+  const [unit,setUnit]=useState(2);
   const name=/^\/admin\/users\/([a-z][a-z0-9]{2,23})$/.exec(window.location.pathname)?.[1];
   async function load(){
     if(name){setDetails(await api('admin/users/'+name));}
@@ -50,20 +52,25 @@ export function AdminAccounts(){
         <p>{user.passkeys} passkeys · {user.devices} sessions · {formatBytes(user.capacity)} capacity</p>
         <p>Created {new Date(user.created).toLocaleDateString()}</p>
         <div className="xc-actions">
+          <IconAction label={user.verified?'Remove user verification':'Verify user'} disabled={busy} onClick={()=>run(()=>mutate('admin/users/'+user.username,{action:'verify-user',enabled:!user.verified}))}><ShieldCheck size={20}/></IconAction>
+          {!user.rootAdmin&&<IconAction label={user.admin?'Remove admin access':'Grant admin access'} disabled={busy} onClick={()=>setAction('admin')}><ShieldCheck size={20}/></IconAction>}
           {!user.protected&&<><IconAction label={user.locked?'Unlock account':'Lock account'} disabled={busy} onClick={()=>run(()=>mutate('admin/account-status',
             {username:user.username,action:user.locked?'unlock':'lock'}))}>{user.locked?<Unlock size={20}/>:<LockKeyhole size={20}/>}</IconAction>
             <IconAction label="Sign out all devices" disabled={busy} onClick={()=>setAction('logout')}><LogOut size={20}/></IconAction>
             <IconAction label="Delete account" disabled={busy} onClick={()=>{setAction('delete');setConfirmation('');}}><Trash2 size={20}/></IconAction></>}
+          <IconAction label="External email limits" disabled={busy} onClick={()=>{setMailDaily(user.externalMailLimits?.daily==null?'':String(user.externalMailLimits.daily));setMailMonthly(user.externalMailLimits?.monthly==null?'':String(user.externalMailLimits.monthly));setAction('mail-limits');}}><Mail size={20}/></IconAction>
           <IconAction label="Send warning" disabled={busy} onClick={()=>{setAction('warn');setText('');}}><Mail size={20}/></IconAction>
-          <IconAction label="Change storage" disabled={busy} onClick={()=>{setAction('capacity');setCapacity(String(user.capacity/1024**2));}}><Settings2 size={20}/></IconAction>
+          <IconAction label="Change storage" disabled={busy} onClick={()=>{setAction('capacity');setCapacity(String(user.capacity/1024**2));setUnit(2);}}><Settings2 size={20}/></IconAction>
           <IconAction label={user.premium?'Disable premium aliases':'Enable premium aliases'} disabled={busy} onClick={()=>run(()=>mutate('admin/premium',{username:user.username,enabled:!user.premium}))}><ShieldCheck size={20}/></IconAction>
         </div>
-        {['delete','logout','capacity','warn'].includes(action)&&<form className="xc-stack" onSubmit={event=>{
+        {['delete','logout','capacity','warn','admin','mail-limits'].includes(action)&&<form className="xc-stack" onSubmit={event=>{
           event.preventDefault();
           run(async()=>{
             if(action==='delete'){await api('admin/account-status',{username:user.username,action:'delete',confirmation});window.location.assign('/admin');}
             else if(action==='logout')await mutate('admin/account-status',{username:user.username,action:'revoke-sessions'});
-            else if(action==='capacity')await mutate('admin/storage',{username:user.username,capacity:Number(capacity)*1024**2});
+            else if(action==='mail-limits')await mutate('admin/users/'+user.username,{action:'external-mail-limits',daily:mailDaily.trim()?Number(mailDaily):null,monthly:mailMonthly.trim()?Number(mailMonthly):null});
+            else if(action==='admin')await mutate('admin/users/'+user.username,{action:'set-admin',enabled:!user.admin});
+            else if(action==='capacity')await mutate('admin/storage',{username:user.username,capacity:Number(capacity)*1024**unit});
             else await mutate('admin/users/'+user.username,{action:'warn',text});
           });
         }}>
@@ -71,10 +78,13 @@ export function AdminAccounts(){
             <label>Confirm username<input required value={confirmation} onChange={event=>setConfirmation(event.target.value)}/></label></>}
           {action==='logout'&&<p>Sign out every device for @{user.username}?</p>}
           {action==='warn'&&<label>Warning<textarea required maxLength={3000} value={text} onChange={event=>setText(event.target.value)}/></label>}
-          {action==='capacity'&&<label>Capacity in MB<input type="number" min={1} max={1024} required value={capacity} onChange={event=>setCapacity(event.target.value)}/></label>}
+          {action==='mail-limits'&&<><p>External email only. Leave a limit blank to remove it for this user. The service free-plan ceiling remains.</p><label>Emails per day<input type="number" min={0} max={1000000} value={mailDaily} onChange={e=>setMailDaily(e.target.value)}/></label><label>Emails per month<input type="number" min={0} max={1000000} value={mailMonthly} onChange={e=>setMailMonthly(e.target.value)}/></label></>}
+          {action==='admin'&&<p>{user.admin?'Remove administrator access from':'Grant administrator access to'} @{user.username}? Administrators can manage accounts, apps and support.</p>}
+          {action==='capacity'&&<div className="xc-actions"><label>Storage capacity<input type="number" min={0.001} max={100*1024**4} step="any" required value={capacity} onChange={event=>setCapacity(event.target.value)}/></label><label>Unit<select aria-label="Unit" value={unit} onChange={event=>setUnit(Number(event.target.value))}>{['B','KB','MB','GB','TB'].map((u,i)=><option key={u} value={i}>{u}</option>)}</select></label></div>}
           <div className="xc-actions"><IconAction type="submit" label="Confirm action" disabled={busy||action==='delete'&&confirmation!==user.username}><Check size={20}/></IconAction>
             <IconAction label="Cancel action" disabled={busy} onClick={()=>setAction('')}><X size={20}/></IconAction></div>
         </form>}
+        <details><summary>What these actions do</summary><p>Lock restricts account use while keeping sessions. Sign out all devices revokes sessions. Delete removes the identity and credentials after confirmation. Premium aliases enables named Hide My Email addresses. Verification and administrator access are separate privileges.</p></details>
         <h3>Connected apps</h3>
         {!user.apps.length&&<p>No connected apps.</p>}
         {user.apps.map(app=><p key={app.client}>{app.label}</p>)}
@@ -82,6 +92,7 @@ export function AdminAccounts(){
         {!details.registered.length&&<p>No registered apps.</p>}
         {details.registered.map(app=><div key={app.id} className="xc-list-row">
           <div><strong>{app.name}</strong><p>{app.status}{app.restricted?' · Restricted':''}</p><p>{new URL(app.callback).hostname}</p></div>
+          <div className="xc-actions"><IconAction label={app.verified?'Remove app verification':'Verify app'} disabled={busy} onClick={()=>run(()=>mutate('admin/apps',{type:'app',id:app.id,verified:!app.verified}))}><ShieldCheck size={20}/></IconAction><a href={'/developer/storage/'+app.id}>Manage app storage</a></div>
           {app.status==='active'&&<div className="xc-actions">
             <IconAction label={app.restricted?'Restore app':'Restrict app'} disabled={busy} onClick={()=>run(()=>mutate('admin/users/'+user.username,
               {action:app.restricted?'restore':'restrict',app:app.id}))}>{app.restricted?<Unlock size={20}/>:<LockKeyhole size={20}/>}</IconAction>

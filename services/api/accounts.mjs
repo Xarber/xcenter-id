@@ -55,7 +55,7 @@ async function body(req, limit=65536) {
   throw new AccountError(400, 'Invalid request.');
 }
 
-export function createAccounts({ database, origin, sendVerification, profileKey, outboundMail, canReceiveMail = false, externalMail = false, inboundVerification=false }) {
+export function createAccounts({ database, origin, sendVerification, profileKey, outboundMail, canReceiveMail = false, externalMail = false, inboundVerification=false,appBrand=()=>null }) {
   const url = new URL(origin);
   if (url.origin !== origin || url.protocol !== 'https:') throw new Error('Set the exact HTTPS account origin');
   const rpID = url.hostname;
@@ -99,6 +99,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       address TEXT PRIMARY KEY, verified INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS account_restrictions(owner TEXT PRIMARY KEY REFERENCES accounts(id),
       status TEXT NOT NULL CHECK(status IN ('locked','deleted'))) STRICT;
+    CREATE TABLE IF NOT EXISTS account_flags(owner TEXT PRIMARY KEY REFERENCES accounts(id),
+      verified INTEGER NOT NULL DEFAULT 0, admin INTEGER NOT NULL DEFAULT 0, public_fields TEXT NOT NULL DEFAULT '[]') STRICT;
     CREATE TABLE IF NOT EXISTS retired_usernames(username TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS account_admin_events(id TEXT PRIMARY KEY, actor TEXT NOT NULL,
       target TEXT NOT NULL, action TEXT NOT NULL, created INTEGER NOT NULL) STRICT;
@@ -115,7 +117,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   const emailSignIn=openEmailSignIn(db,{send:sendVerification,secret:profileKey??randomBytes(32)});
   const verification = openEmailVerification(db,{ send:sendVerification, origin });
   const adminIds = new Set((process.env.AUTHNJS_ADMIN_ACCOUNT_IDS ?? '').split(',').map(item=>item.trim()).filter(Boolean));
-  const isAdmin = (active) => !!(active && adminIds.has(active.owner));
+  const isAdmin = (active) => !!(active && (adminIds.has(active.owner)||db.prepare('SELECT admin FROM account_flags WHERE owner=?').get(active.owner)?.admin===1));
   const q = (sql) => db.prepare(sql);
   const restriction=q('SELECT status FROM account_restrictions WHERE owner=?');
   const available=owner=>!!account.get(owner)&&!restriction.get(owner);
@@ -257,6 +259,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
 
   async function route(req, res, pathname) {
     const active = session(req);
+    if(req.method==='GET'&&pathname==='/account/session/access'){requireCondition(active,401,'Sign in first.');return {confirmed:confirmed(active)};}
     if(req.method==='GET'&&pathname==='/account/admin/access'){
       requireCondition(isAdmin(active),403,'Administrator access is required.');
       return {authorized:confirmed(active)};
@@ -277,23 +280,29 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         profile: saved ? { ...details, hasPicture:!!picture } : null,
         pendingUsername: saved ? undefined : reservedUsername.get(active.owner,now())?.username,
         passkeys: keys.all(active.owner).map(({ id, label, created }) => ({ id, label, created })),
-        emails: emails.all(active.owner),
+        emails: [...emails.all(active.owner),...inbound.addresses(active.owner)],
         canSendMail: !!outboundMail,
         canReceiveMail,
         externalMail,
         externalMailSubmission:!!outboundMail?.external,
         mailbox:saved ? saved.username+'@mail.xcenter.it' : null,
         admin:isAdmin(active),
+        externalMailLimits:outboundMail?.limits?.view(active.owner)??null,
+        verified:q('SELECT verified FROM account_flags WHERE owner=?').get(active.owner)?.verified===1,
       } };
     }
 
     if(req.method==='GET'&&pathname==='/account/email/incoming'){
       requireCondition(active,401,'Sign in first.');
-      return {enabled:inbound.enabled,pending:inbound.pending(active.owner)};
+      return {enabled:inbound.enabled,pending:inbound.pending(active.owner),result:inbound.result(active.owner)};
+    }
+    if(req.method==='GET'&&pathname==='/account/profile/visibility'){
+      requireCondition(active,401,'Sign in first.');
+      return {fields:JSON.parse(q('SELECT public_fields FROM account_flags WHERE owner=?').get(active.owner)?.public_fields??'[]')};
     }
     if (req.method === 'GET' && pathname === '/account/connected-apps') {
       requireCondition(active,401,'Sign in first.');
-      return {apps:q('SELECT client,label,updated FROM connected_apps WHERE owner=? ORDER BY updated DESC LIMIT 100').all(active.owner)};
+      return {apps:q('SELECT client,label,updated FROM connected_apps WHERE owner=? ORDER BY updated DESC LIMIT 100').all(active.owner).map(app=>({...app,icon:appBrand(app.client)?.icon??null}))};
     }
     if (req.method === 'GET' && pathname === '/account/devices') {
       requireCondition(active,401,'Sign in first.');
@@ -310,7 +319,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       return {accounts:q(`SELECT p.username,p.owner,coalesce(e.premium_mail,0) AS premium FROM identity_profiles p
         LEFT JOIN account_entitlements e ON e.owner=p.owner ORDER BY p.username LIMIT 500`).all()
         .map(row=>({username:row.username,premium:!!row.premium,capacity:storageCapacity(row.owner),
-          locked:restriction.get(row.owner)?.status==='locked',protected:adminIds.has(row.owner),hasPicture:!!profile(row.owner)?.picture}))};
+          locked:restriction.get(row.owner)?.status==='locked',protected:isAdmin({owner:row.owner}),hasPicture:!!profile(row.owner)?.picture}))};
     }
     if(req.method==='GET'&&pathname==='/account/username-change'){
       requireCondition(active,401,'Sign in first.');
@@ -387,7 +396,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       requireCondition(req.headers['x-authnjs-request']==='account-consent',403,'Invalid request.');
       const {username,action,confirmation}=input;
       const target=typeof username==='string'&&usernameOwner.get(username)?.owner;
-      requireCondition(target&&!adminIds.has(target),422,'Choose an account that is not an administrator.');
+      requireCondition(target&&!isAdmin({owner:target}),422,'Choose an account that is not an administrator.');
       requireCondition(['lock','unlock','delete','revoke-sessions'].includes(action),422,'Choose a valid account action.');
       requireCondition(action!=='delete'||confirmation===username,422,'Enter the username to confirm deletion.');
       db.exec('BEGIN IMMEDIATE');
@@ -404,7 +413,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         if(action==='delete'){
           q('INSERT INTO retired_usernames VALUES(?)').run(username);
           for(const table of ['passkeys','connected_apps','app_disconnects','account_entitlements','account_storage_caps',
-            'identity_profiles','signup_usernames','verified_emails','email_verifications','username_change_requests',
+            'account_email_addresses','inbound_verification_results','account_flags','identity_profiles','signup_usernames','verified_emails','email_verifications','username_change_requests',
             'inbound_verifications','inbound_verification_rates']){
             q('DELETE FROM '+table+' WHERE owner=?').run(target);
           }
@@ -479,11 +488,19 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       requireCondition(changed.changes===1,404,'Session unavailable.');
       return {ok:true};
     }
+    if(pathname==='/account/profile/visibility'){
+      requireCondition(active&&allowsMutation(req),403,'Sign in first.');
+      const fields=input.fields;
+      requireCondition(Array.isArray(fields)&&fields.length<=4&&fields.every(f=>['username','givenName','surname','picture'].includes(f)),422,'Choose public profile fields.');
+      q('INSERT OR IGNORE INTO account_flags(owner) VALUES(?)').run(active.owner);
+      q('UPDATE account_flags SET public_fields=? WHERE owner=?').run(JSON.stringify([...new Set(fields)]),active.owner);
+      return {ok:true};
+    }
     if(pathname==='/account/admin/storage'){
       requireCondition(isAdmin(active),403,'Administrator access is required.');
       recent(active);
       const selected=usernameOwner.get(typeof input.username==='string'?input.username:'');
-      requireCondition(selected&&Number.isSafeInteger(input.capacity)&&input.capacity>=1024**2&&input.capacity<=1024**3,422,'Enter an account and a capacity from 1 MB to 1 GB.');
+      requireCondition(selected&&Number.isSafeInteger(input.capacity)&&input.capacity>=1024**2&&input.capacity<=1024**4*100,422,'Enter an account and a capacity from 1 MB to 100 TB.');
       q(`INSERT INTO account_storage_caps VALUES(?,?) ON CONFLICT(owner) DO UPDATE SET bytes=excluded.bytes`).run(selected.owner,input.capacity);
       return {ok:true,capacity:input.capacity};
     }
@@ -503,6 +520,24 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       const result = await outboundMail.send(active.owner,identity.username,input);
       if (!result.ok) throw new AccountError(result.status,result.error);
       return result;
+    }
+    if(pathname==='/account/email/remove'){
+      requireCondition(active,401,'Sign in first.');recent(active);
+      requireCondition(typeof input.email==='string'&&input.email.length<=254,422,'Choose an email address.');
+      const address=input.email.trim().toLowerCase();
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        q('DELETE FROM verified_emails WHERE owner=? AND address=?').run(active.owner,address);
+        q('DELETE FROM account_email_addresses WHERE owner=? AND address=?').run(active.owner,address);
+        q('DELETE FROM inbound_verifications WHERE owner=? AND address=?').run(active.owner,address);
+        q('DELETE FROM email_verifications WHERE owner=? AND address=?').run(active.owner,address);
+        q('DELETE FROM email_signins WHERE owner=?').run(active.owner);
+        db.exec('COMMIT');return {ok:true};
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    }
+    if(pathname==='/account/email/add'){
+      requireCondition(active,401,'Sign in first.');
+      return inbound.add(active.owner,input.email);
     }
     if(pathname==='/account/email/incoming'){
       requireCondition(active,401,'Sign in first.');
@@ -698,19 +733,53 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       if(!owner)return null;
       const person=profile(owner);
       return {owner,username,hasPicture:!!person?.picture,name:person?.givenName+' '+person?.surname,
-        locked:restriction.get(owner)?.status==='locked',protected:adminIds.has(owner),capacity:storageCapacity(owner),
+        locked:restriction.get(owner)?.status==='locked',protected:isAdmin({owner}),admin:isAdmin({owner}),rootAdmin:adminIds.has(owner),verified:q('SELECT verified FROM account_flags WHERE owner=?').get(owner)?.verified===1,capacity:storageCapacity(owner),
+        externalMailLimits:outboundMail?.limits?.view(owner)??null,
         premium:q('SELECT premium_mail FROM account_entitlements WHERE owner=?').get(owner)?.premium_mail===1,
         created:q('SELECT created FROM accounts WHERE id=?').get(owner).created,
         devices:q('SELECT count(*) AS count FROM account_sessions WHERE owner=? AND expires>?').get(owner,now()).count,
         passkeys:keys.all(owner).length,
         apps:q('SELECT client,label,updated FROM connected_apps WHERE owner=? ORDER BY updated DESC').all(owner)};
     },
+    setMailLimits(owner,limits){
+      requireCondition(outboundMail?.limits,503,'Mail limits unavailable.');
+      outboundMail.limits.set(owner,limits);
+    },
+    setAccountFlag(req,owner,flag,value) {
+      const active=session(req);
+      requireCondition(isAdmin(active)&&confirmed(active)&&allowsMutation(req),403,'Confirm administrator access.');
+      requireCondition(['verified','admin'].includes(flag)&&typeof value==='boolean'&&available(owner),422,'Choose an active account and setting.');
+      requireCondition(flag!=='admin'||!adminIds.has(owner),403,'The operator administrator cannot be removed here.');
+      requireCondition(flag!=='admin'||owner!==active.owner,403,'Ask another administrator to change your own administrator access.');
+      q('INSERT OR IGNORE INTO account_flags(owner) VALUES(?)').run(owner);
+      q('UPDATE account_flags SET '+flag+'=? WHERE owner=?').run(Number(value),owner);
+    },
+    recentlyConfirmed:req=>confirmed(session(req)),
+    badgeForAddress(address) {
+      const user=q('SELECT owner FROM verified_emails WHERE address=?').get(address?.toLowerCase());
+      const local=/^([a-z][a-z0-9]{2,23})@mail\.xcenter\.it$/.exec(address?.toLowerCase()??'');
+      const owner=user?.owner??(local?usernameOwner.get(local[1])?.owner:null);
+      if(!owner||!available(owner))return {verified:false,admin:false};
+      return {verified:q('SELECT verified FROM account_flags WHERE owner=?').get(owner)?.verified===1,admin:isAdmin({owner})};
+    },
+    publicProfile(username) {
+      const owner=usernameOwner.get(username)?.owner;
+      if(!owner||!available(owner))return null;
+      const fields=JSON.parse(q('SELECT public_fields FROM account_flags WHERE owner=?').get(owner)?.public_fields??'[]');
+      if(!fields.length)return null;
+      const person=profile(owner), result={username};
+      for(const field of fields)if(['givenName','surname'].includes(field))result[field]=person[field];
+      if(fields.includes('picture'))result.avatar=person.picture?'/public/profiles/'+username+'/avatar':null;
+      return result;
+    },
+    publicProfileAvatar(username){const owner=usernameOwner.get(username)?.owner;if(!owner||!available(owner))return null;const fields=JSON.parse(q('SELECT public_fields FROM account_flags WHERE owner=?').get(owner)?.public_fields??'[]');return fields.includes('picture')?profile(owner)?.picture??null:null;},
     auditAdmin(req,target,action) {
       const active=session(req);
       requireCondition(isAdmin(active)&&confirmed(active),403,'Confirm administrator access.');
       q('INSERT INTO account_admin_events VALUES(?,?,?,?,?)').run(randomUUID(),active.owner,target,action,now());
     },
     available,
+    ownerForUsername:username=>usernameOwner.get(username)?.owner,
     username: (owner) => q('SELECT username FROM identity_profiles WHERE owner=?').get(owner)?.username,
     allowsMutation,
     storageCapacity,

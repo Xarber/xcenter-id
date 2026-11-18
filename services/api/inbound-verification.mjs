@@ -11,6 +11,8 @@ const addressPattern=/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]*[a-z0
 export function openInboundVerification(database,{enabled=false,resolver}={}){
   const db=new DatabaseSync(database);
   db.exec(`PRAGMA busy_timeout=3000;
+    CREATE TABLE IF NOT EXISTS account_email_addresses(owner TEXT NOT NULL,address TEXT NOT NULL,created INTEGER NOT NULL,PRIMARY KEY(owner,address)) STRICT;
+    CREATE TABLE IF NOT EXISTS inbound_verification_results(owner TEXT PRIMARY KEY,address TEXT NOT NULL,status TEXT NOT NULL,created INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS inbound_verifications(owner TEXT PRIMARY KEY, address TEXT NOT NULL,
       hash TEXT UNIQUE NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS inbound_verification_rates(owner TEXT PRIMARY KEY, created INTEGER NOT NULL) STRICT;`);
@@ -18,7 +20,17 @@ export function openInboundVerification(database,{enabled=false,resolver}={}){
   const owner=db.prepare('SELECT * FROM inbound_verifications WHERE owner=?');
   const dns=new Resolver({timeout:1800,tries:1});
   const resolve=resolver??((name,type)=>dns.resolve(name,type));
+  function add(account,candidate){
+    const address=typeof candidate==='string'?candidate.trim().toLowerCase():'';
+    if(address.length>254||!addressPattern.test(address)||address.includes('..'))return {status:422,error:'Enter a valid email address.'};
+    if(db.prepare('SELECT count(*) AS n FROM account_email_addresses WHERE owner=?').get(account).n>=10&&!db.prepare('SELECT 1 FROM account_email_addresses WHERE owner=? AND address=?').get(account,address))return {status:409,error:'Verify or remove an address before adding more.'};
+    db.prepare('INSERT OR IGNORE INTO account_email_addresses VALUES(?,?,?)').run(account,address,Date.now());
+    return {ok:true,address};
+  }
   return {
+    add,
+    addresses:account=>db.prepare('SELECT address,0 AS verified FROM account_email_addresses WHERE owner=? AND address NOT IN(SELECT address FROM verified_emails WHERE owner=?)').all(account,account),
+    result:account=>db.prepare('SELECT address,status,created FROM inbound_verification_results WHERE owner=?').get(account)??null,
     enabled,
     recipient,
     start(account,candidate){
@@ -26,14 +38,15 @@ export function openInboundVerification(database,{enabled=false,resolver}={}){
       const address=typeof candidate==='string'?candidate.trim().toLowerCase():'';
       if(address.length>254||!addressPattern.test(address)||address.includes('..'))return {status:422,error:'Enter a valid email address.'};
       const existing=db.prepare('SELECT owner FROM verified_emails WHERE address=?').get(address);
-      if(existing)return {status:409,error:'This address is already registered.'};
+      if(existing?.owner===account)return {status:409,error:'This address is already verified on your account.'};
+      const added=add(account,address);if(!added.ok)return added;
       const now=Date.now();
       db.prepare('DELETE FROM inbound_verifications WHERE expires<=?').run(now);
       db.prepare('DELETE FROM inbound_verification_rates WHERE created<?').run(now-3600_000);
       if(now-(db.prepare('SELECT created FROM inbound_verification_rates WHERE owner=?').get(account)?.created??0)<60_000||
-        db.prepare('SELECT 1 FROM inbound_verifications WHERE address=? AND created>?').get(address,now-60_000)||
         db.prepare('SELECT count(*) AS n FROM inbound_verification_rates WHERE created>?').get(now-60_000).n>=30)
         return {status:429,error:'Please wait before requesting another verification.'};
+      db.prepare('DELETE FROM inbound_verification_results WHERE owner=?').run(account);
       const code=randomBytes(32).toString('base64url');
       const expires=now+20*60_000;
       db.prepare(`INSERT INTO inbound_verifications VALUES (?,?,?,?,?) ON CONFLICT(owner) DO UPDATE SET
@@ -77,10 +90,19 @@ export function openInboundVerification(database,{enabled=false,resolver}={}){
         const valid=current&&current.owner===record.owner&&current.address===from&&
           !db.prepare('SELECT 1 FROM account_restrictions WHERE owner=?').get(record.owner);
         if(!valid){db.exec('ROLLBACK');return false;}
-        db.prepare('INSERT OR IGNORE INTO verified_emails VALUES(?,?,?)').run(record.owner,from,Date.now());
-        const saved=db.prepare('SELECT owner FROM verified_emails WHERE address=?').get(from);
-        if(saved?.owner!==record.owner){db.exec('ROLLBACK');return false;}
-        db.prepare('DELETE FROM inbound_verifications WHERE owner=?').run(record.owner);
+        const previous=db.prepare('SELECT owner FROM verified_emails WHERE address=?').get(from)?.owner;
+        const competing=db.prepare('SELECT owner FROM inbound_verifications WHERE address=?').all(from);
+        db.prepare('DELETE FROM verified_emails WHERE address=?').run(from);
+        db.prepare('INSERT INTO verified_emails VALUES(?,?,?)').run(record.owner,from,Date.now());
+        // Invalidate sign-in/verification capabilities issued before this address transfer.
+        if(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='email_signins'").get()){
+          for(const account of new Set([previous,record.owner].filter(Boolean)))db.prepare('DELETE FROM email_signins WHERE owner=?').run(account);
+        }
+        if(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='email_verifications'").get())db.prepare('DELETE FROM email_verifications WHERE address=?').run(from);
+        for(const request of competing)db.prepare('INSERT INTO inbound_verification_results VALUES(?,?,?,?) ON CONFLICT(owner) DO UPDATE SET address=excluded.address,status=excluded.status,created=excluded.created')
+          .run(request.owner,from,request.owner===record.owner?'verified':'superseded',Date.now());
+        db.prepare('DELETE FROM account_email_addresses WHERE owner=? AND address=?').run(record.owner,from);
+        db.prepare('DELETE FROM inbound_verifications WHERE address=?').run(from);
         db.exec('COMMIT');
         return true;
       }catch(error){db.exec('ROLLBACK');throw error;}

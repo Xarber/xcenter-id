@@ -1,3 +1,5 @@
+import AppIcon from './AppIcon.web';
+import {isSampleClient} from './application-identity';
 import Reauthenticate from './Reauthenticate.web';
 import { AdminAccounts, IconAction } from './AdminUsers.web';
 import { AdminUsernameChanges } from './UsernameChange.web';
@@ -6,7 +8,7 @@ import { accountMessage } from './account-locale';
 import type { Friend } from './friends-model';
 import type { MailMessage, PrivateAddress } from './mail-message';
 import { formatBytes, storageCategories } from './storage-summary';
-import { BadgeCheck, Download, File, FileUp, Folder, FolderPlus, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
+import { Grid2X2, BadgeCheck, Download, File, FileUp, Folder, FolderPlus, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { api, fileAsBase64, type Account } from './web-account';
 
@@ -200,7 +202,7 @@ export function MailPage({ account }:{account:Account}) {
     </div>}
     {open ? <article className="xc-stack">
       <h3>{open.message.subject || accountMessage('noSubject','(No subject)')}</h3>
-      <p>{open.message.from}</p>
+      <p>{open.message.from}</p>{open.message.badges?.verified&&<span className="xc-pill"><BadgeCheck size={16}/> Verified sender</span>}{open.message.badges?.admin&&<span className="xc-pill"><ShieldCheck size={16}/> Administrator</span>}
       <p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{open.message.text}</p>
       {open.message.attachments.map(file=><a key={file.index} href={'/account/inbox/'+open.id+'/attachments/'+file.index}>{file.name} · {size(file.size)}</a>)}
       <a href={'/account/inbox/'+open.id}>{accountMessage('downloadEmail','Download original email')}</a>
@@ -236,10 +238,11 @@ export function MailPage({ account }:{account:Account}) {
         setMessages(previous=>[...(previous??[]),...result.messages]);setInboxCursor(result.nextCursor);
       }).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
     }}>{accountMessage('olderEmail','Load older email')}</button>}
+    {!messageId&&account.externalMailLimits&&<p>External email allowance: {account.externalMailLimits.usedToday} / {account.externalMailLimits.daily??'unlimited'} today · {account.externalMailLimits.usedMonth} / {account.externalMailLimits.monthly??'unlimited'} this month.</p>}
     {!messageId&&aliases.length>0&&<details>
-      <summary>{accountMessage('privateAddresses','Hide My Email addresses')}</summary>
+      <summary>{accountMessage('privateAddresses','Hide My Email addresses')} · {aliases.filter(item=>item.active).length} On / {aliases.filter(item=>!item.active).length} Off</summary><p>On forwards incoming mail to your inbox. Off stops new deliveries to that address.</p>
       {aliases.map(item=><div className="xc-list-row" key={item.address}>
-        <div><strong>{item.address}</strong><p>{item.active?(item.premium?'Premium address':'Private address'):'Disabled'}</p></div>
+        <div><strong>{item.address}</strong><p>{item.active?'On · '+(item.premium?'Premium address':'Private address'):'Off · Not receiving mail'}</p></div>
         {item.active&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
           if(confirmAlias!==item.address){setConfirmAlias(item.address);return;}
           setBusy(true);
@@ -323,7 +326,7 @@ function AdminContent() {
       {apps.map(app=><div className="xc-list-row xc-permission-row" key={app.id}>
         <div><strong>{app.name}</strong><p>{app.developerName??'Developer'} · {app.status}</p>
           <p>{new URL(app.callback).hostname}</p>{app.repository&&<a href={app.repository} rel="noreferrer" target="_blank">Review repository</a>}</div>
-        {app.status==='active'&&<IconAction label={app.verified?'Remove verification':'Verify app'} disabled={busy}
+        {app.status!=='revoked'&&<IconAction label={app.verified?'Remove verification':'Verify app'} disabled={busy}
           onClick={()=>save('admin/apps',{type:'app',id:app.id,verified:!app.verified},'App verification updated.')}><BadgeCheck size={20}/></IconAction>}
       </div>)}
     </section>
@@ -332,15 +335,15 @@ function AdminContent() {
 }
 
 export function ConnectedApps() {
-  const [apps,setApps]=useState<{client:string;label:string;updated:number}[]|null>(null);
+  const [apps,setApps]=useState<{client:string;label:string;updated:number;icon?:string}[]|null>(null);
   const [status,setStatus]=useState('');
   const [confirm,setConfirm]=useState('');
   const [busy,setBusy]=useState(false);
-  useEffect(()=>{void api('connected-apps').then(data=>setApps(data.apps)).catch(error=>setStatus(notice(error)));},[]);
+  useEffect(()=>{void api('connected-apps').then(data=>setApps(data.apps.filter((app:{client:string})=>!isSampleClient(app.client)))).catch(error=>setStatus(notice(error)));},[]);
   return <div className="xc-pad">
     <h2>Authorized apps</h2>
     {apps?.length===0 && <div className="xc-empty">No apps have been authorized yet.</div>}
-    {apps?.map(item=><div className="xc-list-row" key={item.client}><div><strong>{item.label}</strong><p>Last authorized {date(item.updated)}</p></div>
+    {apps?.map(item=><div className="xc-list-row" key={item.client}><div className="xc-row-head"><AppIcon icon={item.icon}/><div><strong>{item.label}</strong><p>Last authorized {date(item.updated)}</p></div></div>
       <div className="xc-actions"><a href={'/permissions/'+encodeURIComponent(item.client)}>Manage data access</a>
         {confirm===item.client?<><span>This ends the app’s access.</span><button className="xc-button xc-secondary" disabled={busy} onClick={()=>{
           setBusy(true);

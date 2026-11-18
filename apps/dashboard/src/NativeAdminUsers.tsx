@@ -1,3 +1,4 @@
+import ApplicationStorage from './ApplicationStorage';
 import {useEffect,useState} from 'react';
 import {Alert,Image,Pressable,Text,TextInput,View} from 'react-native';
 import {Ionicons} from '@expo/vector-icons';
@@ -5,8 +6,8 @@ import {accountHost,nativeRequest} from './native-account';
 import type {ManagedAccount} from './support-model';
 
 type Colors={ink:string;muted:string;accent:string;soft:string};
-type User=ManagedAccount&{name:string;devices:number;passkeys:number;apps:{client:string;label:string}[]};
-type App={id:string;name:string;status:string;restricted:boolean};
+type User=ManagedAccount&{admin:boolean;rootAdmin:boolean;verified:boolean;externalMailLimits?:{daily:number|null;monthly:number|null};name:string;devices:number;passkeys:number;apps:{client:string;label:string}[]};
+type App={verified:boolean;id:string;name:string;status:string;restricted:boolean};
 function Avatar({user,token,colors}:{user:ManagedAccount;token:string;colors:Colors}){
   const [failed,setFailed]=useState(false);
   return user.hasPicture&&!failed?<Image accessibilityLabel="Profile photo" onError={()=>setFailed(true)} source={{
@@ -16,6 +17,10 @@ function Avatar({user,token,colors}:{user:ManagedAccount;token:string;colors:Col
 }
 export default function NativeAdminUsers({token,colors}:{token:string;colors:Colors}){
   const [users,setUsers]=useState<ManagedAccount[]>([]);
+  const [capacity,setCapacity]=useState<string|null>(null);
+  const [unit,setUnit]=useState(2);
+  const [storageApp,setStorageApp]=useState('');
+  const [mailLimits,setMailLimits]=useState<{daily:string;monthly:string}|null>(null);
   const [filter,setFilter]=useState('');
   const [selected,setSelected]=useState('');
   const [details,setDetails]=useState<{account:User;registered:App[]}|null>(null);
@@ -36,9 +41,10 @@ export default function NativeAdminUsers({token,colors}:{token:string;colors:Col
   }
   function icon(label:string,name:React.ComponentProps<typeof Ionicons>['name'],press:()=>void,disabled=busy){
     return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={press}
-      style={({pressed})=>({width:44,height:44,alignItems:'center',justifyContent:'center',borderRadius:10,
-        backgroundColor:colors.soft,opacity:pressed||disabled?0.6:1})}><Ionicons name={name} size={22} color={colors.accent}/></Pressable>;
+      style={({pressed})=>({minWidth:90,minHeight:62,padding:8,alignItems:'center',justifyContent:'center',borderRadius:10,
+        backgroundColor:colors.soft,opacity:pressed||disabled?0.6:1})}><Ionicons name={name} size={22} color={colors.accent}/><Text style={{color:colors.accent,fontSize:12,textAlign:'center'}}>{label}</Text></Pressable>;
   }
+  if(storageApp)return <ApplicationStorage id={storageApp} token={token} colors={colors} admin back={()=>setStorageApp('')}/>;
   const user=details?.account;
   return <View style={{gap:14}}>
     {selected?<>{icon('All accounts','arrow-back',()=>{setSelected('');setDetails(null);setDeleting(false);setWarning(null);})}
@@ -46,6 +52,11 @@ export default function NativeAdminUsers({token,colors}:{token:string;colors:Col
         <Avatar user={user} token={token} colors={colors}/><Text accessibilityRole="header" style={{color:colors.ink,fontSize:22,fontWeight:'700'}}>{user.name} · @{user.username}</Text>
         <Text style={{color:colors.muted}}>{user.locked?'Locked':'Active'} · {user.passkeys} passkeys · {user.devices} sessions</Text>
         <View style={{flexDirection:'row',gap:10,flexWrap:'wrap'}}>
+          {icon(user.verified?'Remove user verification':'Verify user','checkmark-circle-outline',()=>run(async()=>{await api('admin/users/'+user.username,{action:'verify-user',enabled:!user.verified});}))}
+          {!user.rootAdmin&&icon(user.admin?'Remove admin access':'Grant admin access','shield-checkmark-outline',()=>Alert.alert('Change administrator access?','Administrators can manage accounts, apps and support.',[{text:'Cancel',style:'cancel'},{text:'Confirm',onPress:()=>run(async()=>{await api('admin/users/'+user.username,{action:'set-admin',enabled:!user.admin});})}]))}
+          {icon('Change storage','server-outline',()=>{setCapacity(String(user.capacity/1024**2));setUnit(2);})}
+          {icon('External email limits','mail-open-outline',()=>setMailLimits({daily:user.externalMailLimits?.daily==null?'':String(user.externalMailLimits.daily),monthly:user.externalMailLimits?.monthly==null?'':String(user.externalMailLimits.monthly)}))}
+          {icon(user.premium?'Disable premium aliases':'Enable premium aliases','eye-off-outline',()=>run(async()=>{await api('admin/premium',{username:user.username,enabled:!user.premium});}))}
           {!user.protected&&<>{icon(user.locked?'Unlock account':'Lock account',user.locked?'lock-open-outline':'lock-closed-outline',()=>run(async()=>{
             await api('admin/account-status',{username:user.username,action:user.locked?'unlock':'lock'});
           }))}
@@ -55,6 +66,13 @@ export default function NativeAdminUsers({token,colors}:{token:string;colors:Col
           {icon('Delete account','trash-outline',()=>{setDeleting(true);setTyped('');})}</>}
           {icon('Send warning','mail-outline',()=>setWarning(''))}
         </View>
+        {capacity!==null&&<View style={{gap:10}}><TextInput accessibilityLabel="Storage capacity" keyboardType="decimal-pad" value={capacity} onChangeText={setCapacity} style={{color:colors.ink,minHeight:48}}/>
+          <View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>{['B','KB','MB','GB','TB'].map((label,i)=>icon((unit===i?'Selected ':'')+label,'server-outline',()=>setUnit(i)))}</View>
+          {icon('Save capacity','checkmark',()=>run(async()=>{await api('admin/storage',{username:user.username,capacity:Number(capacity)*1024**unit});setCapacity(null);} ))}{icon('Cancel capacity','close',()=>setCapacity(null))}</View>}
+        {mailLimits&&<View style={{gap:10}}><Text style={{color:colors.muted}}>Blank means no individual limit. The shared free-plan limit remains.</Text>
+          <TextInput accessibilityLabel="External emails per day" keyboardType="number-pad" value={mailLimits.daily} onChangeText={daily=>setMailLimits({...mailLimits,daily})} style={{color:colors.ink,minHeight:48}}/>
+          <TextInput accessibilityLabel="External emails per month" keyboardType="number-pad" value={mailLimits.monthly} onChangeText={monthly=>setMailLimits({...mailLimits,monthly})} style={{color:colors.ink,minHeight:48}}/>
+          {icon('Save mail limits','checkmark',()=>run(async()=>{await api('admin/users/'+user.username,{action:'external-mail-limits',daily:mailLimits.daily.trim()?Number(mailLimits.daily):null,monthly:mailLimits.monthly.trim()?Number(mailLimits.monthly):null});setMailLimits(null);} ))}{icon('Cancel mail limits','close',()=>setMailLimits(null))}</View>}
         {deleting&&<><Text style={{color:colors.ink}}>Type @{user.username} without @ to delete this identity and credentials.</Text>
           <TextInput accessibilityLabel="Confirm username" autoCapitalize="none" value={typed} onChangeText={setTyped} style={{minHeight:48,color:colors.ink}}/>
           <View style={{flexDirection:'row',gap:10}}>
@@ -75,6 +93,7 @@ export default function NativeAdminUsers({token,colors}:{token:string;colors:Col
         <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Registered apps</Text>
         {details.registered.map(app=><View key={app.id} style={{gap:8}}>
           <Text style={{color:colors.ink}}>{app.name} · {app.status}{app.restricted?' · Restricted':''}</Text>
+          <View style={{flexDirection:'row',gap:8,flexWrap:'wrap'}}>{icon(app.verified?'Remove app verification':'Verify app','checkmark-circle-outline',()=>run(async()=>{await api('admin/apps',{type:'app',id:app.id,verified:!app.verified});}))}{icon('App storage','server-outline',()=>setStorageApp(app.id))}</View>
           {app.status==='active'&&<View style={{flexDirection:'row',gap:10}}>
             {icon(app.restricted?'Restore app':'Restrict app',app.restricted?'lock-open-outline':'lock-closed-outline',()=>run(async()=>{
               await api('admin/users/'+user.username,{action:app.restricted?'restore':'restrict',app:app.id});

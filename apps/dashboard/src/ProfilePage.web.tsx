@@ -1,6 +1,7 @@
+import PublicProfile from './PublicProfile.web';
 import IncomingEmail from './IncomingEmail.web';
 import { UsernameChange } from './UsernameChange.web';
-import { accountMessage } from './account-locale';
+import { accountMessage,accountLocale } from './account-locale';
 import { Camera, Check, CircleHelp, Mail, Save, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import DeveloperIdentityPanel from './DeveloperIdentity.web';
@@ -9,6 +10,7 @@ import { api, profilePhoto, type Account } from './web-account';
 export default function ProfilePage({ account, update, complete }: {
   account:Account; update:()=>Promise<void>; complete?:()=>void;
 }) {
+  const [editing,setEditing]=useState(!account.profile);
   const [picture,setPicture] = useState<string|null|undefined>();
   const [revision,setRevision] = useState(0);
   const [notice,setNotice] = useState('');
@@ -24,7 +26,12 @@ export default function ProfilePage({ account, update, complete }: {
     catch(error) { setNotice(error instanceof Error ? error.message : 'Could not complete this action.'); }
     finally { setBusy(false); }
   }
+  if(profile&&!editing)return <><section className="xc-card xc-pad xc-stack"><h2>Personal information</h2><p>{profile.givenName} {profile.surname}</p><p>@{profile.username}</p><p>{profile.birthday?new Date(profile.birthday+'T12:00:00Z').toLocaleDateString(accountLocale(),{timeZone:'UTC'}):'Birthday not set'}</p><button className="xc-button xc-secondary" onClick={()=>setEditing(true)}>Edit profile</button></section><PublicProfile/>
+    <details className="xc-card xc-pad"><summary>Change username</summary><UsernameChange/></details>
+    <details className="xc-card xc-pad"><summary>Email addresses</summary>{account.emails.map(email=><p key={email.address}>{email.address} · {email.verified?'Verified':'Unverified'}</p>)}<IncomingEmail updated={update}/></details>
+    <details className="xc-card xc-pad"><summary>Developer profile</summary><DeveloperIdentityPanel/></details></>;
   return <>
+    {profile&&<button className="xc-button xc-secondary xc-self-start" onClick={()=>setEditing(false)}>Cancel editing</button>}
     <section className="xc-card xc-profile-card">
       <div className="xc-profile-head">
         <div className="xc-avatar xc-avatar-large">{image ? <img src={image} alt="Your profile"/> : <UserRound size={36}/>}</div>
@@ -46,7 +53,7 @@ export default function ProfilePage({ account, update, complete }: {
           catch(error){setSaveState('ready');throw error;}
           setSaveState('saved');
           await update();setPicture(undefined);setRevision(prev=>prev+1);
-          complete?.();
+          setEditing(false);complete?.();
         });
       }}>
         <h2>Personal information</h2>

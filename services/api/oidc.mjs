@@ -58,7 +58,7 @@ async function form(req) {
   return new URLSearchParams(value);
 }
 
-export function createIdentityProvider({ issuer, database, accounts, configuration, mail, registry }) {
+export function createIdentityProvider({ issuer, database, accounts, configuration, mail, registry, applicationData }) {
   const storageKey = Buffer.from(configuration.storageKey, 'hex');
   const subjectKey = Buffer.from(configuration.subjectKey, 'hex');
   if (subjectKey.length !== 32) throw new Error('Invalid stable subject key');
@@ -178,6 +178,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       if (selected === 'masked' && !alias) return html(res,'<h1>Hide My Email is unavailable</h1>',409);
       const email = premium || alias || selected;
       if (email && !alias && !premium && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
+      if(applicationData&&String(details.params.scope??'').split(' ').includes('app_data'))applicationData.authorize(active.owner,client.client_id,input.getAll('data-permission'));
       const choices = new Set(input.getAll('permission'));
       const optional = ['profile','age_range','app_data'].filter(scope=>requested.has(scope));
       const allowed = ['openid',...optional.filter(scope=>choices.has(scope)),...(email?['email']:[])];
@@ -224,6 +225,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         ${!incremental?`<li>${glyph('id')}<span>App-specific account ID · required</span></li>`:''}
         ${permissions.filter(item=>missing.has(item[2])).map(([symbol,label,scope])=>`<li><label class="permission-toggle">${glyph(symbol)}<span>${label}</span><input type="checkbox" role="switch" name="permission" value="${scope}"></label></li>`).join('')}
       </ul>
+      ${String(details.params.scope??'').split(' ').includes('app_data')?(applicationData?.requested(client.client_id)??[]).map(item=>`<label class="permission-toggle"><span>${escape(item.label)}<small> · Read ${escape(item.collection)} from ${escape(registry.publicDetails(item.source)?.name??item.source)}</small></span><input type="checkbox" role="switch" name="data-permission" value="${escape(item.source+'/'+item.collection)}"></label>`).join(''):''}
       <p>You can review app access in X-Center ID.</p>
       ${missing.has('email') ? `<fieldset><legend>Email address to share</legend>
       <label><input type="radio" name="email" value="" checked>Do not share an email address</label>
@@ -257,9 +259,9 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       await Promise.all(grants.flatMap(({id})=>[new Adapter('Grant').destroy(id),...['AccessToken','AuthorizationCode','RefreshToken'].map(model=>new Adapter(model).revokeByGrantId(id))]));
       return true;
     },
-    async dataAccess(value) {
+    async dataAccess(value,{native=false}={}) {
       const access = await provider.AccessToken.find(value);
-      if (!access?.accountId || !registry?.has(access.clientId) || (await provider.Client.find(access.clientId))?.tokenEndpointAuthMethod!=='client_secret_basic' || !accounts.grantAllowed(access.accountId,access.clientId,access.grantId) || !access.scope?.split(' ').includes('app_data')) return null;
+      if (!access?.accountId || !registry?.has(access.clientId) || (!native&&(await provider.Client.find(access.clientId))?.tokenEndpointAuthMethod!=='client_secret_basic') || !accounts.grantAllowed(access.accountId,access.clientId,access.grantId) || !access.scope?.split(' ').includes('app_data')) return null;
       return { owner:access.accountId, client:access.clientId, confidential:true };
     },
     async delegatedAccess(token, expectedClient) {

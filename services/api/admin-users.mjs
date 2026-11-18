@@ -23,7 +23,11 @@ export function createAdminUsers({accounts,registry,mail}){
     let input;
     try{input=JSON.parse(Buffer.concat(chunks).toString());}catch{return send(422,{error:'Invalid request.'});}
     if(!permits())return send(403,{error:'Confirm administrator access.'});
-    if(input.action==='warn'){
+    if(input.action==='external-mail-limits'){
+      try{accounts.setMailLimits(owner,{daily:input.daily,monthly:input.monthly});}catch{return send(422,{error:'Set whole-number mail limits, or leave them unlimited.'});}
+    }else if(['verify-user','set-admin'].includes(input.action)){
+      try{accounts.setAccountFlag(req,owner,input.action==='verify-user'?'verified':'admin',input.enabled);}catch(error){return send(error.status??400,{error:error.status?error.message:'Could not update account status.'});}
+    }else if(input.action==='warn'){
       const text=typeof input.text==='string'&&input.text.trim();
       if(!text||text.length>3000)return send(422,{error:'Enter a warning of up to 3000 characters.'});
       if(!mail)return send(503,{error:'Mailbox delivery unavailable.'});

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "repository": "Xarber/xcenter-id",
+  "visibility": "private",
+  "previewWorkflow": "native-preview.yml",
+  "sourceBranch": "testing",
+  "artifactCommitRequired": true,
+  "formats": [
+    "ios-unsigned-ipa",
+    "ios-simulator-app-zip",
+    "android-universal-apk",
+    "android-aab"
+  ],
+  "publication": "not-authorized-by-this-batch",
+  "distributionMetadata": "generate only from verified release artifacts; exclude metadata release from application update detection",
+  "nativeIdentifiers": {
+    "ios": "com.xarber.authnjs.dashboard",
+    "android": "com.xarber.authnjs.dashboard"
+  }
+}

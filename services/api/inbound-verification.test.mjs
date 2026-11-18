@@ -57,7 +57,16 @@ test('inbound verification authenticates signed sender, code, full body and sing
     assert.equal(db.prepare('SELECT owner FROM verified_emails WHERE address=?').get('sender@example.net').owner,'owner');
     assert.equal(await inbox.receive(good,peer),false);
     assert.equal(inbox.pending('owner'),null);
-    assert.equal(inbox.start('other','sender@example.net').status,409);
+    // A fresh signed proof may transfer a verified address; requesting a code alone cannot.
+    const transfer=inbox.start('other','sender@example.net');assert.equal(transfer.ok,true);
+    assert.equal(db.prepare('SELECT owner FROM verified_emails WHERE address=?').get('sender@example.net').owner,'owner');
+    const transferUrl=new URL(transfer.mailto);
+    const {message:transferMessage}=await transport.sendMail({from:'sender@example.net',to:transferUrl.pathname,
+      subject:transferUrl.searchParams.get('subject'),text:transferUrl.searchParams.get('body')});
+    assert.equal(await inbox.receive(await signed(transferMessage),peer),true);
+    assert.equal(db.prepare('SELECT owner FROM verified_emails WHERE address=?').get('sender@example.net').owner,'other');
+    assert.equal(await inbox.receive(good,peer),false);
+    db.prepare('UPDATE inbound_verification_rates SET created=0 WHERE owner=?').run('other');
     const second=new URL(inbox.start('other','other@example.net').mailto);
     const {message:raw}=await transport.sendMail({from:'other@example.net',to:second.pathname,
       subject:second.searchParams.get('subject'),text:second.searchParams.get('body')});

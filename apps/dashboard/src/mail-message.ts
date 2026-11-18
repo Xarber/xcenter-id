@@ -1,4 +1,4 @@
-export type MailMessage = {
+export type MailMessage = {badges?:{verified:boolean;admin:boolean};
   from: string;
   subject: string;
   text: string;

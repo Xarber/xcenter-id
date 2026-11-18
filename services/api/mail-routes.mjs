@@ -95,6 +95,7 @@ export async function handleInbox(req, res, path, accounts, mail) {
         });
         if (match[2] === 'view') {
           json(res,{
+            badges:mail.trust?.(session.owner,match[1])??{verified:false,admin:false},
             from:(parsed.from?.text ?? '').slice(0,500),
             subject:(parsed.subject ?? '').slice(0,500),
             text:(parsed.text ?? (parsed.html ? convert(parsed.html, {

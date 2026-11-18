@@ -185,3 +185,31 @@ test('admin moderation and support enforce role, ownership and one mailbox reply
   assert.equal((await post('signup/options','member',{username:'fixture'})).status,409);
   assert.equal(db.prepare('SELECT count(*) AS total FROM account_admin_events').get().total,5);
 });
+
+test('live admin delegation, user verification and public profile flags enforce server trust boundaries',async()=>{
+ const {createAdminUsers}=await import('./admin-users.mjs');
+ const dir=mkdtempSync(join(tmpdir(),'xcenter-roles-')),database=join(dir,'accounts.sqlite'),origin='https://id.example.test';
+ const previous=process.env.AUTHNJS_ADMIN_ACCOUNT_IDS;process.env.AUTHNJS_ADMIN_ACCOUNT_IDS='root';
+ const accounts=createAccounts({database,origin});if(previous===undefined)delete process.env.AUTHNJS_ADMIN_ACCOUNT_IDS;else process.env.AUTHNJS_ADMIN_ACCOUNT_IDS=previous;
+ const db=new DatabaseSync(database);db.exec("INSERT INTO accounts VALUES('root','Root',0),('member','Member',0);INSERT INTO identity_profiles VALUES('root','rootuser','Root','User','adult'),('member','fixture','Test','Member','adult')");
+ for(const token of ['root','member'])db.prepare('INSERT INTO account_sessions VALUES(?,?,?,?)').run(createHash('sha256').update(token).digest('hex'),token,Date.now(),Date.now()+600000);
+ const users=createAdminUsers({accounts,registry:{managed:()=>[]},mail:null});
+ const server=createServer((req,res)=>{const username=/^\/account\/admin\/users\/([a-z]+)$/.exec(req.url)?.[1];void(username?users(req,res,username):accounts.handle(req,res,req.url));}).listen(0,'127.0.0.1');await once(server,'listening');
+ const post=(path,body,token='root')=>fetch('http://127.0.0.1:'+server.address().port+'/account/'+path,{method:'POST',headers:{origin,'content-type':'application/json','x-authnjs-request':'account-consent',cookie:'__Host-authnjs='+token},body:JSON.stringify(body)});
+ try{
+  assert.equal((await post('admin/users/fixture',{action:'set-admin',enabled:true},'member')).status,403);
+  assert.equal((await post('admin/users/fixture',{action:'set-admin',enabled:true})).status,200);
+  assert.equal(accounts.adminDetails('fixture').admin,true);
+  assert.equal((await post('admin/users/rootuser',{action:'set-admin',enabled:false})).status,403);
+  assert.equal((await post('admin/users/fixture',{action:'verify-user',enabled:true})).status,200);
+  assert.equal(accounts.badgeForAddress('fixture@mail.xcenter.it').verified,true);
+  assert.equal((await post('admin/storage',{username:'fixture',capacity:2*1024**4})).status,200);
+  assert.equal(accounts.storageCapacity('member'),2*1024**4);
+  assert.equal(accounts.publicProfile('fixture'),null);
+  assert.equal((await post('profile/visibility',{fields:['givenName']},'member')).status,200);
+  assert.deepEqual(accounts.publicProfile('fixture'),{username:'fixture',givenName:'Test'});
+  assert.equal((await post('profile/visibility',{fields:['birthday']},'member')).status,422);
+  assert.equal((await post('admin/users/fixture',{action:'set-admin',enabled:false})).status,200);
+  assert.equal(accounts.adminDetails('fixture').admin,false);
+ }finally{await new Promise(resolve=>server.close(resolve));db.close();rmSync(dir,{recursive:true,force:true});}
+});

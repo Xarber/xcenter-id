@@ -1,3 +1,8 @@
+import ApplicationStorage from './ApplicationStorage.web';
+import DeveloperDocumentation from './DeveloperDocumentation.web';
+import PreferenceControls from './PreferenceControls.web';
+import {parsePreferences,preferencesKey,type Preferences} from './preferences';
+import {setAccountLanguage} from './account-locale';
 import Reauthenticate from './Reauthenticate.web';
 import { SupportPage } from './Support.web';
 import FriendsPage from './FriendsPage.web';
@@ -5,7 +10,7 @@ import { accountMessage } from './account-locale';
 import { accountGreeting, accountShortcuts, accountStatus } from './account-overview';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import {
-  ArrowDownRight, ArrowLeft, ArrowRight, ChevronRight, CircleHelp, Code2, Fingerprint, FolderOpen,
+  Menu, ArrowDownRight, ArrowLeft, ArrowRight, ChevronRight, CircleHelp, Code2, Fingerprint, FolderOpen,
   Grid2X2, HardDrive, IdCard, KeyRound, Laptop, LockKeyhole, LogOut, Mail, MapPin, Settings, ShieldCheck, UserRound, X,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -71,7 +76,7 @@ function SignIn({signup,busy,notice,authenticate,beginUsername,submitCode,create
   const [motionPaused,setMotionPaused]=useState(false);
   const suffix=continuation?'?continue='+encodeURIComponent(continuation):'';
   return <div className="xc-auth">
-    <header><Logo href="/"/><a href="/samples" className="xc-text-link">Explore apps <ArrowDownRight size={15}/></a></header>
+    <header><Logo href="/"/><a href="/docs" className="xc-text-link">Developer documentation <ArrowDownRight size={15}/></a></header>
     <div className="xc-auth-grid">
       <div className="xc-auth-visual">
         <div className="xc-constellation" aria-hidden="true" data-paused={motionPaused}>
@@ -176,6 +181,28 @@ function Security({account,update,addPasskey}:{account:Account;update:()=>Promis
 }
 
 export default function WebApp(){
+  const [sidebar,setSidebar]=useState(false);
+  const sidebarRef=useRef<HTMLElement>(null);
+  useEffect(()=>{
+    if(!sidebar)return;
+    const previous=document.activeElement as HTMLElement|null;
+    const links=()=>Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>('a,button')??[]);
+    links()[0]?.focus();
+    const key=(event:KeyboardEvent)=>{
+      if(event.key==='Escape'){event.preventDefault();setSidebar(false);}
+      if(event.key==='Tab'){
+        const choices=links(),first=choices[0],last=choices.at(-1);
+        if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}
+        else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
+      }
+    };
+    document.addEventListener('keydown',key);
+    return ()=>{document.removeEventListener('keydown',key);previous?.focus();};
+  },[sidebar]);
+  const [preferences,setPreferences]=useState(()=>{try{return parsePreferences(localStorage.getItem(preferencesKey));}catch{return parsePreferences(null);}});
+  setAccountLanguage(preferences.language);
+  useEffect(()=>{document.documentElement.dataset.theme=preferences.theme;document.documentElement.lang=preferences.language==='system'?navigator.language:preferences.language;},[preferences]);
+  function changePreferences(value:Preferences){setAccountLanguage(value.language);setPreferences(value);try{localStorage.setItem(preferencesKey,JSON.stringify(value));}catch{}}
   const [account,setAccount]=useState<Account|null|undefined>(undefined);
   const [locked,setLocked]=useState(false);
   const [notice,setNotice]=useState('');
@@ -238,6 +265,7 @@ export default function WebApp(){
     void api('login/code',{ticket,code}).then(()=>window.location.replace(authDestination))
       .catch(error=>setNotice(error.message)).finally(()=>setBusy(false));
   }
+  if(path==='docs')return <DeveloperDocumentation/>;
   if(account===undefined)return <div className="xc-loading"><Logo href="/"/><p role="status">Opening your account…</p></div>;
   if(locked)return <main className="xc-setup"><Logo href="/"/><h1>Account locked</h1><SupportPage/>
     {nativeReturn.test(path==='native-session'?window.location.pathname+window.location.search:continuation??'')&&
@@ -283,7 +311,8 @@ export default function WebApp(){
   const name=profile.givenName+' '+profile.surname;
   const picture=profile.hasPicture?'/account/avatar':null;
   const permissionClient=permissionRoute?.[1];
-  const page=path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':mailRoute?'mail':path.startsWith('admin/users/')?'admin':path;
+  const storageRoute=/^developer\/storage\/([0-9a-f-]{36})$/.exec(path)?.[1];
+  const page=storageRoute?'developer':path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':mailRoute?'mail':path.startsWith('admin/users/')?'admin':path;
   const [title,summary]=titles[page]??[accountMessage('overviewTitle','Account overview'),accountMessage('overviewSummary','Manage the details, devices, and apps connected to your X-Center ID.')];
   const shortcutIcons = {
     profile:[UserRound,'xc-sky'],security:[Fingerprint,'xc-mint'],
@@ -291,7 +320,8 @@ export default function WebApp(){
   } as const;
 
   let content:ReactNode;
-  if(page==='profile')content=<>
+  if(storageRoute)content=<ApplicationStorage id={storageRoute} admin={account.admin}/>;
+  else if(page==='profile')content=<>
     {emailToken&&<section className="xc-card xc-pad"><h2>Verify your email</h2>
       <button type="button" className="xc-button xc-primary" onClick={()=>void api('email/confirm',{token:emailToken}).then(()=>{
         window.history.replaceState(null,'','/profile');setNotice('Email verified.');return load();
@@ -308,11 +338,10 @@ export default function WebApp(){
   else if(page==='admin')content=account.admin?<AdminPage/>:<section className="xc-card xc-pad">Administrator access is required.</section>;
   else if(page==='developer')content=<section className="xc-card xc-pad"><DeveloperPortal back={()=>window.location.assign('/apps')}/></section>;
   else if(page==='apps')content=<><section className="xc-card"><ConnectedApps/></section><section className="xc-card xc-pad">
-    <div className="xc-row-head"><span className="xc-symbol xc-lavender"><Grid2X2 size={22}/></span><div><h2>Apps using X-Center ID</h2><p>Try the sample apps or register your own integration.</p></div></div>
-    <div className="xc-list-row"><div><strong>Places Notebook and Trip Planner</strong><p>Two sample clients for testing sign-in and sharing.</p></div><a className="xc-button xc-secondary" href="/samples">Open sample apps <ArrowRight size={15}/></a></div>
+    <div className="xc-row-head"><span className="xc-symbol xc-lavender"><Grid2X2 size={22}/></span><div><h2>Apps using X-Center ID</h2><p>Manage your connected apps or register your own integration.</p></div></div>
     <div className="xc-list-row"><div><strong>Developer portal</strong><p>Register or review your applications.</p></div><a className="xc-button xc-secondary" href="/developer"><Code2 size={16}/> Developer apps</a></div>
   </section></>;
-  else if(page==='settings')content=<section className="xc-card xc-pad">
+  else if(page==='settings')content=<><PreferenceControls value={preferences} change={changePreferences}/><section className="xc-card xc-pad">
     <div className="xc-list-row"><span>Feedback and support</span><a className="xc-button xc-secondary" href="/support">Contact support</a></div>
     <div className="xc-list-row"><div className="xc-row-head"><CircleHelp size={22}/><div><strong>Introduction</strong><p>See how your X-Center ID works.</p></div></div><button className="xc-button xc-secondary" onClick={()=>setIntro(true)}>View introduction</button></div>
     <div className="xc-list-row"><div><strong>App version</strong><p>X-Center ID for web</p></div><button className="xc-button xc-secondary" onClick={()=>{
@@ -321,12 +350,12 @@ export default function WebApp(){
       if(taps.current>=3){taps.current=0;setDev(true);}
       timer.current=setTimeout(()=>{setDev(false);setSampleMode(false);taps.current=0;},30000);
     }}>0.1.0</button></div>
-    {dev&&<div className="xc-stack"><h2>Developer Options</h2>
+    {dev&&<div className="xc-stack"><h2>Developer Options</h2><a href="/samples">Open sample integrations</a>
       <button className="xc-button xc-secondary" onClick={()=>setSampleMode(!sampleMode)}>{sampleMode?'Exit sample dashboard':'Open sample dashboard'}</button>
       {sampleMode&&<div className="xc-sample"><span className="xc-pill">Sample data</span><h2>Sample dashboard</h2>
         {Object.entries(sample).map(([section,items])=><div key={section}><h3>{section}</h3>{items.map(item=><p key={item.id}>{item.title} · {item.detail}</p>)}</div>)}</div>}
     </div>}
-  </section>;
+  </section></>;
   else content=<>
     <section className="xc-hero">
       <div><p className="xc-kicker">{accountMessage('personalAccount','Personal account')}</p><h2>{accountGreeting(profile.givenName)}</h2><p>@{profile.username}</p>
@@ -342,16 +371,17 @@ export default function WebApp(){
       })}
     </section>
     <section className="xc-card xc-pad xc-account-status"><div className="xc-row-head"><span className="xc-symbol xc-mint"><ShieldCheck size={22}/></span>
-      <div><h2>{accountMessage('accountStatus','Account status')}</h2><p>{accountStatus(account.passkeys.length,account.emails.length)}</p></div></div>
+      <div><h2>{accountMessage('accountStatus','Account status')}</h2><p>{accountStatus(account.passkeys.length,account.emails.filter(email=>email.verified).length)}</p></div></div>
     </section>
   </>;
 
   return <div className="xc-shell">
-    <header className="xc-topbar"><Logo/><div className="xc-top-actions">
+    <header className="xc-topbar"><button className="xc-icon-link xc-menu-toggle" aria-label={sidebar?'Close page sidebar':'Open page sidebar'} aria-expanded={sidebar} onClick={()=>setSidebar(!sidebar)}><Menu size={23}/></button><Logo/><div className="xc-top-actions">
       <a href="/settings" className="xc-icon-link" aria-label="Open settings"><Settings size={20}/></a>
       <a href="/profile" className="xc-avatar" aria-label="Open profile">{picture?<img src={picture} alt=""/>:<UserRound size={19}/>}</a>
     </div></header>
-    <aside className="xc-side">
+    {sidebar&&<button className="xc-nav-backdrop" aria-label="Close page sidebar" onClick={()=>setSidebar(false)}/>}
+    <aside className="xc-side" data-open={sidebar} ref={sidebarRef}>
       <nav aria-label="Account sections">{sections.map(([id,label,Icon])=><a key={id} href={'/'+id} aria-current={page===id?'page':undefined}><Icon size={19}/><span>{accountMessage(id,label)}</span></a>)}
         {account.admin&&<a href="/admin" aria-current={page==='admin'?'page':undefined}><ShieldCheck size={19}/><span>Administration</span></a>}
       </nav>
@@ -362,6 +392,9 @@ export default function WebApp(){
       {notice&&<p className="xc-notice" role="status">{notice}</p>}
       {content}
     </main>
+    <nav className="xc-bottom" aria-label="Main screens">{[
+      ['dashboard','Account',UserRound],['apps','Apps',Grid2X2],['settings','Settings',Settings],...(account.admin?[['admin','Admin',ShieldCheck]]:[]),
+    ].map(([id,label,Icon])=>{const ItemIcon=Icon as typeof UserRound;const selected=id==='dashboard'?!['apps','permissions','developer','settings','support','admin'].includes(page):id==='apps'?['apps','permissions','developer'].includes(page):id==='settings'?['settings','support'].includes(page):page==='admin';return <a key={String(id)} href={'/'+id} aria-current={selected?'page':undefined}><ItemIcon size={22}/><span>{String(label)}</span></a>;})}</nav>
     {intro&&<Intro close={()=>setIntro(false)}/>}
   </div>;
 }

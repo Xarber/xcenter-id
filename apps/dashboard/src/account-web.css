@@ -120,3 +120,20 @@ body{overflow-y:auto}
 .xc-admin-avatar{object-fit:cover;border-radius:50%;background:var(--soft);flex:none}
 
 .xc-icon-action{width:44px;height:44px;padding:10px}.xc-admin-avatar{display:inline-flex;align-items:center;justify-content:center;overflow:hidden}
+
+.xc-icon-action{width:auto!important;min-width:44px;max-width:100%;height:auto!important;min-height:44px;gap:8px;white-space:normal;text-align:left}.xc-icon-action span{font-size:.8rem}.xc-icon-action svg{flex:none}
+
+:root[data-theme=light]{color-scheme:light;--paper:#f6f8fc;--surface:#fff;--ink:#141b2e;--muted:#526078;--line:#dee4ee;--blue:#214fbe;--soft:#e9f0ff;--nav:#f8faff;--mint:#dcf6ef;--lavender:#eee8ff}
+:root[data-theme=dark]{color-scheme:dark;--paper:#101522;--surface:#192132;--ink:#f3f6ff;--muted:#b1c1dc;--line:#33415a;--blue:#9ebcff;--soft:#23355d;--nav:#151e2f;--mint:#143a34;--lavender:#302747}
+.xc-menu-toggle,.xc-bottom,.xc-nav-backdrop{display:none}
+@media(max-width:900px){
+ .xc-shell{display:block}.xc-topbar{height:64px;padding:0 14px;gap:8px}.xc-brand{margin-right:auto}.xc-top-actions{gap:4px}
+ .xc-menu-toggle{display:grid;border:0;background:transparent;flex:none}
+ .xc-side{position:fixed;display:flex!important;inset:64px auto 0 0;top:64px;width:min(290px,85vw);height:calc(100dvh - 64px);z-index:21;transform:translateX(-100%);visibility:hidden;padding:18px 12px 100px;transition:transform 180ms ease-out,visibility 180ms}
+ .xc-side[data-open=true]{transform:translateX(0);visibility:visible}.xc-side nav{display:flex;flex-direction:column;overflow:visible;gap:5px}.xc-side .xc-signout{display:flex}
+ .xc-nav-backdrop{display:block;position:fixed;inset:64px 0 0;z-index:20;background:#0006;border:0}
+ .xc-bottom{position:fixed;inset:auto 0 0;z-index:15;display:flex;justify-content:space-around;background:var(--surface);border-top:1px solid var(--line);padding:8px 6px max(8px,env(safe-area-inset-bottom));gap:4px}
+ .xc-bottom a{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:48px;text-decoration:none;font-size:.73rem;color:var(--muted);border-radius:12px}.xc-bottom a[aria-current=page]{color:var(--blue);background:var(--soft)}
+ .xc-main{padding:24px 16px 120px;gap:18px}.xc-page-title h1{font-size:1.85rem}
+}
+@media(prefers-reduced-motion:reduce){.xc-side{transition:none}}

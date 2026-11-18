@@ -6,6 +6,9 @@ export type NativeAuthorizationOptions = {
   issuer: string;
   clientId: string;
   redirectUri: string;
+  scopes?: readonly string[];
+  nonce?: string;
+  promptConsent?: boolean;
 };
 
 export type NativeAuthorizationCode = {
@@ -21,7 +24,7 @@ function https(value: string) {
 }
 
 /** Obtain a code for the host's approved public sign-in client. */
-export async function authorizeNative({ issuer, clientId, redirectUri }: NativeAuthorizationOptions):
+export async function authorizeNative({ issuer, clientId, redirectUri,scopes=['openid'],nonce:providedNonce,promptConsent=false }: NativeAuthorizationOptions):
   Promise<NativeAuthorizationCode | null> {
   if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
     throw new Error('Use the website backend to start web sign-in');
@@ -36,10 +39,12 @@ export async function authorizeNative({ issuer, clientId, redirectUri }: NativeA
     [discovery.authorizationEndpoint,discovery.tokenEndpoint].some(endpoint=>new URL(endpoint).origin!==new URL(issuer).origin)) {
     throw new Error('Invalid issuer discovery');
   }
-  const nonce = randomUUID();
+  if(scopes.length>5||scopes.some(scope=>!['openid','profile','email','age_range','app_data'].includes(scope)))throw new Error('Unsupported X-Center permission scope');
+  if(providedNonce&&!/^[A-Za-z0-9_-]{22,256}$/.test(providedNonce))throw new Error('Use a cryptographically random transaction nonce');
+  const nonce = providedNonce??randomUUID();
   const request = new AuthRequest({
-    clientId, redirectUri, responseType: ResponseType.Code, scopes: ['openid'],
-    usePKCE: true, codeChallengeMethod: CodeChallengeMethod.S256, extraParams: { nonce },
+    clientId, redirectUri, responseType: ResponseType.Code, scopes: [...new Set(['openid',...scopes])],
+    usePKCE: true, codeChallengeMethod: CodeChallengeMethod.S256, extraParams: { nonce,...(promptConsent?{prompt:'consent'}:{}) },
   });
   const result = await request.promptAsync(discovery,{preferUniversalLinks:true});
   if (result.type === 'cancel' || result.type === 'dismiss') return null;

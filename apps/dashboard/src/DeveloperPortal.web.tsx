@@ -51,6 +51,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
 
   const existing=selection==='create'?null:selection;
   return <div className="xc-stack">
+    {selection!=='create'&&<a href={'/developer/storage/'+selection.id}>Manage application database</a>}
     <button type="button" className="xc-button xc-secondary xc-self-start" onClick={()=>edit(null)} disabled={busy}><ArrowLeft size={16}/> Registered apps</button>
     <div className="xc-row-head"><h2>{existing?.name??'Register an app'}</h2>
       {existing?.verified&&<span className="xc-pill"><BadgeCheck size={15}/> Verified</span>}</div>

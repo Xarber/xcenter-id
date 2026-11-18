@@ -1,5 +1,5 @@
 import { accountCount } from './account-counts.mjs';
-import { accountMessage } from './account-locale';
+import { accountMessage,accountLocale } from './account-locale';
 
 const shortcuts = [
   ['profile','profileShortcut','profileDescription'],
@@ -18,7 +18,7 @@ export function accountGreeting(name:string,locale?:string) {
   return accountMessage('greeting','Hello, {name}',locale).replace('{name}',()=>name);
 }
 
-export function accountStatus(passkeys:number,emails:number,locale=Intl.DateTimeFormat().resolvedOptions().locale) {
+export function accountStatus(passkeys:number,emails:number,locale=accountLocale()) {
   const count=(key:string,value:number)=>{
     const {suffix,formatted}=accountCount(value,locale);
     return accountMessage(key+suffix,'',locale).replace('{count}',formatted);

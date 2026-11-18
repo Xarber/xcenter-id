@@ -38,6 +38,8 @@ export function openRegistry(path) {
   const developerView=owner=>readDeveloper.get(owner)??{name:'',status:'unverified'};
   const setAppName=db.prepare('UPDATE clients SET name=?,callback=? WHERE id=? AND developer=?');
   return {
+    registration:id=>db.prepare('SELECT c.id,c.client,c.developer,c.status,p.verified FROM clients c LEFT JOIN app_profiles p ON p.id=c.id WHERE c.id=?').get(id),
+    clientForId:id=>db.prepare('SELECT client FROM clients WHERE id=?').get(id)?.client,
     brand: (client) => db.prepare(`SELECT c.developer AS owner,coalesce(nullif(d.name,''),b.developer_name) AS developerName,
       b.icon,p.description,p.repository,p.verified,d.status AS developerStatus
       FROM clients c LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN app_profiles p ON p.id=c.id
@@ -74,7 +76,7 @@ export function openRegistry(path) {
         .map(developer=>({...developer,repository:readOpenSource.get(developer.owner)?.repository??null})),
     }),
     verifyApp(id,verified){
-      const item=db.prepare("SELECT callback FROM clients WHERE id=? AND status='active'").get(id);
+      const item=db.prepare("SELECT callback FROM clients WHERE id=? AND status IN ('pending','active')").get(id);
       if(!item)return false;
       db.prepare(`INSERT INTO app_profiles VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET verified=excluded.verified`)
         .run(id,'','',JSON.stringify([item.callback]),Number(verified));

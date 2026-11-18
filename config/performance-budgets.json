@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "measurementStatus": "pending",
+  "web": {
+    "lcpMs": 2500,
+    "inpMs": 200,
+    "cls": 0.1
+  },
+  "api": {
+    "hostedRecordPayloadMaxBytes": 60000,
+    "hostedRequestMaxBytes": 65536,
+    "pageMaxRecords": 100,
+    "privateReadersMax": 50,
+    "storageWriteHeadroomMinBytes": 268435456
+  },
+  "native": {
+    "navigationFeedbackTargetMs": 100,
+    "runtimeMeasurement": "requires installed-device evidence"
+  },
+  "notes": "Budgets are targets and enforced bounds; they are not measured performance results."
+}

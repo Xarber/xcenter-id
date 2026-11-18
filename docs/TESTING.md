@@ -28,3 +28,12 @@ Isolated Chrome at 390 px verified an old administrator session opening the menu
 
 
 18 November final source batch: 24 API tests and 3 dashboard tests passed; dashboard TypeScript and the 16-declaration UADS structural check passed (using the existing temporary Python environment with jsonschema). Isolated Chrome covered admin renewal, native-bound renewal, account details/default avatar/warnings, app moderation, restricted support-only sign-in/replies, temporary mailto creation and cross-client authorization-code isolation. Actual iOS/Android devices and real external incoming verification remain unverified. The dashboard dependency audit fails on the unpatched picomatch advisory recorded in SECURITY.md; the API audit passes.
+
+
+## Administration, navigation and hosted data expansion
+
+The subsequent batch passes 28 API tests, 4 dashboard tests, TypeScript, web export and YAML syntax validation. Isolated Chrome at 390px covered theme/language persistence, drawer and main tabs, dynamic admin visibility, grouped profile editing, user verification, 2 GB quota, role grant/removal, hidden samples and public documentation. Actual OAuth tokens from registered public clients exercised app_data, source-collection consent and read isolation. Existing wrong-client/replay/moderation browser checks also passed.
+
+New hosted-data regressions cover recipient ACLs, revocation, quota management authorization, backend-key isolation/revocation, private/public records, ciphertext at rest and authenticated publication flags. The Android signing parser was checked against the real failed-run output and extracts exactly the expected certificate hash; this is not a replacement for a new APK artifact check.
+
+The email-related source changes made before the explicit pause are preserved, but provider sending, DNS completion, production email activation and external delivery are not verified. Native runtime evidence and measured changed-code coverage remain open. A green manifest validator is not full UADS compliance.

@@ -2,7 +2,7 @@
   "uadsVersion": "2026-11-16-instructions",
   "manifestVersion": 1,
   "project": {
-    "name": "AuthNJS",
+    "name": "X-Center ID",
     "repository": "Xarber/xcenter-id",
     "profiles": [
       "web-app",
@@ -43,7 +43,13 @@
     "accountModeration": "implemented",
     "supportInbox": "implemented",
     "inboundEmailVerification": "implemented",
-    "sessionReauthentication": "implemented"
+    "sessionReauthentication": "implemented",
+    "hostedApplicationData": "implemented",
+    "publicProfileFlags": "implemented",
+    "administratorDelegation": "implemented",
+    "dashboardPreferences": "implemented",
+    "groupedNavigation": "implemented",
+    "developerDocumentation": "implemented"
   },
   "distribution": {
     "githubReleases": "pending authorization and verification"

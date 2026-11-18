@@ -2,9 +2,8 @@ import { composeContent } from './mail-compose.mjs';
 import nodemailer from 'nodemailer';
 
 const recipientPattern = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i;
-const protectedNames = new Set(['support','xarber','schoolmanager']);
 
-export function createOutboundMail(config) {
+export function createOutboundMail(config,{limits,deliverLocal}={}) {
   if (!config?.userSubmission && !config?.localDelivery) return null;
   const domain = config.mailboxDomain ?? 'mail.xcenter.it';
   if(!['mail.xcenter.it','xcenter.it'].includes(domain)||!config.inboundDomains?.includes(domain)){
@@ -26,8 +25,9 @@ export function createOutboundMail(config) {
   return {
     domain,
     external:!!upstream,
+    limits,
     async send(owner,username,input) {
-      if (!/^[a-z][a-z0-9]{2,23}$/.test(username) || protectedNames.has(username)) return {status:403,error:'Sender is unavailable.'};
+      if (!/^[a-z][a-z0-9]{2,23}$/.test(username)) return {status:403,error:'Sender is unavailable.'};
       const recipient = typeof input.to === 'string' ? input.to.trim() : '';
       const subject = typeof input.subject === 'string' ? input.subject.trim() : '';
       const text = typeof input.text === 'string' ? input.text.trim() : '';
@@ -38,6 +38,8 @@ export function createOutboundMail(config) {
       const destination=recipient.split('@').at(-1).toLowerCase();
       const client=config.inboundDomains.includes(destination)&&local?local:upstream;
       if(!client)return {status:503,error:'Sending to external email addresses is unavailable.'};
+      const external=!config.inboundDomains.includes(destination);
+      if(external&&limits&&!limits.reserve(owner))return {status:429,error:'Your external mail allowance or the service free-plan allowance has been reached.'};
       const now = Date.now();
       if (now-minute >= 60_000) { minute=now; total=0; }
       for (const [id,record] of rates) if (record.until <= now) rates.delete(id);
@@ -52,7 +54,11 @@ export function createOutboundMail(config) {
       total++;
       try {
         const from = username+'@'+domain;
-        await client.sendMail({from,to:recipient,subject,...content,envelope:{from,to:[recipient]}});
+        if(!external&&deliverLocal){
+          const composer=nodemailer.createTransport({streamTransport:true,buffer:true,disableFileAccess:true,disableUrlAccess:true});
+          const raw=await composer.sendMail({from,to:recipient,subject,...content});
+          if(!deliverLocal(recipient,raw.message,from))throw new Error('Local mailbox unavailable');
+        }else await client.sendMail({from,to:recipient,subject,...content,envelope:{from,to:[recipient]}});
         return {ok:true};
       } catch { return {status:503,error:'The mail provider did not accept the message.'}; }
     },

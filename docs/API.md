@@ -47,3 +47,8 @@ The typed data API is an initial slice. Live passkey signup, recovery and sessio
 Node 24 API tests passed for account and client isolation, grant creation and revocation, revision conflicts, ciphertext at rest, authentication failures on wrong key or record context, and signed token issuer/audience/time/user-scope validation. The dependency audit returned zero known findings at execution. Tests used synthetic accounts, temporary SQLite storage and a generated signing key. Live identity and deployment remain unverified.
 
 The [integration guide](INTEGRATION.md) defines the issuer policy and operator approval procedure for the live client registry. Production data access requires both an active registered client and the issuer-controlled confidential-client claim.
+
+
+## Hosted app database and public profiles
+
+[HOSTED_DATA.md](HOSTED_DATA.md) is the maintained contract for `/v1/apps/:client/data`, read-only `/public/apps/:client/data`, `/account/app-storage/:registrationId`, `/account/app-data-permissions` and public name/photo profiles. `/docs` publishes installation and integration guidance. These APIs do not expose the identity database or accept SQL.

@@ -107,7 +107,12 @@ const catalogs:Record<string,Partial<Record<Message,string>>> = {
     verifiedOther:'{count} e-mails verificados'},
 };
 
-export function accountMessage(key:string, fallback:string, locale=Intl.DateTimeFormat().resolvedOptions().locale) {
+let selectedLanguage:string|undefined;
+export function setAccountLanguage(value:string){selectedLanguage=value==='system'?undefined:value;}
+
+export function accountLocale(){return selectedLanguage??Intl.DateTimeFormat().resolvedOptions().locale;}
+
+export function accountMessage(key:string, fallback:string, locale=selectedLanguage??Intl.DateTimeFormat().resolvedOptions().locale) {
   if (!Object.hasOwn(en,key)) return fallback;
   const message = key as Message;
   return catalogs[accountLanguage(locale)]?.[message] ?? en[message];
