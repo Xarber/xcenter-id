@@ -75,7 +75,8 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
   const clientsStorage = new StorageAdapter('Client');
   const selections = new Adapter('ClaimSelection');
   const scopeClaims = {
-    openid: ['sub'], profile: ['name', 'given_name', 'family_name'],
+    openid: ['sub','name','given_name','family_name','preferred_username','picture'],
+    profile: ['name','given_name','family_name','preferred_username','picture'],
     age_range: ['age_range'], email: ['email', 'email_verified'],
   };
   const clients = configuration.clients.map((client) => ({
@@ -128,7 +129,8 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
           return {
             sub: owner,
             name: person.givenName + ' ' + person.surname, given_name: person.givenName,
-            family_name: person.surname, age_range: person.ageRange,
+            family_name: person.surname, preferred_username:person.username, age_range: person.ageRange,
+            ...(person.hasPicture?{picture:issuer+'/v1/profile/avatar'}:{}),
             ...(email ? { email, email_verified: true } : {}),
           };
         },
@@ -186,8 +188,8 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       if (email && !alias && !premium && !primary && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
       if(applicationData&&String(details.params.scope??'').split(' ').includes('app_data'))applicationData.authorize(active.owner,client.client_id,input.getAll('data-permission'));
       const choices = new Set(input.getAll('permission'));
-      const optional = ['profile','age_range','app_data'].filter(scope=>requested.has(scope));
-      const allowed = ['openid',...optional.filter(scope=>choices.has(scope)),...(email?['email']:[])];
+      const optional = ['age_range','app_data'].filter(scope=>requested.has(scope));
+      const allowed = ['openid','profile',...optional.filter(scope=>choices.has(scope)),...(email?['email']:[])];
       const denied = [...optional.filter(scope=>!choices.has(scope)),...(requested.has('email')&&!email?['email']:[])];
       const linked=accounts.linkedGrant(active.owner,client.client_id);
       const grant=linked&&await provider.Grant.find(linked) || new provider.Grant({ accountId:active.owner, clientId:client.client_id });
@@ -212,7 +214,6 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     }
     const incremental=!!accounts.linkedGrant(active.owner,client.client_id);
     const permissions=[
-      ['user','Given name and surname','profile'],
       ['age','Age range','age_range'],
       ['records','Access to records belonging to this app','app_data'],
     ];
@@ -227,7 +228,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       ${brand?.verified?'<br>Verified app':''}${brand?.developerStatus==='verified'?'<br>Verified developer':''}</div>
       <form method="post"><h2>Permissions</h2>
       <ul class="permission-list">
-        ${!incremental?`<li>${glyph('id')}<span>App-specific account ID · required</span></li>`:''}
+        ${!incremental?`<li>${glyph('id')}<span>App-specific account ID, name, username and profile photo · required</span></li>`:''}
         ${permissions.filter(item=>missing.has(item[2])).map(([symbol,label,scope])=>`<li><label class="permission-toggle">${glyph(symbol)}<span>${label}</span><input type="checkbox" role="switch" name="permission" value="${scope}"></label></li>`).join('')}
       </ul>
       ${String(details.params.scope??'').split(' ').includes('app_data')?(applicationData?.requested(client.client_id)??[]).map(item=>`<label class="permission-toggle"><span>${escape(item.label)}<small> · Read ${escape(item.collection)} from ${escape(registry.publicDetails(item.source)?.name??item.source)}</small></span><input type="checkbox" role="switch" name="data-permission" value="${escape(item.source+'/'+item.collection)}"></label>`).join(''):''}
@@ -268,6 +269,12 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const access = await provider.AccessToken.find(value);
       if (!access?.accountId || !registry?.has(access.clientId) || (!native&&(await provider.Client.find(access.clientId))?.tokenEndpointAuthMethod!=='client_secret_basic') || !accounts.grantAllowed(access.accountId,access.clientId,access.grantId) || !access.scope?.split(' ').includes('app_data')) return null;
       return { owner:access.accountId, client:access.clientId, confidential:true };
+    },
+    async profileAvatar(token) {
+      const access=await provider.AccessToken.find(token);
+      if(!access?.accountId||!knownClient(access.clientId)||!accounts.linkedGrant(access.accountId,access.clientId)||
+        !accounts.grantAllowed(access.accountId,access.clientId,access.grantId)||!access.scope?.split(' ').includes('openid'))return undefined;
+      return accounts.profileAvatar(access.accountId)??null;
     },
     async delegatedAccess(token, expectedClient) {
       const access = await provider.AccessToken.find(token);

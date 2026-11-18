@@ -151,6 +151,20 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   const path = target.pathname;
   const forwardedOrigin='https://'+req.headers['x-forwarded-host'];
   const externalSample=sampleOrigins.has(forwardedOrigin)&&req.headers['x-forwarded-proto']==='https';
+  if(path==='/v1/profile/avatar'){
+    const headers={'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
+    if(req.method==='OPTIONS'){
+      res.writeHead(204,{...headers,'Access-Control-Allow-Methods':'GET, OPTIONS','Access-Control-Allow-Headers':'Authorization'}).end();
+      return;
+    }
+    if(req.method!=='GET'){res.writeHead(405,headers).end();return;}
+    const token=/^Bearer ([A-Za-z0-9_-]{20,200})$/.exec(req.headers.authorization??'')?.[1];
+    void (token&&provider?provider.profileAvatar(token):Promise.resolve(undefined)).then(picture=>{
+      if(!picture){res.writeHead(picture===undefined?401:404,headers).end();return;}
+      res.writeHead(200,{...headers,'Content-Type':'image/jpeg'}).end(Buffer.from(picture,'base64'));
+    }).catch(()=>res.writeHead(503,headers).end());
+    return;
+  }
   if(applicationData&&(/^\/(?:public|v1)\/apps\//.test(path)||path.startsWith('/account/app-storage/')||path==='/account/app-data-permissions')){
     void applicationData.handle(req,res,target);return;
   }

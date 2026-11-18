@@ -43,6 +43,7 @@ export function openEmailVerification(db, { send, origin }) {
   const sent = db.prepare('SELECT count(*) AS total FROM email_verifications WHERE created>?');
 
   return {
+    pending(owner){const record=pending.get(owner);return record&&record.expires>Date.now()?{address:record.address,expires:record.expires}:null;},
     async start(owner, candidate) {
       if (!send) return { status:503, error:'Email verification is unavailable. No address was saved.' };
       const address = typeof candidate === 'string' ? candidate.trim().toLowerCase() : '';
@@ -57,8 +58,11 @@ export function openEmailVerification(db, { send, origin }) {
       const token = randomBytes(32).toString('base64url');
       const hash = digest(token);
       insert.run(owner,address,hash,timestamp,timestamp+1200_000);
-      try { await send({ address, link:origin+'/#verify-email='+token }); }
-      catch { return { status:503,error:'Could not send the verification message. Try again later.' }; }
+      try { await send({ address, link:origin+'/profile#verify-email='+token }); }
+      catch {
+        remove.run(owner,hash);
+        return { status:503,error:'Could not send the verification message. Try again later.' };
+      }
       return { ok:true };
     },
     confirm(owner, value) {

@@ -5,12 +5,17 @@ Start with the [sign-in contract](integration.md). Request only the scopes neede
 | Goal | Use |
 | --- | --- |
 | Sign in to your product | Request `openid`. Validate the token and keep a product session keyed by issuer and pairwise subject. |
-| Show a user's name, email, or age band | Request `profile`, `email`, or `age_range` as needed. Read authorized claims through discovered UserInfo. Email is optional and can be a Hide My Email address. Age band is self-declared. |
+| Show a user's name, username or profile photo | Read discovered UserInfo with the access token issued for `openid`. If it includes `picture`, fetch the JPEG with the same Bearer token. |
+| Read a verified email or age band | Request `email` or `age_range` and read approved claims through UserInfo. Email can be a Hide My Email address. Age band is self-declared. |
 | Store product-wide records | Use the app's backend key in its dedicated app-owned namespace. |
 | Store data belonging to one signed-in user | Use that app's user access token with `app_data`. |
 | Let users browse and share personal files | Direct them to Files or Friends in the X-Center dashboard. A third-party app token cannot access the account's file cabinet. |
 | Read data offered by a different app | Configure exact source collections, obtain consent, then read the authorized source collection. |
 | Present an opted-in public profile or record | Use the documented public profile or public record endpoint. |
+
+## Profile photos
+
+Use the discovery document's `userinfo_endpoint` after sign-in. Check that UserInfo's `sub` matches the validated ID token before using the profile. Send an `Authorization: Bearer …` header to the X-Center ID picture endpoint on the configured issuer's origin. In a web app, convert the returned image bytes to a blob URL and revoke it when replaced or on sign-out. Use your default avatar when `picture` is absent or the endpoint returns an error. Keep access tokens out of URLs.
 
 ## Dedicated app storage
 

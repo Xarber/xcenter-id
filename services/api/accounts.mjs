@@ -300,7 +300,9 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     if(req.method==='GET'&&pathname==='/account/mail/clients'){requireCondition(active,401,'Sign in first.');return {clients:mailCredentials.list(active.owner)};}
     if(req.method==='GET'&&pathname==='/account/email/incoming'){
       requireCondition(active,401,'Sign in first.');
-      return {enabled:inbound.enabled,pending:inbound.pending(active.owner),result:inbound.result(active.owner)};
+      return {enabled:inbound.enabled,canSendLink:!!sendVerification,pending:inbound.pending(active.owner),
+        outgoing:verification.pending(active.owner),result:inbound.result(active.owner),
+        emails:[...emails.all(active.owner),...inbound.addresses(active.owner)]};
     }
     if(req.method==='GET'&&pathname==='/account/profile/visibility'){
       requireCondition(active,401,'Sign in first.');
@@ -547,7 +549,9 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     }
     if(pathname==='/account/email/add'){
       requireCondition(active,401,'Sign in first.');
-      return inbound.add(active.owner,input.email);
+      const result=inbound.add(active.owner,input.email);
+      requireCondition(result.ok,result.status,result.error);
+      return result;
     }
     if(pathname==='/account/email/incoming'){
       requireCondition(active,401,'Sign in first.');
@@ -903,6 +907,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       };
     },
     premiumEligible: (owner) => q('SELECT premium_mail FROM account_entitlements WHERE owner=?').get(owner)?.premium_mail===1,
+    profileAvatar:owner=>available(owner)?profile(owner)?.picture??null:null,
     identity(owner) {
       if(!available(owner))return undefined;
       const found = profile(owner);

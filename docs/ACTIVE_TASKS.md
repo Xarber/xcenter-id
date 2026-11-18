@@ -281,3 +281,12 @@ Dashboard follow-up: AUTHN-067–070 source is deployed as 310186a. Isolated Chr
 
 - App management and storage health deployed at d595995 after file entry recovery. See [rollout and rollback](operations/XCENTER_ID_PRODUCTION.md). 33 API tests, 4 dashboard tests, typecheck and web export passed. XHDD attachment and indexed placement remain open.
 - The installed skill now covers dedicated app storage, per-user records, same-app recipient grants, cross-app consent, public interfaces, and the unsigned-app browser handoff. An isolated Chrome run completed confidential OIDC through a browser-only HTTPS callback, verified issuer/audience/nonce/signature, and tested the fixture product session pickup before completion, with an incorrect verifier, on first use, and on replay. Each integrating backend must implement its own expiring atomic pickup.
+
+### App profile and email verification
+
+| ID | Request | State | Evidence and next action |
+| --- | --- | --- | --- |
+| AUTHN-072 | Share the standard profile and photo with all signed-in apps | Verified locally | Chrome completed a registered app sign-in using only `openid`, checked UserInfo and the protected JPEG, and confirmed that anonymous and unlinked access were denied. Email and age stay separately consented. Developer docs and integration skill updated. Production smoke check pending. |
+| AUTHN-073 | Restore email verification and give Check delivery feedback | Verified locally | Chrome added an unverified address, submitted a link through an isolated authenticated SMTP fixture, confirmed it in a second tab and saw Verified in the original tab. API tests covered wrong-account confirmation, replay and rejected SMTP submission. Production relay is configured. The original mailbox attempt and installed native UI are unverified. |
+
+Implementation and preparation for this batch are complete. Next run the production-targeted web export and staged API/Web rollout. No mobile release is required to verify the public web and API deployment. Physical native UI verification depends on an updated installation. Work usage percentages were unavailable.

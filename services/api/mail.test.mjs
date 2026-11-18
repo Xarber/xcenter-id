@@ -94,19 +94,27 @@ test('SMTP accepts registered destinations and aliases, rejects relay and isolat
 test('email remains pending until the matching account uses its one-time verification link', async () => {
   const db = new DatabaseSync(':memory:');
   db.exec('CREATE TABLE verified_emails (owner TEXT,address TEXT PRIMARY KEY,verified INTEGER)');
-  let sent;
+  let sent, rejectDelivery;
   const service = openEmailVerification(db,{
     origin:'https://identity.example.test',
-    send(message) { sent = message; },
+    send(message) { if(rejectDelivery)throw new Error('Fixture relay refused delivery'); sent = message; },
   });
   try {
     assert.deepEqual(await service.start('first','valid@example.test'),{ok:true});
     assert.equal(db.prepare('SELECT count(*) AS n FROM verified_emails').get().n,0);
-    const token = new URLSearchParams(new URL(sent.link).hash.slice(1)).get('verify-email');
+    const link = new URL(sent.link);
+    assert.equal(link.pathname,'/profile');
+    assert.equal(service.pending('first').address,'valid@example.test');
+    assert.equal(service.pending('second'),null);
+    const token = new URLSearchParams(link.hash.slice(1)).get('verify-email');
     assert.equal(service.confirm('second',token),false);
     assert.equal(service.confirm('first',token),true);
     assert.equal(service.confirm('first',token),false);
     assert.equal(db.prepare('SELECT address FROM verified_emails').get().address,'valid@example.test');
+    assert.equal(service.pending('first'),null);
+    rejectDelivery=true;
+    assert.equal((await service.start('second','other@example.test')).status,503);
+    assert.equal(service.pending('second'),null);
   } finally { db.close(); }
 });
 
