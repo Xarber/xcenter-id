@@ -168,10 +168,10 @@ Production revision 861128c is now live at id.xcenter.it and both sample hosts. 
 | ID | Request | State | Next action |
 | --- | --- | --- | --- |
 | AUTHN-053 | Integrate X-Center ID skill | Verified | Installed and source-controlled skill validated with Skill Creator. Independent review completed and clarified native versus confidential backend registration. |
-| AUTHN-054 | Native accountStatus crash | In Progress | Remove unsupported Intl constructor dependency, test missing constructors and run native preview after the batch. |
-| AUTHN-055 | Admin authentication, icons, avatar fallback and user detail controls | In Progress | Add in-session passkey authentication, details, app moderation and mailbox warnings. |
-| AUTHN-056 | Support access while account locked | In Progress | Restrict preserved sessions to support operations and expose that UI. |
-| AUTHN-057 | Temporary verification using mailto and authenticated inbound mail | In Progress | Verify the received sender and a single-use code at the SMTP boundary, then expose the pending verification flow. |
+| AUTHN-054 | Native accountStatus crash | Implemented | Unsupported Intl constructor dependency removed; missing-constructor regression passed. Native run 44245479618 is building; installed-device verification remains open. |
+| AUTHN-055 | Admin authentication, icons, avatar fallback and user detail controls | Implemented | Isolated Chrome and API checks passed. Deployed d4de743; authenticated production and native-device checks remain open. |
+| AUTHN-056 | Support access while account locked | Implemented | Browser/API verified preserved and fresh passkey support-only sessions with reply history. Deployed d4de743; native device remains unverified. |
+| AUTHN-057 | Temporary verification using mailto and authenticated inbound mail | Implemented | Signed SMTP regression and descriptive browser draft passed. Live service accepts verify@mail.xcenter.it over TLS and rejects relay; first real independently sent message remains unverified. |
 
 
 18 November batch checkpoint: AUTHN-054–057 are implemented. API tests passed 24/24, dashboard tests 3/3, TypeScript and the UADS structural validator passed. Isolated Chrome passed in-session browser/native confirmation, cross-account denial, default avatars, account detail moderation, warnings, locked passkey support-only access and replies, descriptive mailto, and cross-client PKCE redemption/replay denial. The signed loopback SMTP regression verifies the matching sender and code, rejecting forged headers, changed content and replay. Native runtime and the first independently sent external verification message remain unverified.
@@ -179,3 +179,6 @@ Production revision 861128c is now live at id.xcenter.it and both sample hosts. 
 Build gate: independent implementation and preparation for this batch are done. Production export and the requested four-job native preview are the next verification steps. No stable release or public artifact publication is planned. APK certificate verification remains to validate on the new run. External outbound transport, submission/IMAP, complete localization, physical devices and distribution publication remain outstanding; the compact navbar item remains ordered after mail by the user.
 
 Dependency gate: the dashboard audit reports the high picomatch advisory GHSA-fc5q-39xc-vjpf (CVE-2026-112366), including transitive Expo/Metro build tooling. The affected upstream releases extend through 4.0.7 and no patched npm release is currently available. Do not force a framework downgrade or disable the audit. API audit reports zero vulnerabilities. Stable publication remains gated on resolution or an authorized, justified exception. The diagnostic native preview and targeted runtime deployment remain distinct from stable release publication.
+
+
+Production receipt: API/Web d4de743 is live with old versions retained and six checked recovery snapshots. Native preview [44245479618](https://github.com/Xarber/xcenter-id/actions/runs/44245479618) targets the same source and has all four jobs running. It has not been reported as built or released. Commits dd78ce5 and d4de743 were pushed to testing. Hardware-backed signing was attempted and failed with device-not-found; unsigned commits were used under UADS §36. No main/beta promotion or new distribution publication occurred.

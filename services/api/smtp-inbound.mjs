@@ -54,6 +54,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   if (!tlsKeyFile || !tlsCertificateFile) throw new Error('Configure an SMTP STARTTLS certificate and key');
   const server = createInboundServer({ store, verification, name:'mail.xcenter.it',
     tls:{ key:readFileSync(tlsKeyFile),cert:readFileSync(tlsCertificateFile) } });
-  server.on('error',() => { console.error('Inbound mail listener failed'); process.exitCode=1; });
+  server.on('error',error => {
+    const code=typeof error.code==='string'&&/^E[A-Z_]{2,24}$/.test(error.code)?error.code:'UNKNOWN';
+    const listenerFailure=['EADDRINUSE','EACCES','EADDRNOTAVAIL'].includes(code);
+    console.error(JSON.stringify({timestamp:new Date().toISOString(),service:'xcenter-id-smtp',
+      severity:listenerFailure?'error':'warning',operation:listenerFailure?'listen':'connection',code}));
+    if(listenerFailure)process.exitCode=1;
+  });
   server.listen(Number(process.env.AUTHNJS_SMTP_PORT ?? 2525),process.env.AUTHNJS_SMTP_BIND ?? '127.0.0.1');
 }
