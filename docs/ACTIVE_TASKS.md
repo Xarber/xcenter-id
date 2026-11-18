@@ -286,7 +286,11 @@ Dashboard follow-up: AUTHN-067–070 source is deployed as 310186a. Isolated Chr
 
 | ID | Request | State | Evidence and next action |
 | --- | --- | --- | --- |
-| AUTHN-072 | Share the standard profile and photo with all signed-in apps | Verified locally | Chrome completed a registered app sign-in using only `openid`, checked UserInfo and the protected JPEG, and confirmed that anonymous and unlinked access were denied. Email and age stay separately consented. Developer docs and integration skill updated. Production smoke check pending. |
-| AUTHN-073 | Restore email verification and give Check delivery feedback | Verified locally | Chrome added an unverified address, submitted a link through an isolated authenticated SMTP fixture, confirmed it in a second tab and saw Verified in the original tab. API tests covered wrong-account confirmation, replay and rejected SMTP submission. Production relay is configured. The original mailbox attempt and installed native UI are unverified. |
+| AUTHN-072 | Share the standard profile and photo with all signed-in apps | Verified | Chrome completed a registered app sign-in using only `openid`, checked UserInfo and the protected JPEG, and confirmed that anonymous and unlinked access were denied. Email and age stay separately consented. Developer docs and integration skill updated. Production 3faa812 returned 401 to signed-out avatar requests and rendered the updated public guide. |
+| AUTHN-073 | Restore email verification and give Check delivery feedback | Implemented | Chrome added an unverified address, submitted a link through an isolated authenticated SMTP fixture, confirmed it in a second tab and saw Verified in the original tab. API tests covered wrong-account confirmation, replay and rejected SMTP submission. Production relay authenticated over TLS. The original mailbox attempt and installed native UI are unverified. |
 
-Implementation and preparation for this batch are complete. Next run the production-targeted web export and staged API/Web rollout. No mobile release is required to verify the public web and API deployment. Physical native UI verification depends on an updated installation. Work usage percentages were unavailable.
+The web export is deployed. See the [production receipt](operations/XCENTER_ID_PRODUCTION.md). Physical native UI verification depends on an updated installation. Work usage percentages were unavailable.
+
+| ID | Request | State | Evidence |
+| --- | --- | --- | --- |
+| AUTHN-074 | Make the integration skill perform registration preparation, DNS activation and target-app sync work | Verified | Installed and tracked copies match and pass skill validation. Checked the portal action labels against the dashboard source and the storage and permission instructions against the API contract. The unnamed target app was not changed. |
