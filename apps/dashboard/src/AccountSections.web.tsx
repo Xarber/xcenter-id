@@ -179,7 +179,7 @@ export function MailPage({ account }:{account:Account}) {
     }
   }
 
-  return <section className={'xc-card xc-pad'+(account.canSendMail?' xc-inbox':'')}>
+  return <section className={'xc-card xc-pad xc-mailbox'+(account.canSendMail?' xc-inbox':'')}>
     <div className="xc-row-head"><span className="xc-symbol xc-sky"><Mail size={21}/></span><div><h2>{account.mailbox??'X-Center mailbox'}</h2>
     <p>{messages?'Your private mailbox.':'This address is reserved. Mailbox delivery is unavailable.'}</p></div></div>
     {messages&&!account.externalMail&&<p>This inbox can receive local X-Center mail. External delivery is unavailable.</p>}
@@ -246,7 +246,7 @@ export function MailPage({ account }:{account:Account}) {
       <summary>{accountMessage('privateAddresses','Hide My Email addresses')} · {aliases.filter(item=>item.active).length} On / {aliases.filter(item=>!item.active).length} Off</summary><p>On forwards incoming mail to your inbox. Off stops new deliveries to that address.</p>
       {aliases.map(item=><div className="xc-list-row" key={item.address}>
         <div><strong>{item.address}</strong><p>{item.active?'On · '+(item.premium?'Premium address':'Private address'):'Off · Not receiving mail'}</p></div>
-        {!item.active&&<button className="xc-button xc-secondary" disabled={busy} onClick={()=>{setBusy(true);void api('mail/aliases/'+item.address,{active:true},'PUT').then(()=>api('mail/aliases')).then(r=>setAliases(r.aliases)).catch(e=>setStatus(notice(e))).finally(()=>setBusy(false));}}>Turn on</button>}
+        {!item.active&&<button className="xc-button xc-secondary" disabled={busy} onClick={()=>{setBusy(true);void api('mail/aliases/'+item.address,{active:true},'PUT').then(()=>api('mail/aliases')).then(r=>{setAliases(r.aliases);setStatus('Private address enabled.');}).catch(e=>setStatus(notice(e))).finally(()=>setBusy(false));}}>Turn on</button>}
         {item.active&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
           if(confirmAlias!==item.address){setConfirmAlias(item.address);return;}
           setBusy(true);

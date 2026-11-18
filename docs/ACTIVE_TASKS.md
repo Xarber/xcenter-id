@@ -247,3 +247,6 @@ Storage inspection: SharedData has about 870 MB free; root about 2.08 GB. No dis
 
 
 Both approved router rules are now saved and visibly Active: TCP465→192.168.1.30:465 and TCP993→192.168.1.30:993, all source addresses. No DMZ or unrelated rule changed. Source checks and preparation for the current batch are complete; the smallest web export is now required for real browser verification and staging. Private native preview follows this integration. Pending hardware/real-mail-client tests and provider/inbound round-trip evidence are recorded dependencies. Existing backup limitation remains explicit.
+
+
+Mail source 5c3187f is pushed to testing. Both public mail-port rules are saved. Six pre-migration databases plus the new seventh app-data database passed online snapshot quick_check at `/var/lib/xcenter-id-rollbacks/pre-mail-5c3187f.nxq70s3m`. Staged API/OIDC, incoming STARTTLS/support acceptance/relay denial and IMAP/submission TLS passed. Browser alias and mail-client credential flows passed. Thirty API tests passed in the actual Linux image after correcting test-environment prerequisites. Final visual polish wraps long addresses and clears stale reactivation feedback. Old preview is finished: simulator/AAB succeeded, APK failed script location, device canceled; replacement preview follows final preparation.

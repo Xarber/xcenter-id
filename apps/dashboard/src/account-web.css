@@ -137,3 +137,5 @@ body{overflow-y:auto}
  .xc-main{padding:24px 16px 120px;gap:18px}.xc-page-title h1{font-size:1.85rem}
 }
 @media(prefers-reduced-motion:reduce){.xc-side{transition:none}}
+
+.xc-mailbox .xc-row-head>div{min-width:0}.xc-mailbox h2,.xc-mailbox .xc-list-row strong{overflow-wrap:anywhere}
