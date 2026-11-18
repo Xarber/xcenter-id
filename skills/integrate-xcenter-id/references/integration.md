@@ -39,3 +39,14 @@ The identity provider uses opaque access tokens. Third-party native clients cann
 Trace normal login, deep-link return and app-session restore. Preserve user data when switching login providers. Verify against isolated identities before public deployment. Include negative checks showing that app B cannot redeem app A's code, that a different callback or verifier fails, and that an unregistered/revoked client fails. For public clients, verify the OS sends the claimed HTTPS callback only to the intended app. Backend identity, user consent and OS callback ownership are distinct checks.
 
 Inspect docs/IDENTITY.md, services/api/oidc.mjs, services/api/registry.mjs and packages/expo in the current identity repo if behavior differs. Apply a discovered security fix at its relevant boundary before reporting integration complete.
+
+## Unsigned apps and clients without an app callback
+
+Use the product's backend as the OIDC client. Register its exact HTTPS browser callback as a **Website backend**. The device never has to claim a URL, receive an OS app link, or carry a client secret.
+
+1. The local app generates a cryptographically random pickup verifier. It sends only its SHA-256 challenge to the product backend over HTTPS and receives a short-lived transaction handle and browser URL.
+2. The product backend independently creates an OIDC state, nonce and PKCE verifier for that transaction. The app opens the browser URL in the system browser. Show the product's identity and the user's chosen account before completing the browser sign-in.
+3. The issuer returns to the backend's registered HTTPS callback. The backend validates and consumes state, exchanges the code using its own secret and PKCE verifier, and validates issuer, signature, audience, expiry and nonce. It shows a completion page in the browser. Keep issuer tokens, product session tokens and pickup proof out of browser URLs.
+4. The local app polls its product backend with the transaction handle and original pickup verifier over HTTPS. Enforce short expiry, bounded polling and cancellation. Only a proven client can redeem the successful transaction, and that redemption must consume it atomically. Return a product session to the device over HTTPS.
+
+Verify pending, wrong proof, expired, canceled and replayed pickup requests. The app owns the pickup implementation. X-Center ID supplies the existing confidential authorization code flow. Its private native account-manager exchange is reserved for the dashboard. There is currently no issuer device-code grant for an unsigned, backend-less client.
