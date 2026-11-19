@@ -23,10 +23,17 @@ test('app profiles retain exact callbacks and admin verification is independent 
     assert.equal(registry.verifyApp(item.id,true),true);
     assert.equal(registry.brand('atlas').developerName,'Atlas Team');
     assert.equal(registry.brand('atlas').verified,1);
+    assert.deepEqual(registry.lookup('developer',item.id).requirements,{email:false,age_range:false});
+    assert.equal(registry.saveRequirements('someone-else',item.id,{email:true,age_range:true}),null);
+    assert.deepEqual(registry.saveRequirements('developer',item.id,{email:true,age_range:true}),{email:true,age_range:true});
+    assert.equal(registry.brand('atlas').requiresEmail,1);
+    assert.equal(registry.brand('atlas').requiresAgeRange,1);
+    assert.equal(registry.brand('atlas').verified,1);
     assert.equal(registry.saveApp('someone-else',item.id,profile),null);
     assert.equal(registry.saveApp('developer',item.id,{...profile,callbacks:['https://new.example.test/callback']}),null);
     const edited=registry.saveApp('developer',item.id,{...profile,name:'Atlas',description:'Updated map',icon:'new-fixture-icon',callbacks:[extra]});
     assert.equal(edited.verified,false);
+    assert.deepEqual(edited.requirements,{email:true,age_range:true});
     assert.equal(registry.brand('atlas').name,'Atlas');
     assert.equal(registry.brand('atlas').icon,'new-fixture-icon');
     assert.equal(registry.brand('atlas').description,'Updated map');
@@ -34,7 +41,10 @@ test('app profiles retain exact callbacks and admin verification is independent 
     assert.equal(registry.verifyApp(item.id,true),true);
     assert.deepEqual(registry.published(),[{client:'atlas',name:'Atlas',verified:true}]);
     assert.deepEqual(registry.publicDetails('atlas').callbacks,[extra]);
+    assert.equal(registry.saveDeveloper('developer','Atlas Team',false).status,'verified');
     assert.equal(registry.saveDeveloper('developer','New Name',false).status,'unverified');
+    assert.equal(registry.brand('atlas').developerName,'New Name');
+    assert.equal(registry.brand('atlas').verified,1);
   }finally{registry.close();}
 });
 

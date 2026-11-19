@@ -1,7 +1,7 @@
 import TrustBadges from './TrustBadges.web';
 import { ArrowLeft, ChevronRight, Database, Grid2X2, ImagePlus, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { developerApi, readAppIcon, type AppRegistration } from './developer-web';
+import { developerApi, optionalClaims, readAppIcon, type AppRegistration } from './developer-web';
 
 type Draft=Pick<AppRegistration,'name'|'description'|'repository'|'icon'|'callbacks'|'native'>;
 const blank=():Draft=>({name:'',description:'',repository:'',icon:null,callbacks:[''],native:false});
@@ -10,6 +10,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
   const [apps,setApps]=useState<AppRegistration[]|null>(null);
   const [selection,setSelection]=useState<AppRegistration|'create'|null>(null);
   const [draft,setDraft]=useState<Draft>(blank);
+  const [requirements,setRequirements]=useState(optionalClaims);
   const [deleteConfirm,setDeleteConfirm]=useState(false);
   const [notice,setNotice]=useState('');
   const [busy,setBusy]=useState(false);
@@ -21,6 +22,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
   useEffect(()=>{void load().catch(error=>setNotice(error.message));},[]);
   function edit(item:AppRegistration|'create'|null){
     setSelection(item);setDeleteConfirm(false);setNotice('');setSecret(null);
+    setRequirements(item&&item!=='create'?(item.requirements??optionalClaims):optionalClaims);
     setDraft(item&&item!=='create'?{...item,callbacks:item.callbacks??[item.callback]}:blank());
   }
   function work(job:()=>Promise<void>){
@@ -42,7 +44,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
     <a href="/profile/developer">Manage your developer profile</a>
     {apps?.map(item=><button type="button" className="xc-card xc-permission-link xc-portal-app" onClick={()=>edit(item)} key={item.id}>
       <span className="xc-symbol xc-lavender">{item.icon?<img src={'data:image/png;base64,'+item.icon} alt=""/>:<Grid2X2 size={20}/>}</span>
-      <span className="xc-permission-name"><strong className="xc-identity-label">{item.name}<TrustBadges kind="app" verified={item.verified}/></strong><span>{item.native?'Native app':'Website'} · {item.status}</span></span>
+      <span className="xc-permission-name"><strong className="xc-identity-label">{item.name}<TrustBadges compact kind="app" verified={item.verified}/></strong><span>{item.native?'Native app':'Website'} · {item.status}</span></span>
       <ChevronRight className="xc-permission-chevron" size={20}/>
     </button>)}
     {apps?.length===0&&<p className="xc-empty">You haven’t registered any apps yet.</p>}
@@ -55,8 +57,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
   return <div className="xc-stack">
     {existing?.status==='active'&&existing.verified&&<a className="xc-button xc-secondary xc-self-start" href={'/developer/storage/'+existing.id}><Database size={17}/> Manage app storage</a>}
     <button type="button" className="xc-button xc-secondary xc-self-start" onClick={()=>edit(null)} disabled={busy}><ArrowLeft size={16}/> Registered apps</button>
-    <div className="xc-row-head"><h2>{existing?.name??'Register an app'}</h2>
-      <TrustBadges kind="app" verified={existing?.verified}/></div>
+    <div><h2>{existing?.name??'Register an app'}</h2><TrustBadges kind="app" verified={existing?.verified}/></div>
     <form className="xc-stack" onSubmit={event=>{event.preventDefault();save();}}>
       <div className="xc-profile-head xc-portal-profile">
         <span className="xc-symbol xc-lavender">{draft.icon?<img alt="" src={'data:image/png;base64,'+draft.icon}/>:<Grid2X2 size={22}/>}</span>
@@ -90,6 +91,21 @@ export default function DeveloperPortal({back}:{back:()=>void}){
       </fieldset>
       <button className="xc-button xc-primary xc-self-start" disabled={busy}>{existing?'Save app profile':'Register app'}</button>
     </form>
+    {existing&&<form onSubmit={event=>{
+      event.preventDefault();work(async()=>{
+        const result=await developerApi('apps/'+existing.id+'/permissions',requirements,'PUT');
+        setSelection({...existing,requirements:result.requirements});setRequirements(result.requirements);
+        await load();setNotice('App permissions saved.');
+      });
+    }}>
+      <fieldset className="xc-callbacks xc-claim-settings">
+        <legend>Permissions</legend>
+        <p>Require only the profile information this app needs to work. The app must request these scopes during sign-in.</p>
+        <label><input type="checkbox" checked={requirements.email} onChange={event=>setRequirements({...requirements,email:event.target.checked})}/> Require a verified email address</label>
+        <label><input type="checkbox" checked={requirements.age_range} onChange={event=>setRequirements({...requirements,age_range:event.target.checked})}/> Require age range</label>
+        <button className="xc-button xc-secondary" disabled={busy||(requirements.email===!!existing.requirements?.email&&requirements.age_range===!!existing.requirements?.age_range)}>Save permissions</button>
+      </fieldset>
+    </form>}
     {existing?.status==='pending'&&<div className="xc-info"><strong>Verify your callback domain</strong>
       <code>{'_xcenter-id.'+new URL(existing.callback).hostname}</code><code>{'xcenter-id='+existing.id}</code>
       <button className="xc-button xc-secondary" disabled={busy} onClick={()=>work(async()=>{

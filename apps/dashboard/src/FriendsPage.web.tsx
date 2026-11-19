@@ -50,7 +50,7 @@ export default function FriendsPage() {
       <label>Friend’s username<input value={username} onChange={event=>setUsername(event.target.value)} maxLength={24} required autoComplete="off"/></label>
       <button className="xc-button xc-primary" disabled={busy}>Send request</button>
     </form>
-    {requests.map(item=><div className="xc-list-row" key={item.id}><span className="xc-identity-label"><strong>@{item.username}</strong><TrustBadges verified={item.verified} admin={item.admin}/></span><div className="xc-actions">{[true,false].map(accept=><button type="button" key={String(accept)} className="xc-button xc-secondary" onClick={()=>void action(async()=>{await api('friends/respond',{id:item.id,accept});await load();})}>{accept?'Accept':'Decline'}</button>)}</div></div>)}
+    {requests.map(item=><div className="xc-list-row" key={item.id}><span className="xc-identity-label"><strong>@{item.username}</strong><TrustBadges compact verified={item.verified} admin={item.admin}/></span><div className="xc-actions">{[true,false].map(accept=><button type="button" key={String(accept)} className="xc-button xc-secondary" onClick={()=>void action(async()=>{await api('friends/respond',{id:item.id,accept});await load();})}>{accept?'Accept':'Decline'}</button>)}</div></div>)}
     {mode&&<dialog ref={dialog} className="xc-intro" onCancel={event=>{event.preventDefault();closeInvite();}} aria-labelledby="friend-invite-title">
     <h2 id="friend-invite-title">{mode==='create'?'Share an invitation':'Accept an invitation'}</h2>
     {mode==='create'?(invite?<div className="xc-stack"><strong>{invite}</strong><button type="button" className="xc-button xc-secondary" onClick={()=>void action(async()=>{await navigator.clipboard.writeText(location.origin+'/friends#invite='+invite);setStatus('Invitation link copied.');})}>Copy invitation link</button></div>:<p>Creating invitation…</p>):
@@ -61,7 +61,7 @@ export default function FriendsPage() {
       <button className="xc-button xc-primary xc-self-start" disabled={busy||![10,32].includes(code.trim().length)}>Accept invitation</button>
     </form>}<button type="button" className="xc-button xc-secondary" onClick={closeInvite}>Close</button>{status&&<p role="status">{status}</p>}</dialog>}
     {friends.map(friend=><div className="xc-list-row" key={friend.id}>
-      <div className="xc-row-head"><span className="xc-avatar">{friend.avatar?<img src={friend.avatar} alt=""/>:<UserRound size={20}/>}</span><span className="xc-identity-label"><strong>@{friend.username}</strong><TrustBadges verified={friend.verified} admin={friend.admin}/></span></div>
+      <div className="xc-row-head"><span className="xc-avatar">{friend.avatar?<img src={friend.avatar} alt=""/>:<UserRound size={20}/>}</span><span className="xc-identity-label"><strong>@{friend.username}</strong><TrustBadges compact verified={friend.verified} admin={friend.admin}/></span></div>
       <button className="xc-button xc-secondary" disabled={busy} onClick={()=>{
         if(confirm!==friend.id){setConfirm(friend.id);return;}
         void action(async()=>{await api('friends/'+friend.id,{},'DELETE');setConfirm('');await load();});

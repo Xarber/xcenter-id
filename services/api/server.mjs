@@ -68,7 +68,7 @@ export function createApiHandler({ store, authenticate, apps, consoleClient, dev
       const url = new URL(req.url, 'http://localhost');
       const method = req.method;
       if (method === 'GET' && url.pathname === '/health') return json(res, 200, { status: 'ok' });
-      const brandId=/^\/v1\/developer\/apps\/([0-9a-f-]{36})\/(brand|profile)$/.exec(url.pathname);
+      const brandId=/^\/v1\/developer\/apps\/([0-9a-f-]{36})\/(brand|profile|permissions)$/.exec(url.pathname);
       const developerRoute = url.pathname === '/v1/developer/apps' || !!brandId || url.pathname==='/v1/developer/profile';
       const consoleRoute = url.pathname === '/v1/grants';
       const recordRoute = url.pathname === '/v1/records/saved-place';
@@ -93,6 +93,12 @@ export function createApiHandler({ store, authenticate, apps, consoleClient, dev
           if(method!=='PUT')throw new HttpError(405,'method_not_allowed');
           const input=await readJson(req,64_000);
           const [ ,id,kind]=brandId;
+          if(kind==='permissions'){
+            if(typeof input.email!=='boolean'||typeof input.age_range!=='boolean')throw new HttpError(422,'Choose whether each permission is required.');
+            const requirements=registry.saveRequirements(owner,id,input);
+            if(!requirements)throw new HttpError(404,'registration_unavailable');
+            return json(res,200,{requirements});
+          }
           if(kind==='profile'){
             const profile=await validateApplicationProfile(input).catch(error=>{throw new HttpError(422,error.message);});
             const item=registry.saveApp(owner,id,profile);

@@ -142,3 +142,23 @@ export function createFriendRoutes({accounts,friends}) {
     return friends.accept(user.owner,input?.code)?send(res,200,{ok:true}):send(res,422,{error:'This invitation cannot be accepted.'});
   };
 }
+
+
+export function createAppFriendRoutes({accounts,friends,authorize,subject}) {
+  return async (req,res)=>{
+    const headers={
+      'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
+      'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET, OPTIONS','Access-Control-Allow-Headers':'Authorization',
+    };
+    if(req.method==='OPTIONS')return res.writeHead(204,headers).end();
+    if(req.method!=='GET')return res.writeHead(405,{...headers,Allow:'GET, OPTIONS'}).end();
+    const token=/^Bearer ([A-Za-z0-9_-]{20,200})$/.exec(req.headers.authorization??'')?.[1];
+    const access=token&&await authorize(token);
+    if(!access)return res.writeHead(401,headers).end(JSON.stringify({error:'A user access token with friends permission is required.'}));
+    const entries=friends.list(access.owner).flatMap(({owner})=>{
+      const username=accounts.username(owner);
+      return username?[{username,sub:subject(owner,access.client)}]:[];
+    });
+    return res.writeHead(200,headers).end(JSON.stringify({friends:entries}));
+  };
+}

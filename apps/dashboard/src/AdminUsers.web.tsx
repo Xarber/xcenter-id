@@ -50,7 +50,7 @@ export function AdminAccounts(){
   return <><section className="xc-card xc-pad xc-stack">
     {name?<><a className="xc-button xc-secondary xc-self-start" href="/admin" aria-label="All accounts" title="All accounts"><ArrowLeft size={20}/></a>
       {user&&<>
-        <div className="xc-row-head"><AdminAvatar username={user.username} hasPicture={user.hasPicture}/><div><h2 className="xc-identity-label">{user.name}<TrustBadges verified={user.verified} admin={user.admin}/></h2><p>@{user.username} · {user.locked?'Locked':'Active'}</p></div></div>
+        <div className="xc-row-head"><AdminAvatar username={user.username} hasPicture={user.hasPicture}/><div><h2 className="xc-identity-label">{user.name}<TrustBadges compact verified={user.verified} admin={user.admin}/></h2><p>@{user.username} · {user.locked?'Locked':'Active'}</p></div></div>
         <p>{user.passkeys} passkeys · {user.devices} sessions · {formatBytes(user.capacity)} capacity</p>
         <p>Created {new Date(user.created).toLocaleDateString()}</p>
         <div className="xc-actions">
@@ -89,11 +89,11 @@ export function AdminAccounts(){
         <details><summary>What these actions do</summary><p>Lock restricts account use while keeping sessions. Sign out all devices revokes sessions. Delete removes the identity and credentials after confirmation. Premium aliases enables named Hide My Email addresses. Verification and administrator access are separate privileges.</p></details>
         <h3>Connected apps</h3>
         {!user.apps.length&&<p>No connected apps.</p>}
-        {user.apps.map(app=><div className="xc-identity-label" key={app.client}>{app.label}<TrustBadges kind="app" verified={app.verified}/></div>)}
+        {user.apps.map(app=><div className="xc-identity-label" key={app.client}>{app.label}<TrustBadges compact kind="app" verified={app.verified}/></div>)}
         <section className="xc-stack"><div className="xc-row-head"><BadgeCheck size={21}/><h2>Registered apps</h2></div>
         {!registrations.length&&<p>No registered apps.</p>}
         {registrations.map(app=><div key={app.id} className="xc-list-row xc-permission-row">
-          <div><strong className="xc-identity-label">{app.name}<TrustBadges kind="app" verified={app.verified}/></strong><p>{app.status}{app.restricted?' · Restricted':''}</p><p>{new URL(app.callback).hostname}</p></div>
+          <div><strong className="xc-identity-label">{app.name}<TrustBadges compact kind="app" verified={app.verified}/></strong><p>{app.status}{app.restricted?' · Restricted':''}</p><p>{new URL(app.callback).hostname}</p></div>
           <div className="xc-actions"><IconAction label={app.verified?'Remove app verification':'Verify app'} disabled={busy} onClick={()=>run(()=>mutate('admin/apps',{type:'app',id:app.id,verified:!app.verified}))}><ShieldCheck size={20}/></IconAction>{app.status==='active'&&app.verified&&!app.restricted&&<a className="xc-button xc-secondary" href={'/developer/storage/'+app.id+'?account='+user.username}><Database size={17}/> Manage app storage</a>}</div>
           {<div className="xc-actions">
             {app.status==='active'&&<IconAction label={app.restricted?'Restore app':'Restrict app'} disabled={busy} onClick={()=>run(()=>mutate('admin/users/'+user.username,
@@ -108,7 +108,7 @@ export function AdminAccounts(){
     </>:<><h2>Accounts</h2><label>Find an account<input type="search" value={filter} onChange={event=>setFilter(event.target.value)}/></label>
       {users.filter(user=>user.username.includes(filter.toLowerCase().trim())).map(user=>
         <a className="xc-list-row" key={user.username} href={'/admin/users/'+user.username}>
-          <span className="xc-row-head"><AdminAvatar username={user.username} hasPicture={user.hasPicture}/><span className="xc-identity-label"><strong>@{user.username}</strong><TrustBadges verified={user.verified} admin={user.admin}/></span></span>
+          <span className="xc-row-head"><AdminAvatar username={user.username} hasPicture={user.hasPicture}/><span className="xc-identity-label"><strong>@{user.username}</strong><TrustBadges compact verified={user.verified} admin={user.admin}/></span></span>
           {user.locked&&<LockKeyhole size={18} aria-label="Locked"/>}
         </a>)}</>}
     {status&&<p role="status">{status}</p>}

@@ -5,7 +5,7 @@ import {openApplicationData} from './application-data.mjs';
 import { createAdminUsers } from './admin-users.mjs';
 import { createSupportRoutes } from './support-routes.mjs';
 import { createFriendRecordRoutes, openFriendRecords } from './friend-records.mjs';
-import { createFriendRoutes, openFriends } from './account-friends.mjs';
+import { createAppFriendRoutes, createFriendRoutes, openFriends } from './account-friends.mjs';
 import { handleInbox, handleMailAliases } from './mail-routes.mjs';
 import { createAdminAppRoutes } from './admin-apps.mjs';
 import { hkdfSync } from 'node:crypto';
@@ -146,11 +146,22 @@ const types = new Map(Object.entries({
   svg: 'image/svg+xml', css:'text/css; charset=utf-8', ttf: 'font/ttf', txt: 'text/plain',
 }));
 
+const appFriendRoutes=provider&&friends&&createAppFriendRoutes({
+  accounts,friends,authorize:provider.friendAccess,subject:provider.friendSubject,
+});
+
 createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   const target = new URL(req.url, 'http://localhost');
   const path = target.pathname;
   const forwardedOrigin='https://'+req.headers['x-forwarded-host'];
   const externalSample=sampleOrigins.has(forwardedOrigin)&&req.headers['x-forwarded-proto']==='https';
+  if(path==='/v1/profile/friends'&&appFriendRoutes){
+    void appFriendRoutes(req,res).catch(()=>{
+      if(!res.headersSent)res.writeHead(503,{'Cache-Control':'no-store'});
+      res.end();
+    });
+    return;
+  }
   if(path==='/v1/profile/avatar'){
     const headers={'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
     if(req.method==='OPTIONS'){
@@ -277,7 +288,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     });
     return;
   }
-  if (['/account/developer/apps','/account/developer/profile'].includes(path) || /^\/account\/developer\/apps\/[0-9a-f-]{36}\/(?:brand|profile)$/.test(path)) {
+  if (['/account/developer/apps','/account/developer/profile'].includes(path) || /^\/account\/developer\/apps\/[0-9a-f-]{36}\/(?:brand|profile|permissions)$/.test(path)) {
     if (req.method !== 'GET' && (!accounts.allowsMutation(req) || req.headers['x-authnjs-request'] !== 'developer-portal')) {
       res.writeHead(403, { 'Cache-Control': 'no-store', 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'invalid_origin' }));

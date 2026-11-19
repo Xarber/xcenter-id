@@ -1,6 +1,8 @@
 export type DeveloperIdentity={name:string;status:'unverified'|'requested'|'verified'};
+export type ClaimRequirements={email:boolean;age_range:boolean};
+export const optionalClaims:ClaimRequirements={email:false,age_range:false};
 export type AppRegistration={id:string;name:string;description:string;repository:string;icon:string|null;callbacks:string[];
-  callback:string;native?:boolean;client?:string;status:'active'|'pending'|'revoked';verified?:boolean};
+  callback:string;native?:boolean;client?:string;status:'active'|'pending'|'revoked';verified?:boolean;requirements?:ClaimRequirements};
 
 export async function developerApi(path:string,body?:object,method=body?'POST':'GET'){
   const response=await fetch('/account/developer/'+path,{

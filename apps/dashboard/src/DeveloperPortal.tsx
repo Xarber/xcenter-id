@@ -1,3 +1,4 @@
+import { optionalClaims, type ClaimRequirements, type DeveloperIdentity } from './developer-web';
 import TrustBadges from './TrustBadges';
 import ApplicationStorage from './ApplicationStorage';
 import { getDocumentAsync } from 'expo-document-picker';
@@ -5,16 +6,17 @@ import { File } from 'expo-file-system';
 import { accountHost } from './native-account';
 import { fileAsBase64 } from './web-account';
 import { useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, TextInput, useColorScheme, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Switch, Text, TextInput, useColorScheme, View } from 'react-native';
 import Animated, { Easing, FadeIn, ReduceMotion } from 'react-native-reanimated';
 
-type Registration = { id: string; name: string; callback: string; status: string; native?:boolean; client?: string; developerName?:string; icon?:string|null; verified?:boolean };
+type Registration = { id: string; name: string; callback: string; status: string; native?:boolean; client?: string; developerName?:string; icon?:string|null; verified?:boolean; requirements?:ClaimRequirements };
 const entering = FadeIn.duration(180).easing(Easing.bezier(0.23, 1, 0.32, 1)).reduceMotion(ReduceMotion.System);
 
 export default function DeveloperPortal({ back,token,colors }: { back: () => void;token?:string;colors?:{ink:string;accent:string;muted:string;soft:string} }) {
   const endpoint=(token?accountHost:'')+'/account/developer/apps';
   function request(path='',init:RequestInit={}){
-    return fetch(endpoint+path,{...init,credentials:token?'omit':'same-origin',headers:{
+    const url=path==='/developer-profile'?endpoint.replace(/\/apps$/,'/profile'):endpoint+path;
+    return fetch(url,{...init,credentials:token?'omit':'same-origin',headers:{
       'X-AuthNJS-Request':'developer-portal',
       ...(token?{'X-AuthNJS-Native':'account-manager',Authorization:'Bearer '+token}:{}),
       ...init.headers,
@@ -24,6 +26,11 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
   const ink = colors?.ink??(dark ? '#f4f7ff' : '#142438');
   const accent = colors?.accent??(dark ? '#b9d0ff' : '#1b469b');
   const border = dark ? '#5a7192' : '#62738c';
+  const [profile,setProfile]=useState<DeveloperIdentity|null>(null);
+  const [profileName,setProfileName]=useState('');
+  const [editingDeveloper,setEditingDeveloper]=useState(false);
+  const [permissionApp,setPermissionApp]=useState('');
+  const [requirements,setRequirements]=useState(optionalClaims);
   const [creating,setCreating]=useState(false);
   const [storage,setStorage]=useState('');
   const [apps, setApps] = useState<Registration[] | null>(null);
@@ -52,6 +59,40 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
       .catch(() => { if (!controller.signal.aborted) setNotice('Sign in through the developer account service to register an app.'); });
     return () => controller.abort();
   }, [token]);
+
+  async function openDeveloper(){
+    setSaving(true);
+    try{
+      const response=await request('/developer-profile');
+      if(!response.ok)throw new Error();
+      const result=await response.json();
+      setProfile(result);setProfileName(result.name);setEditingDeveloper(true);setNotice('');
+    }catch{setNotice('Could not load the developer profile.');}
+    finally{setSaving(false);}
+  }
+
+  async function saveDeveloper(requestVerification=false){
+    setSaving(true);
+    try{
+      const response=await request('/developer-profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:profileName,requestVerification})});
+      const result=await response.json();
+      if(!response.ok)throw new Error(result.error);
+      setProfile(result);setProfileName(result.name);setNotice(requestVerification?'Verification request submitted.':'Developer profile saved.');
+    }catch(error){setNotice(error instanceof Error?error.message:'Could not save the developer profile.');}
+    finally{setSaving(false);}
+  }
+
+  async function savePermissions(id:string){
+    setSaving(true);
+    try{
+      const response=await request('/'+id+'/permissions',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(requirements)});
+      const result=await response.json();
+      if(!response.ok)throw new Error(result.error);
+      setApps(previous=>previous?.map(app=>app.id===id?{...app,requirements:result.requirements}:app)??null);
+      setPermissionApp('');setNotice('App permissions saved.');
+    }catch(error){setNotice(error instanceof Error?error.message:'Could not save app permissions.');}
+    finally{setSaving(false);}
+  }
 
   async function submit() {
     if (saving || !apps) return;
@@ -131,9 +172,9 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
   }
   function branding(){
     return <>
-      <Text style={{color:ink}}>Developer name shown to users</Text>
+      <Text style={{color:ink}}>Developer name fallback</Text>
       <TextInput accessibilityLabel="Developer name" style={[styles.input,{color:ink,borderColor:border}]}
-        value={developerName} onChangeText={setDeveloperName} maxLength={80} placeholder="Use your account name by default"/>
+        value={developerName} onChangeText={setDeveloperName} maxLength={80} placeholder="Your developer profile takes priority"/>
       {icon&&<Image accessibilityLabel="Selected app icon" source={{uri:'data:image/'+(icon.startsWith('/9j/')?'jpeg':'png')+';base64,'+icon}} style={styles.icon}/>}
       {action('Choose app icon',()=>void selectIcon(),saving)}
       {icon&&action('Remove app icon',()=>setIcon(null),saving)}
@@ -146,11 +187,24 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
     </Pressable>;
   }
 
+  if(editingDeveloper)return <View style={styles.content}>
+    {action('Back to developer apps',()=>setEditingDeveloper(false),saving)}
+    <Text accessibilityRole="header" style={[styles.title,{color:ink}]}>Developer profile</Text>
+    <TrustBadges kind="developer" verified={profile?.status==='verified'} color={accent}/>
+    {profile?.status==='requested'&&<Text style={{color:ink}}>Verification in review</Text>}
+    <Text style={{color:ink}}>Developer display name</Text>
+    <TextInput accessibilityLabel="Developer display name" value={profileName} onChangeText={setProfileName} maxLength={80} style={[styles.input,{color:ink,borderColor:border}]}/>
+    {profile?.status==='verified'&&profile.name!==profileName.trim()&&<Text accessibilityLiveRegion="polite" style={{color:ink}}>Changing your developer name removes its verified badge. You’ll need to request verification again.</Text>}
+    {action('Save developer name',()=>void saveDeveloper(),saving||!profileName.trim())}
+    {profile?.status==='unverified'&&action('Request verification',()=>void saveDeveloper(true),saving||!profileName.trim())}
+    {notice&&<Text accessibilityLiveRegion="polite" style={{color:ink}}>{notice}</Text>}
+  </View>;
   if(storage&&token)return <ApplicationStorage id={storage} token={token} colors={colors??{ink,accent,muted:border,soft:dark?'#23355d':'#e9f0ff'}} back={()=>setStorage('')}/>;
   return <Animated.View entering={entering} style={styles.content}>
     {action('Back to X-Center ID', back)}
     <Text accessibilityRole="header" style={[styles.title, { color: ink }]}>Developer apps</Text>
     <Text style={{ color: ink }}>Register an exact HTTPS callback, then verify your domain to activate sign-in.</Text>
+    {action('Manage developer profile',()=>void openDeveloper(),saving)}
     {apps && <>
       {action(creating?'Cancel registration':'Register a new app',()=>setCreating(!creating))}
       {!editing&&creating&&<>
@@ -171,6 +225,15 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
           {action('Save branding',()=>void saveBrand(app.id),saving)}
           {action('Cancel editing',()=>{setEditing(null);setDeveloperName('');setIcon(null);},saving)}</>
           :action('Edit branding',()=>{setEditing(app.id);setDeveloperName(app.developerName??'');setIcon(app.icon??null);},saving))}
+        {permissionApp===app.id?<View style={{gap:10}}>
+          <Text accessibilityRole="header" style={{color:ink,fontWeight:'700'}}>Permissions</Text>
+          <Text style={{color:ink}}>The app must request the scopes you mark as required.</Text>
+          {([['email','Require a verified email address'],['age_range','Require age range']] as const).map(([key,label])=><View key={key} style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12}}>
+            <Text style={{color:ink,flex:1}}>{label}</Text><Switch accessibilityLabel={label} value={requirements[key]} disabled={saving} onValueChange={value=>setRequirements({...requirements,[key]:value})}/>
+          </View>)}
+          {action('Save permissions',()=>void savePermissions(app.id),saving)}
+          {action('Cancel',()=>setPermissionApp(''),saving)}
+        </View>:action('Edit permissions',()=>{setRequirements(app.requirements??optionalClaims);setPermissionApp(app.id);},saving)}
         {app.status==='active'&&action('Manage application database',()=>setStorage(app.id))}
         {app.status !== 'revoked' && (revoking === app.id ? <>
           <Text style={{color:ink}}>This disables sign-in and API access. Stored records are retained.</Text>

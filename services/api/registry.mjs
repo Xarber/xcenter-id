@@ -14,6 +14,7 @@ export function openRegistry(path) {
     CREATE TABLE IF NOT EXISTS app_restrictions(id TEXT PRIMARY KEY, restricted INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS client_native(id TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS app_profiles(id TEXT PRIMARY KEY, description TEXT NOT NULL, repository TEXT NOT NULL, callbacks TEXT NOT NULL, verified INTEGER NOT NULL DEFAULT 0) STRICT;
+    CREATE TABLE IF NOT EXISTS app_requirements(id TEXT PRIMARY KEY, email INTEGER NOT NULL, age_range INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS developer_profiles(owner TEXT PRIMARY KEY,name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unverified') STRICT;
   `);
   const add = db.prepare("INSERT INTO clients (id, developer, name, callback) SELECT ?, ?, ?, ? WHERE (SELECT count(*) FROM clients WHERE developer = ? AND status <> 'revoked') < 30");
@@ -26,8 +27,10 @@ export function openRegistry(path) {
 
   const setBrand=db.prepare(`INSERT INTO client_brand VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET
     developer_name=excluded.developer_name,icon=excluded.icon`);
+  const readRequirements=db.prepare("SELECT email,age_range FROM app_requirements WHERE id=?");
   const appView=row=>row?{...row,description:row.description??'',repository:row.repository??'',
-    callbacks:row.callbacks?JSON.parse(row.callbacks):[row.callback],verified:!!row.verified}:undefined;
+    callbacks:row.callbacks?JSON.parse(row.callbacks):[row.callback],verified:!!row.verified,...(row.id?{requirements:requirements(row.id)}:{})}:undefined;
+  const requirements=id=>{const row=readRequirements.get(id);return {email:!!row?.email,age_range:!!row?.age_range};};
   const detailByClient=db.prepare(`SELECT c.name,c.callback,p.callbacks FROM clients c LEFT JOIN app_profiles p ON p.id=c.id
     WHERE c.client=? AND c.status='active' AND c.id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)`);
   const writeAppProfile=db.prepare(`INSERT INTO app_profiles(id,description,repository,callbacks) VALUES(?,?,?,?)
@@ -41,16 +44,23 @@ export function openRegistry(path) {
     registration:id=>db.prepare('SELECT c.id,c.client,c.developer,c.status,p.verified FROM clients c LEFT JOIN app_profiles p ON p.id=c.id WHERE c.id=?').get(id),
     clientForId:id=>db.prepare('SELECT client FROM clients WHERE id=?').get(id)?.client,
     brand: (client) => db.prepare(`SELECT c.developer AS owner,c.name,coalesce(nullif(d.name,''),b.developer_name) AS developerName,
-      b.icon,p.description,p.repository,p.verified,d.status AS developerStatus
+      b.icon,p.description,p.repository,p.verified,d.status AS developerStatus,r.email AS requiresEmail,r.age_range AS requiresAgeRange
       FROM clients c LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN app_profiles p ON p.id=c.id
-      LEFT JOIN developer_profiles d ON d.owner=c.developer WHERE c.client=? AND c.status='active' AND c.id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)`).get(client),
+      LEFT JOIN developer_profiles d ON d.owner=c.developer LEFT JOIN app_requirements r ON r.id=c.id WHERE c.client=? AND c.status='active' AND c.id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)`).get(client),
     publicDetails: client=>appView(detailByClient.get(client)),
     developer: developerView,
+    saveRequirements(owner,id,input){
+      const app=lookup.get(id,owner);
+      if(!app||app.status==='revoked')return null;
+      db.prepare('INSERT INTO app_requirements VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email,age_range=excluded.age_range')
+        .run(id,Number(input.email),Number(input.age_range));
+      return requirements(id);
+    },
     saveDeveloper(owner,name,request){
       const previous=developerView(owner);
       if(request&&(!readOpenSource.get(owner)||!name))return null;
-      const status=request&&previous.status!=='verified'?'requested':
-        previous.status==='verified'&&previous.name!==name?'unverified':previous.status;
+      const changed=previous.name!==name;
+      const status=request&&(previous.status!=='verified'||changed)?'requested':changed?'unverified':previous.status;
       db.prepare(`INSERT INTO developer_profiles VALUES(?,?,?) ON CONFLICT(owner) DO UPDATE SET name=excluded.name,status=excluded.status`).run(owner,name,status);
       return developerView(owner);
     },

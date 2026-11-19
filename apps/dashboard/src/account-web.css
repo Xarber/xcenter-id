@@ -164,3 +164,7 @@ input:is([type=checkbox],[type=radio]){inline-size:1.2rem;block-size:1.2rem;min-
 .xc-trust-badges .xc-trust-admin{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
 .xc-trust-badge svg{flex:none}
 .xc-identity-label{display:flex;align-items:center;flex-wrap:wrap;gap:5px 8px;min-width:0;overflow-wrap:anywhere}
+.xc-trust-badges.xc-trust-compact{flex-wrap:nowrap;gap:4px}
+.xc-trust-compact .xc-trust-badge{padding:2px 4px}
+.xc-stack .xc-claim-settings label{flex-direction:row;align-items:center;gap:8px;margin-block:10px}
+.xc-stack .xc-claim-settings input{width:1rem;height:1rem;flex:none;accent-color:var(--blue)}

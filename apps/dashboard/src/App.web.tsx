@@ -369,7 +369,7 @@ export default function WebApp(){
   else content=<>
     <section className="xc-hero">
       <div><p className="xc-kicker">{accountMessage('personalAccount','Personal account')}</p><h2>{accountGreeting(profile.givenName)}</h2><p>@{profile.username}</p><TrustBadges verified={account.verified} admin={account.admin}/>
-        <a className="xc-button xc-hero-button" href="/profile">{accountMessage('viewProfile','View profile')} <ArrowRight size={16}/></a></div>
+        <div><a className="xc-button xc-hero-button" href="/profile">{accountMessage('viewProfile','View profile')} <ArrowRight size={16}/></a></div></div>
       <div className="xc-avatar xc-hero-avatar">{picture?<img src={picture} alt=""/>:<UserRound size={43}/>}</div>
     </section>
     <section className="xc-shortcuts" aria-label="Account shortcuts">

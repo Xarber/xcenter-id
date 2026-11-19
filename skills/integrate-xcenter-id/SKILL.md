@@ -23,4 +23,4 @@ Bind code exchange and login completion to a single-use transaction created befo
 
 Verify cancellation, callback failure, process restart, wrong client, wrong callback, wrong PKCE verifier, replay, pending/revoked registration and unauthorized data access. Only report installation or device sign-in when actually executed. Document the installed files, portal identity, tested platforms and remaining activation steps in the target project. Registering a relying-party app does not authorize publishing it or changing another app.
 
-For sync, use [the private sync and permissions workflow](references/capabilities.md#private-sync-and-permissions) to map each requested category to real app features, consent and storage. Account-manager files, mail and administration remain dashboard features.
+Read the [capability reference](references/capabilities.md) to implement profile and email claims, required permissions, friend import, verified app storage, public data, and cross-app sharing. Use the dashboard for user-owned account management.

@@ -67,7 +67,7 @@ export default function PermissionsPage({client}: {client?:string}) {
         +state.samples.filter(item=>item.destination===app.client&&item.expires).length;
       return <a className="xc-card xc-permission-link" key={app.client} href={appPath(app.client)}>
         <AppIcon key={app.icon} icon={app.icon}/>
-        <span className="xc-permission-name"><strong className="xc-identity-label">{app.name}<TrustBadges kind="app" verified={app.verified}/></strong>
+        <span className="xc-permission-name"><strong className="xc-identity-label">{app.name}<TrustBadges compact kind="app" verified={app.verified}/></strong>
           <span>{allowed?allowed+' active '+(allowed===1?'permission':'permissions'):linked.has(app.client)?'Linked':sample?'Test app':'Registered app'}</span>
         </span><ChevronRight className="xc-permission-chevron" size={20} aria-hidden="true"/>
       </a>;
@@ -85,7 +85,7 @@ export default function PermissionsPage({client}: {client?:string}) {
   const sources=state.apps.filter(app=>app.client!==client&&!incoming.some(item=>item.source===app.client));
   function savedPlaces(grant:Grant,other:string){
     return <div className="xc-list-row xc-permission-row" key={grant.source+grant.destination}>
-      <div className="xc-row-head"><MapPin size={18} aria-hidden="true"/><div><strong className="xc-identity-label">{appName(other)}<TrustBadges kind="app" verified={directory.get(other)?.verified}/></strong>
+      <div className="xc-row-head"><MapPin size={18} aria-hidden="true"/><div><strong className="xc-identity-label">{appName(other)}<TrustBadges compact kind="app" verified={directory.get(other)?.verified}/></strong>
         <p>Saved places · Read only · {duration(grant.expires)}</p></div></div>
       <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>void change('data-grants','DELETE',grant.source,grant.destination)}>
         <X size={15} aria-hidden="true"/> Revoke access
@@ -114,7 +114,7 @@ export default function PermissionsPage({client}: {client?:string}) {
     {back}<HostedDataPermissions client={client}/>
     <section className="xc-card xc-pad xc-permission-heading">
       <AppIcon key={selected.icon} icon={selected.icon}/>
-      <div><h2 className="xc-identity-label">{selected.name}<TrustBadges kind="app" verified={selected.verified}/></h2><p>{linked.has(client)?'Linked to your X-Center ID':'Manage what this app can share or access.'}</p>{selected.description&&<p>{selected.description}</p>}</div>
+      <div><h2 className="xc-identity-label">{selected.name}<TrustBadges compact kind="app" verified={selected.verified}/></h2><p>{linked.has(client)?'Linked to your X-Center ID':'Manage what this app can share or access.'}</p>{selected.description&&<p>{selected.description}</p>}</div>
     </section>
     <section className="xc-card xc-pad">
       <div className="xc-row-head"><ArrowDownLeft size={20} aria-hidden="true"/><h2>Data this app can access</h2></div>

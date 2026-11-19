@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
 import { createAccountFiles } from './account-files.mjs';
-import { openFriends } from "./account-friends.mjs";
+import { createAppFriendRoutes, openFriends } from "./account-friends.mjs";
 import { createSamplePermissions } from './sample-permissions.mjs';
 import { openStore } from './store.mjs';
 
@@ -122,4 +122,29 @@ test('only the named recipient can accept a username friend request',()=>{
     assert.ok(friends.linked('sender','recipient'));
     assert.equal(friends.answer('recipient',id,true),false);
   }finally{friends.close();}
+});
+
+
+test('app friend import requires a scoped user token and only includes same-app subjects',async()=>{
+  const friends=openFriends(':memory:');
+  assert.equal(friends.accept('same-app',friends.invite('member').code),true);
+  assert.equal(friends.accept('other-app',friends.invite('member').code),true);
+  const token=randomBytes(32).toString('base64url');
+  const handler=createAppFriendRoutes({
+    accounts:{username:owner=>owner},friends,
+    authorize:value=>value===token?{owner:'member',client:'fixture-app'}:null,
+    subject:(owner,client)=>owner==='same-app'&&client==='fixture-app'?'pairwise-fixture':undefined,
+  });
+  const server=createServer((req,res)=>void handler(req,res)).listen(0,'127.0.0.1');
+  await once(server,'listening');
+  const url='http://127.0.0.1:'+server.address().port+'/v1/profile/friends';
+  try{
+    assert.equal((await fetch(url)).status,401);
+    const response=await fetch(url,{headers:{Authorization:'Bearer '+token}});
+    assert.equal(response.headers.get('cache-control'),'no-store');
+    const {friends:result}=await response.json();
+    assert.deepEqual(result.find(item=>item.username==='same-app'),{username:'same-app',sub:'pairwise-fixture'});
+    assert.deepEqual(result.find(item=>item.username==='other-app'),{username:'other-app'});
+    assert.equal(result.length,2);
+  }finally{await new Promise(resolve=>server.close(resolve));friends.close();}
 });

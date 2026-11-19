@@ -11,3 +11,9 @@ The secure boundaries are the authenticated account, active friendship identity,
 The first supported dataset is `saved-place.v1`. The operator registers publishers that have opted in under `friendRecordPublishers` in the protected issuer configuration. Entries use the publisher's registered client `id` and display `name`. The capability defaults off. Reported records include the place label and coordinates, visible to the owner before sharing. A recipient sees the current version of the selected place through Friends. Removing the grant, disconnecting the friendship, deleting the record, disabling its publisher or removing that publisher's approval removes access. App access tokens cannot authorize this route. Automated coverage uses synthetic owners and publishers. No production publisher was enabled.
 
 A 390 px Chrome run against an isolated HTTPS issuer verified invitation, sharing a seeded record from an opted-in publisher, recipient visibility, and removal from the recipient's view after revocation. API coverage also verified recipient isolation and re-friending. Installed native verification remains open.
+
+## Friend import by linked apps
+
+An app can request the optional `friends` scope and call `GET /v1/profile/friends` with its user access token. The list contains accepted friends only. A friend gets a `sub` in the response only while that person has linked the same registration. Match it to that registration’s OIDC subject to reconnect the two product accounts. The endpoint derives the registration from the token and does not accept a client ID from the caller. Removing the friendship, unlinking, or withdrawing consent changes subsequent responses.
+
+Isolated Chrome verified the scope, accepted-friend list, same-registration subject, omission for an unlinked friend, and denial after consent withdrawal. Production deployment is pending the saved checkpoint.

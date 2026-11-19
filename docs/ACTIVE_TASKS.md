@@ -315,3 +315,15 @@ Remaining queue dependencies: the XHDD is absent from the guest block-device lis
 The repository publication assignment is blocked on GitHub server-side cleanup. The four-job native workflow is enabled and ready to dispatch on the sanitized testing branch once public visibility can be enabled safely. The last private run failed at runner allocation due to the account billing or spending-limit check.
 
 GitHub Support displayed a successful submission confirmation for the historical-data purge request. The ticket list had not shown a ticket number at verification. Publication and the native build depend on GitHub completing the purge and a fresh check of the old file URLs.
+
+### Consent requirements and friend import
+
+| ID | Request | State | Evidence and next action |
+| --- | --- | --- | --- |
+| AUTHN-077 | Show app and developer badges separately, use the developer profile name, and make email and age requirements editable | Implemented | Required claims are enforced by the issuer and managed by the registration owner. Verified developer name edits require review. Phone-width Chrome verified editable requirements, blocked missing scopes and email approval without a selected address, a locked age switch, developer name and separate app badge, and the dashboard button row. |
+| AUTHN-078 | Support optional friend sharing and describe the full integration surface | Implemented | Linked app bearer tokens can read accepted friends after independent consent. Same-registration friends can be matched using their pairwise subjects. Chrome verified pairwise subject matching, omission for an unlinked friend, scope denial and revocation. The installed skill was refreshed and validated. |
+
+Build gate. The implementation and fixture preparation for the current consent and Friends batch are ready. A web export is the next prerequisite for browser and deployment checks. The private repository publication and native preview remain pending GitHub support cleanup.
+
+
+UADS §0 checkpoint on 19 November. The weekly window has 54% remaining and resets on 25 November at 15:25 CET, six days and about three hours away. Its applicable minimum is 55%, with no weekly reset available. The five-hour window has 97% remaining and resets today at 17:23 CET. API tests (34), dashboard tests (6), TypeScript, UADS validation, web export and isolated browser end-to-end checks passed. An earlier hosted-data test returned 503 while the local disk was nearly full and passed on rerun. Next, stage this tested export and API on 18811, take and verify the seven production snapshots, test discovery and anonymous Friends denial, then cut over from d430aad with rollback retained. Production remains on d430aad. Installed native behavior remains unverified.
