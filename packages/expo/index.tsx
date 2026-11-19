@@ -85,3 +85,5 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   button: { minHeight: 48, justifyContent: 'center', borderRadius: 12, paddingHorizontal: 14 },
 });
+
+export { AccountOverview, type AccountOverviewProps, type OverviewProfile, type OverviewSyncOption } from './account-overview';

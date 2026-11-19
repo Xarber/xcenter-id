@@ -18,6 +18,7 @@ export function openOidcStore(path, key) {
     ON CONFLICT(model,id) DO UPDATE SET grant_id=excluded.grant_id,uid=excluded.uid,user_code=excluded.user_code,
     expires=excluded.expires,payload=excluded.payload`);
   const get = db.prepare('SELECT * FROM oidc_objects WHERE model=? AND id=? AND expires>?');
+  const updateGrantExpiry=db.prepare("UPDATE oidc_objects SET expires=?,payload=? WHERE model='Grant' AND id=?");
   const byUid = db.prepare('SELECT * FROM oidc_objects WHERE model=? AND uid=? AND expires>?');
   const byCode = db.prepare('SELECT * FROM oidc_objects WHERE model=? AND user_code=? AND expires>?');
   const rm = db.prepare('DELETE FROM oidc_objects WHERE model=? AND id=?');
@@ -58,7 +59,24 @@ export function openOidcStore(path, key) {
     async findByUid(uid) { return decode(byUid.get(this.model,uid,now())); }
     async findByUserCode(code) { return decode(byCode.get(this.model,code,now())); }
     async consume(id) {
-      if (consume.run(now(),this.model,id).changes !== 1) throw new Error('Authorization artifact already consumed');
+      const time=now();
+      if(consume.run(time,this.model,id).changes!==1){
+        const prior=get.get(this.model,id,time);
+        throw Object.assign(new Error('Authorization artifact already consumed'),{code:'already_consumed',grantId:prior?.grant_id});
+      }
+    }
+    renewGrant(id,ttl) {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const time=now();
+        const grant=decode(get.get('Grant',id,time));
+        if(grant){
+          grant.exp=time+ttl;
+          updateGrantExpiry.run(grant.exp,encode('Grant',id,grant),id);
+        }
+        db.exec('COMMIT');
+        return !!grant;
+      } catch(error) { db.exec('ROLLBACK'); throw error; }
     }
     async destroy(id) { rm.run(this.model,id); }
     async revokeByGrantId(id) { revoke.run(this.model,id); }

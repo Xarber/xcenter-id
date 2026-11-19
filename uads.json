@@ -39,6 +39,8 @@
     "perAppPermissions": "implemented",
     "developerAppProfiles": "implemented",
     "administratorVerification": "implemented",
+    "rotatingAppSessions": "implemented",
+    "expoAccountOverview": "implemented",
     "mailComposer": "implemented",
     "accountModeration": "implemented",
     "supportInbox": "implemented",

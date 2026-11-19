@@ -20,6 +20,8 @@ Use the [manual developer guide](https://id.xcenter.it/docs#manual) and its HTTP
 4. Authenticate a confidential client's exchange using HTTP Basic on the backend. For a registered public native client, use its client ID and PKCE. Map the verified issuer and pairwise subject to the product's account and issue the product's own session.
 5. For delegated reads, use the returned bearer access token against discovered UserInfo or the documented hosted data route when the app is active, verified and authorized for `app_data`. Treat failure after unlink or deletion as lost access.
 
+Follow [session renewal and account UI](sessions-and-ui.md) for the preferred secure browser handoff and long-lived product sessions.
+
 ## Optional Expo package
 
 The package under packages/expo is @authnjs/expo. It currently targets React 19, React Native >=0.83 <0.89 and Expo 58 authentication modules. Read its package.json and installed target versions. Install from a local checkout or an authorized privately packed artifact. Do not embed a private repository access token into the target app or a package URL.

@@ -2,6 +2,8 @@ import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { errors, interactionPolicy, Provider } from 'oidc-provider';
 import { openOidcStore } from './oidc-store.mjs';
 
+const refreshIdleSeconds = 14 * 24 * 60 * 60;
+
 const escape = (value) => String(value).replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[c]);
@@ -71,8 +73,22 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const app=registry?.publicDetails(id);
       if(!app)return undefined;
       const saved=await super.find(id);
-      return saved?{...saved,client_name:app.name,redirect_uris:app.callbacks}:undefined;
+      return saved?{...saved,client_name:app.name,redirect_uris:app.callbacks,grant_types:['authorization_code','refresh_token']}:undefined;
     }
+    async consume(id) {
+      try { await super.consume(id); }
+      catch(error) {
+        if(this.model==='RefreshToken'&&error.code==='already_consumed'){
+          if(error.grantId)await revokeGrant(error.grantId);
+          throw new errors.InvalidGrant('refresh token already used');
+        }
+        throw error;
+      }
+    }
+  }
+  const grantStorage=new StorageAdapter('Grant');
+  async function revokeGrant(grantId){
+    await Promise.all([grantStorage.destroy(grantId),...['AccessToken','AuthorizationCode','RefreshToken'].map(model=>new StorageAdapter(model).revokeByGrantId(grantId))]);
   }
   const clientsStorage = new StorageAdapter('Client');
   const selections = new Adapter('ClaimSelection');
@@ -122,9 +138,18 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     clients, adapter: Adapter, jwks: configuration.jwks,
     cookies: { keys: configuration.cookieKeys, short: { secure: true, httpOnly: true, sameSite: 'lax' },
       long: { secure: true, httpOnly: true, sameSite: 'lax' } },
-    claims: scopeClaims, scopes: ['openid','profile','email','age_range','app_data','friends'], subjectTypes: ['pairwise'],
+    claims: scopeClaims, scopes: ['openid','profile','email','age_range','app_data','friends','offline_access'], subjectTypes: ['pairwise'],
     pkce: { required: () => true },
-    ttl: { AccessToken:600, AuthorizationCode:90, Interaction:300 },
+    ttl: { AccessToken:600, AuthorizationCode:90, Interaction:300, RefreshToken:refreshIdleSeconds, Grant:refreshIdleSeconds },
+    async issueRefreshToken(ctx,client,source) {
+      if(!registry?.has(client.clientId)||!source.scopes.has('offline_access'))return false;
+      if(!grantStorage.renewGrant(ctx.oidc.entities.Grant.jti,refreshIdleSeconds))throw new errors.InvalidGrant('App grant expired');
+      return true;
+    },
+    async rotateRefreshToken(ctx) {
+      if(!grantStorage.renewGrant(ctx.oidc.entities.Grant.jti,refreshIdleSeconds))throw new errors.InvalidGrant('App grant expired');
+      return true;
+    },
     async loadExistingGrant(ctx) {
       const owner=ctx.oidc.session?.accountId;
       const client=ctx.oidc.client?.clientId;
@@ -142,6 +167,13 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const person = accounts.identity(owner);
       if (!person) return undefined;
       const email=await grantedEmail(owner,person,source?.grantId);
+      if(source&&ctx.oidc.entities.RefreshToken===source){
+        const grant=ctx.oidc.entities.Grant;
+        const brand=registry?.brand(client);
+        const renewed=new Set(grant.getOIDCScopeFiltered(ctx.oidc.params.scope?ctx.oidc.requestParamOIDCScopes:source.scopes).split(' '));
+        if(!renewed.has('offline_access')||(brand?.requiresEmail&&(!renewed.has('email')||!email))||
+          (brand?.requiresAgeRange&&(!renewed.has('age_range')||!person.ageRange)))return undefined;
+      }
       return {
         accountId: owner,
         async claims() {
@@ -193,7 +225,9 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const chooseEmail=missing.has('email')||(requiredEmail&&(!existingScopes.has('email')||!await grantedEmail(active.owner,person,linked)));
     const showAge=missing.has('age_range')||(requiredAge&&scopes.has('age_range'));
     const appData=scopes.has('app_data');
-    const showFriends=scopes.has('friends')&&(missing.has('friends')||String(params.prompt??'').split(' ').includes('consent'));
+    const explicitConsent=String(params.prompt??'').split(' ').includes('consent');
+    const showFriends=scopes.has('friends')&&(missing.has('friends')||explicitConsent);
+    const showOffline=scopes.has('offline_access')&&(missing.has('offline_access')||explicitConsent);
     if (req.method === 'POST') {
       if (req.headers.origin !== issuer) return html(res,'<h1>Could not verify the request</h1>',403);
       let input;
@@ -221,10 +255,11 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const email = premium || alias || (primary?person.username+'@mail.xcenter.it':selected);
       if (email && !alias && !premium && !primary && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
       if(applicationData&&appData)applicationData.authorize(active.owner,client.client_id,input.getAll('data-permission'));
+      const keepSession=showOffline&&input.getAll('permission').includes('offline_access');
       const shareFriends=showFriends&&input.getAll('permission').includes('friends');
       const ageAllowed=scopes.has('age_range')&&showAge&&(requiredAge||input.getAll('permission').includes('age_range'));
-      const allowed=['openid','profile',...(ageAllowed?['age_range']:[]),...(appData?['app_data']:[]),...(shareFriends?['friends']:[]),...(email?['email']:[])];
-      const denied=[...(showAge&&!ageAllowed?['age_range']:[]),...(chooseEmail&&!email?['email']:[]),...(showFriends&&!shareFriends?['friends']:[])];
+      const allowed=['openid','profile',...(ageAllowed?['age_range']:[]),...(appData?['app_data']:[]),...(shareFriends?['friends']:[]),...(keepSession?['offline_access']:[]),...(email?['email']:[])];
+      const denied=[...(showAge&&!ageAllowed?['age_range']:[]),...(chooseEmail&&!email?['email']:[]),...(showFriends&&!shareFriends?['friends']:[]),...(showOffline&&!keepSession?['offline_access']:[])];
       const grant=existingGrant||new provider.Grant({accountId:active.owner,clientId:client.client_id});
       if(grant.rejected?.openid?.scope){
         grant.rejected.openid.scope=grant.getRejectedOIDCScope().split(' ').filter(scope=>!allowed.includes(scope)).join(' ');
@@ -268,6 +303,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         ${!incremental?`<li>${glyph('id')}<span>App-specific account ID, name, username and profile photo · required</span></li>`:''}
         ${showAge?`<li><label class="permission-toggle">${glyph('age')}<span>Age range${requiredAge?`<small>${requiredNote}</small>`:''}</span><input aria-label="Age range" type="checkbox" role="switch" name="permission" value="age_range"${requiredAge?' checked disabled':''}></label></li>`:''}
         ${showFriends?`<li><label class="permission-toggle">${glyph('user')}<span>Friends list<small>Share accepted friends and identify those who already use this app.</small></span><input type="checkbox" role="switch" name="permission" value="friends" aria-label="Friends list"${existingScopes.has('friends')?' checked':''}></label></li>`:''}
+        ${showOffline?`<li><label class="permission-toggle">${glyph('id')}<span>Stay signed in<small>Let this app renew your session while you use it.</small></span><input type="checkbox" role="switch" name="permission" value="offline_access" aria-label="Stay signed in" checked></label></li>`:''}
         ${appData?`<li><label class="permission-toggle">${glyph('records')}<span>Private app storage<small>This app can save and access your records in its own storage.</small></span><input aria-label="Private app storage" type="checkbox" role="switch" checked disabled></label></li>`:''}
       </ul>
       ${appData?(applicationData?.requested(client.client_id)??[]).map(item=>`<label class="permission-toggle"><span>${escape(item.label)}<small> · Read ${escape(item.collection)} from ${escape(registry.publicDetails(item.source)?.name??item.source)}</small></span><input type="checkbox" role="switch" name="data-permission" value="${escape(item.source+'/'+item.collection)}"${activeDataPermissions.some(permission=>permission.source===item.source&&permission.collection===item.collection)?' checked':''}></label>`).join(''):''}
@@ -281,6 +317,11 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       <button name="action" value="approve"${requiredEmail&&chooseEmail&&!hasEmailChoice?' disabled':''}>${incremental?'Authorize selected permissions':'Link app'}</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin);
   }
 
+  async function activeGrant(access) {
+    if(!accounts.grantAllowed(access.accountId,access.clientId,access.grantId))return null;
+    return provider.Grant.find(access.grantId);
+  }
+
   return {
     oidc: provider.callback(), interaction,
     async provision(application) {
@@ -289,7 +330,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const metadata = {
         client_id, client_name:application.name,
         ...(client_secret?{client_secret}:{}), application_type:application.native?'native':'web',
-        redirect_uris:application.callbacks??[application.callback], grant_types:['authorization_code'], response_types:['code'],
+        redirect_uris:application.callbacks??[application.callback], grant_types:['authorization_code','refresh_token'], response_types:['code'],
         token_endpoint_auth_method:application.native?'none':'client_secret_basic', subject_type:'pairwise',
       };
       await clientsStorage.upsert(client_id,metadata);
@@ -301,25 +342,25 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     async unlink(owner,client) {
       const grants=accounts.disconnect(owner,client);
       if(!grants)return false;
-      await Promise.all(grants.flatMap(({id})=>[new Adapter('Grant').destroy(id),...['AccessToken','AuthorizationCode','RefreshToken'].map(model=>new Adapter(model).revokeByGrantId(id))]));
+      await Promise.all(grants.map(({id})=>revokeGrant(id)));
       return true;
     },
     async dataAccess(value,{native=false}={}) {
       const access = await provider.AccessToken.find(value);
-      if (!access?.accountId || !registry?.has(access.clientId) || (!native&&(await provider.Client.find(access.clientId))?.tokenEndpointAuthMethod!=='client_secret_basic') || !accounts.grantAllowed(access.accountId,access.clientId,access.grantId) || !access.scope?.split(' ').includes('app_data')) return null;
+      if (!access?.accountId || !registry?.has(access.clientId) || (!native&&(await provider.Client.find(access.clientId))?.tokenEndpointAuthMethod!=='client_secret_basic') || !await activeGrant(access) || !access.scope?.split(' ').includes('app_data')) return null;
       return { owner:access.accountId, client:access.clientId, confidential:true };
     },
     async profileAvatar(token) {
       const access=await provider.AccessToken.find(token);
       if(!access?.accountId||!knownClient(access.clientId)||!accounts.linkedGrant(access.accountId,access.clientId)||
-        !accounts.grantAllowed(access.accountId,access.clientId,access.grantId)||!access.scope?.split(' ').includes('openid'))return undefined;
+        !await activeGrant(access)||!access.scope?.split(' ').includes('openid'))return undefined;
       return accounts.profileAvatar(access.accountId)??null;
     },
     async friendAccess(token) {
       const access=await provider.AccessToken.find(token);
       if(!access?.accountId||!registry?.has(access.clientId)||!accounts.linkedGrant(access.accountId,access.clientId)||
         !accounts.grantAllowed(access.accountId,access.clientId,access.grantId)||!access.scope?.split(' ').includes('friends'))return null;
-      const grant=await provider.Grant.find(access.grantId);
+      const grant=await activeGrant(access);
       if(!grant?.getOIDCScope().split(' ').includes('friends'))return null;
       return {owner:access.accountId,client:access.clientId};
     },
@@ -328,7 +369,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     },
     async delegatedAccess(token, expectedClient) {
       const access = await provider.AccessToken.find(token);
-      if (!access || access.clientId !== expectedClient || !access.accountId || !knownClient(access.clientId) || !accounts.grantAllowed(access.accountId,access.clientId,access.grantId) || !access.scope?.split(' ').includes('openid')) return null;
+      if (!access || access.clientId !== expectedClient || !access.accountId || !knownClient(access.clientId) || !await activeGrant(access) || !access.scope?.split(' ').includes('openid')) return null;
       return { owner: access.accountId, client: access.clientId };
     },
   };
