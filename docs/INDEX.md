@@ -18,6 +18,7 @@ X-Center ID is a passkey-first identity and consent service with an Expo account
 - [Mail delivery](MAIL.md) records SMTP, verification and address reservations.
 - [Branding](BRANDING.md) describes the original identity-card icon.
 - [Active tasks](ACTIVE_TASKS.md) records current work and pending verification.
+- [Publication review](reports/REPOSITORY_PUBLICATION_2026-11-19.md) records the historical cleanup, artifact audit and visibility status.
 - [UADS verification baseline](UADS_REQUIREMENTS.md) describes the current manifest and quality checks.
 
-The legacy entry point is disabled by default and remains `index.js`. Historical developer examples are in `api.txt` and `HTML/devs.html`. Treat the checkout as sensitive because legacy account, log and key material is tracked. Use `apps/dashboard` to develop the replacement locally.
+The legacy entry point is disabled by default and remains `index.js`. Historical developer examples are in `api.txt` and `HTML/devs.html`. The rewritten branches exclude historical account records, logs, keys and private configuration. Keep pre-rewrite clones and backups private. Use `apps/dashboard` to develop the replacement locally.
