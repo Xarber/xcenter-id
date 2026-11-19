@@ -24,7 +24,7 @@ Follow [session renewal and account UI](sessions-and-ui.md) for the preferred se
 
 ## Optional Expo package
 
-The package under packages/expo is @authnjs/expo. It currently targets React 19, React Native >=0.83 <0.89 and Expo 58 authentication modules. Read its package.json and installed target versions. Install from a local checkout or an authorized privately packed artifact. Do not embed a private repository access token into the target app or a package URL.
+The [Expo package in the X-Center ID repository](https://github.com/Xarber/xcenter-id/tree/testing/packages/expo) is `@authnjs/expo`. It currently targets React 19, React Native >=0.83 <0.89 and Expo 58 authentication modules. Read its package.json and installed target versions. Install from a checkout of the GitHub repository or a verified package archive. Do not embed a private repository access token into the target app or a package URL.
 
 AccountEntry from @authnjs/expo renders the reusable account entry UI. RegisteredAppSignIn from @authnjs/expo/registered-signin starts the native flow. authorizeNative from @authnjs/expo/authorize-native uses Expo AuthSession with S256, a cryptographically generated nonce and an HTTPS native return. It requests openid and returns code, verifier, nonce and redirectUri. Cancellation returns null. It does not establish the product session.
 

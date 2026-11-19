@@ -20,3 +20,39 @@ Use `AccountOverview` from `@authnjs/expo/account-overview` for a single-page Re
 - Group app-owned controls away from the identity card. Use labeled switches with a short description only when it helps the user decide. Show sync, sharing and permissions for the actual features the app supports. Save the controls per account and enforce them in the app’s sync worker or backend. The optional slots accept either embedded settings or an action to open the host app’s settings page.
 - Keep a clear **Manage X-Center ID** action. The component opens the account website by default. Supply a custom action if verified native links and a web fallback are available. Recover from missing photos with the component’s fallback. Fetch photos with the app’s bearer authorization and pass a trusted image source.
 - Match X-Center ID’s light and dark appearance, rounded surfaces, blue accents, restrained typography, accessible labels and quiet press feedback. Use the same hierarchy on other stacks. Keep narrative explanations for screens where a decision needs them.
+
+## Expo component specifications
+
+Use the current [Expo package](https://github.com/Xarber/xcenter-id/tree/testing/packages/expo) and check its peer dependencies against the target app.
+
+### RegisteredAppSignIn
+
+Import from `@authnjs/expo/registered-signin`. Pass the activated native registration’s `clientId`, its exact verified HTTPS `redirectUri`, and `onAuthorized`. The handler receives `code`, `verifier`, `nonce`, and `redirectUri` after the secure system browser returns. Bind exchange to the original sign-in attempt and validate the ID token before saving a product session. The component handles loading, cancellation and sign-in errors.
+
+Optional `scopes` request the app’s capabilities, `nonce` supplies a pre-created transaction nonce, and `promptConsent` reopens consent. The helper automatically requests consent when `offline_access` is present.
+
+```tsx
+<RegisteredAppSignIn
+  clientId={registration.clientId}
+  redirectUri={registration.redirectUri}
+  nonce={signInAttempt.nonce}
+  scopes={['openid', 'offline_access']}
+  onAuthorized={finishVerifiedSignIn}
+/>
+```
+
+### AccountOverview
+
+Import from `@authnjs/expo/account-overview`. Pass `profile` with `name` and `username`. Optional fields are `email`, `photo` as a React Native image source, `verified`, and `administrator`.
+
+Pass `syncOptions` for controlled switches. Each item has `id`, `label`, `enabled`, and `onChange(enabled)`, with optional `description` and `disabled`. Use `settings` for additional inline React content or `onOpenSettings` for a separate app settings screen. The default **Manage X-Center ID** action opens the website profile. Override it with `onManageAccount` to open a supported native route.
+
+```tsx
+<AccountOverview
+  profile={{ name: profile.name, username: profile.preferred_username, photo }}
+  syncOptions={[
+    { id: 'preferences', label: 'Sync preferences', enabled: syncEnabled, onChange: saveSyncPreference },
+  ]}
+  onOpenSettings={openAppSettings}
+/>
+```
