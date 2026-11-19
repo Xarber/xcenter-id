@@ -327,3 +327,13 @@ Build gate. The implementation and fixture preparation for the current consent a
 
 
 UADS §0 checkpoint on 19 November. The weekly window has 54% remaining and resets on 25 November at 15:25 CET, six days and about three hours away. Its applicable minimum is 55%, with no weekly reset available. The five-hour window has 97% remaining and resets today at 17:23 CET. API tests (34), dashboard tests (6), TypeScript, UADS validation, web export and isolated browser end-to-end checks passed. An earlier hosted-data test returned 503 while the local disk was nearly full and passed on rerun. Next, stage this tested export and API on 18811, take and verify the seven production snapshots, test discovery and anonymous Friends denial, then cut over from d430aad with rollback retained. Production remains on d430aad. Installed native behavior remains unverified.
+
+### Persistent app sessions and Expo account overview
+
+| ID | Request | State | Next action |
+| --- | --- | --- | --- |
+| AUTHN-079 | Keep linked app sessions active and renew on activity | Queued | Implement short-lived access tokens plus client-bound rotating refresh tokens with a rolling 14-day idle expiry. Cover single-flight refresh, replay, revocation and relinking. Preserve independent first-party dashboard sessions. |
+| AUTHN-080 | Add a configurable Expo account overview and update the integration skill | Queued | Reuse the account design and secure system-browser sign-in. Show the photo, identity and badges, allow host-owned sync and settings sections, and link to full account management. Document secure browser sign-in, code exchange and refresh in the repository and installed skill. |
+| AUTHN-081 | Deploy the consent and Friends release together with the session update | Queued | The user ordered deployment after the session work. Verify the whole batch with an isolated issuer and browser, then stage the deployment with rollback and production checks. |
+
+19 November usage checkpoint. The five-hour window has 94% remaining and resets at 17:23 CET. The weekly window has 53% remaining and resets 25 November at 15:25 CET, just over six days away. The applicable minimum is 55%, with no weekly reset available. Source inspection confirmed a ten-minute relying-party OIDC access token, no registered refresh grant, and a separate twelve-hour first-party account session. New implementation and deployment are paused. Resume with AUTHN-079 when usage permits or the user explicitly overrides the checkpoint.
