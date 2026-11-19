@@ -17,7 +17,7 @@ function html(res, content, status = 200, callbackOrigin = '') {
     *{box-sizing:border-box}body{margin:0;padding:clamp(1rem,5vw,3rem);background:var(--bg);color:var(--text)}
     main{max-width:34rem;margin:clamp(0rem,4vh,3rem) auto;padding:clamp(1.25rem,5vw,2.25rem);background:var(--card);border:1px solid var(--border);border-radius:1.45rem}
     h1{font-size:clamp(1.55rem,6vw,2.15rem);line-height:1.12;letter-spacing:-.04em;overflow-wrap:anywhere}p{color:var(--muted)}
-    .brand{font-weight:800;letter-spacing:-.03em;color:var(--action)}.context{padding:.8rem 1rem;border-radius:.8rem;background:var(--soft);overflow-wrap:anywhere}
+    .badge{display:inline-block;border:1px solid currentColor;border-radius:1rem;padding:.1rem .5rem;font-size:.8rem;font-weight:700}.brand{font-weight:800;letter-spacing:-.03em;color:var(--action)}.context{padding:.8rem 1rem;border-radius:.8rem;background:var(--soft);overflow-wrap:anywhere}
     fieldset{border:1px solid var(--border);border-radius:.85rem;padding:.6rem 1rem;margin:1.2rem 0;min-width:0}legend{font-weight:700}
     label{display:flex;gap:.7em;align-items:baseline;padding:.5em 0;overflow-wrap:anywhere}input{accent-color:var(--action)}
     button,.action{display:inline-block;font:inherit;font-weight:700;padding:.6em 1em;margin:.45rem .4rem 0 0;border-radius:.65rem;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer}
@@ -75,8 +75,8 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
   const clientsStorage = new StorageAdapter('Client');
   const selections = new Adapter('ClaimSelection');
   const scopeClaims = {
-    openid: ['sub','name','given_name','family_name','preferred_username','picture'],
-    profile: ['name','given_name','family_name','preferred_username','picture'],
+    openid: ['sub','name','given_name','family_name','preferred_username','picture','xcenter_verified','xcenter_admin'],
+    profile: ['name','given_name','family_name','preferred_username','picture','xcenter_verified','xcenter_admin'],
     age_range: ['age_range'], email: ['email', 'email_verified'],
   };
   const clients = configuration.clients.map((client) => ({
@@ -130,6 +130,8 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
             sub: owner,
             name: person.givenName + ' ' + person.surname, given_name: person.givenName,
             family_name: person.surname, preferred_username:person.username, age_range: person.ageRange,
+            ...(person.verified?{xcenter_verified:true}:{}),
+            ...(person.admin?{xcenter_admin:true}:{}),
             ...(person.hasPicture?{picture:issuer+'/v1/profile/avatar'}:{}),
             ...(email ? { email, email_verified: true } : {}),
           };
@@ -203,13 +205,14 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     }
     if (req.method !== 'GET') return html(res,'<h1>Method unavailable</h1>',405);
     const missing = new Set(prompt.details.missingOIDCScope ?? []);
-    const title=client.client_name??client.client_id;
     const brand=registry?.brand(client.client_id);
+    const title=brand?.name??client.client_name??client.client_id;
+    const personBadges=(person.verified?' <span class="badge">✓ Verified profile</span>':'')+(person.admin?' <span class="badge">◆ Administrator</span>':'');
     const visual=client.client_id.startsWith('notes-')||client.client_id.startsWith('places-')?'notes':client.client_id.startsWith('trips-')?'trips':null;
     const developer=brand?.owner&&accounts.identity(brand.owner);
     const developerName=brand?.developerName||(developer?developer.givenName+' '+developer.surname:'X-Center');
     if(prompt.name==='login'){
-      return html(res,`<h1>Choose your account</h1><p>Continue to ${escape(title)} as ${escape(person.givenName)} ${escape(person.surname)}.</p>
+      return html(res,`<h1>Choose your account</h1><p>Continue to ${escape(title)} as ${escape(person.givenName)} ${escape(person.surname)}.${personBadges}</p>
         <form method="post"><button name="action" value="approve">Continue</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin);
     }
     const incremental=!!accounts.linkedGrant(active.owner,client.client_id);
@@ -223,9 +226,9 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       <h1>${incremental?'Authorize permissions':'Link '+escape(title)+' to X-Center ID'}</h1>
       ${incremental?`<p>${escape(title)} is requesting additional access.</p>`:''}
       ${brand?.description?`<p>${escape(brand.description)}</p>`:''}
-      <div class="context"><strong>${escape(person.givenName)} ${escape(person.surname)}</strong><br>
+      <div class="context"><strong>${escape(person.givenName)} ${escape(person.surname)}</strong>${personBadges}<br>
       Developed by ${escape(developerName)} at <strong>${escape(client.host)}</strong>
-      ${brand?.verified?'<br>Verified app':''}${brand?.developerStatus==='verified'?'<br>Verified developer':''}</div>
+      ${brand?.verified?'<br><span class="badge">✓ Verified app</span>':''}${brand?.developerStatus==='verified'?'<br>Verified developer':''}</div>
       <form method="post"><h2>Permissions</h2>
       <ul class="permission-list">
         ${!incremental?`<li>${glyph('id')}<span>App-specific account ID, name, username and profile photo · required</span></li>`:''}

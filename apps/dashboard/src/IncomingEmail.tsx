@@ -1,4 +1,4 @@
-import {verificationStatus,type VerificationStatus} from './email-verification-status';
+import {hasPendingDelivery,verificationStatus,type VerificationStatus} from './email-verification-status';
 import {useEffect,useState} from 'react';
 import {Alert,Linking,Pressable,Text,TextInput,View} from 'react-native';
 import {nativeRequest,nativeReauthenticate} from './native-account';
@@ -16,7 +16,8 @@ export default function IncomingEmail({token,updated,colors}:{token:string;updat
     const target=address??draft?.address??info?.pending?.address??info?.outgoing?.address;
     const message=verificationStatus(next,target);
     if(draft&&(!next.pending||next.pending.address!==draft.address))setDraft(null);
-    if(report||message==='Email verified.'&&!!target)setStatus(message);
+    const completed=!!target&&!hasPendingDelivery(next)&&!!(info?.pending||info?.outgoing||draft);
+    if(report||completed||message==='Email verified.'&&!!target)setStatus(message);
     if(report||message==='Email verified.'&&!!target)await updated();
   }
   useEffect(()=>{void check().catch(error=>setStatus(error.message));},[token]);
@@ -37,10 +38,10 @@ export default function IncomingEmail({token,updated,colors}:{token:string;updat
     <TextInput accessibilityLabel="Email to verify" value={email} onChangeText={setEmail} autoCapitalize="none" autoCorrect={false} keyboardType="email-address"
       maxLength={254} style={{minHeight:48,color:colors.ink,borderWidth:1,borderColor:colors.muted,borderRadius:10,padding:12}}/>
     {action('Add email',async()=>{await nativeRequest('email/add',token,{email});setEmail('');await check();await updated();setStatus('Address added · Unverified');})}
-    {addresses.map(item=><View key={item.address} style={{gap:8}}><Text style={{color:colors.ink}}>{item.address} · {item.verified?'Verified':'Unverified'}</Text>{!item.verified&&info?.canSendLink&&action('Email me a link',async()=>{await nativeRequest('email',token,{email:item.address});await check(true,item.address);})}{!item.verified&&info?.enabled&&action('Send a verification email',async()=>{const result=await nativeRequest('email/incoming',token,{email:item.address});setDraft(result);await check();await Linking.openURL(result.mailto);})}{action('Remove email',async()=>Alert.alert('Remove email address?','It will no longer be used by your account.',[{text:'Cancel',style:'cancel'},{text:'Remove',style:'destructive',onPress:()=>{void (async()=>{await nativeReauthenticate(token);await nativeRequest('email/remove',token,{email:item.address});await check();await updated();})().catch(e=>setStatus(e.message));}}]))}</View>)}
+    {addresses.map(item=><View key={item.address} style={{gap:8}}><Text style={{color:colors.ink}}>{item.address} · {item.verified?'Verified':'Unverified'}</Text>{!item.verified&&info?.canSendLink&&action('Email me a link',async()=>{await nativeRequest('email',token,{email:item.address});await check(true,item.address);})}{!item.verified&&info?.enabled&&action('Send a verification email',async()=>{const result=await nativeRequest('email/incoming',token,{email:item.address});setDraft(result);await check(true,result.address);await Linking.openURL(result.mailto);})}{action('Remove email',async()=>Alert.alert('Remove email address?','It will no longer be used by your account.',[{text:'Cancel',style:'cancel'},{text:'Remove',style:'destructive',onPress:()=>{void (async()=>{await nativeReauthenticate(token);await nativeRequest('email/remove',token,{email:item.address});await check();await updated();})().catch(e=>setStatus(e.message));}}]))}</View>)}
     {draft&&<><Text style={{color:colors.ink}}>Send from {draft.address}. Expires {new Date(draft.expires).toLocaleTimeString()}.</Text>
       {action('Open verification email',async()=>{await Linking.openURL(draft.mailto);})}</>}
-    {(info?.pending||info?.outgoing||draft||info?.result||addresses.some(item=>!item.verified))&&action('Check delivery',()=>check(true))}
+    {hasPendingDelivery(info)&&action('Check delivery',()=>check(true))}
     {status&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}
   </View>;
 }

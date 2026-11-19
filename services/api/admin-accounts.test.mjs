@@ -212,9 +212,12 @@ test('live admin delegation, user verification and public profile flags enforce 
   assert.equal(accounts.storageCapacity('member'),2*1024**4);
   assert.equal(accounts.publicProfile('fixture'),null);
   assert.equal((await post('profile/visibility',{fields:['givenName']},'member')).status,200);
-  assert.deepEqual(accounts.publicProfile('fixture'),{username:'fixture',givenName:'Test'});
+  assert.deepEqual(accounts.publicProfile('fixture'),{username:'fixture',givenName:'Test',verified:true,admin:true});
   assert.equal((await post('profile/visibility',{fields:['birthday']},'member')).status,422);
   assert.equal((await post('admin/users/fixture',{action:'set-admin',enabled:false})).status,200);
   assert.equal(accounts.adminDetails('fixture').admin,false);
+  assert.deepEqual(accounts.publicProfile('fixture'),{username:'fixture',givenName:'Test',verified:true});
+  assert.equal((await post('admin/users/fixture',{action:'verify-user',enabled:false})).status,200);
+  assert.deepEqual(accounts.publicProfile('fixture'),{username:'fixture',givenName:'Test'});
  }finally{await new Promise(resolve=>server.close(resolve));db.close();rmSync(dir,{recursive:true,force:true});}
 });

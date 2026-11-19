@@ -296,3 +296,12 @@ The web export is deployed. See the [production receipt](operations/XCENTER_ID_P
 | AUTHN-074 | Make the integration skill perform registration preparation, DNS activation and target-app sync work | Verified | Installed and tracked copies match and pass skill validation. Checked the portal action labels against the dashboard source and the storage and permission instructions against the API contract. The unnamed target app was not changed. |
 
 Usage checkpoint under UADS §0. The five-hour window has 4% remaining and resets on 2026-11-19 at 01:26 CET. The weekly window has 70% remaining and resets on 2026-11-25 at 15:25 CET. The verified local skill update is published to testing as d72aa7c. Next runnable checks after the short-window reset require the target app repository for its integration, the mailbox owner's real verification attempt for production inbox confirmation, or an updated installed native build for native UI validation.
+
+### App and profile badges, permissions refresh and mail controls
+
+| ID | Request | State | Evidence and next action |
+| --- | --- | --- | --- |
+| AUTHN-075 | Show verified-app, verified-profile and administrator badges and refresh linked-app branding in Permissions | Implemented | One current registry snapshot supplies both linked-app views. Account badges use server state in the dashboard, friend profiles, consent and UserInfo. Run the isolated browser regression and staged production smoke checks. |
+| AUTHN-076 | Hide Check delivery when no verification is pending | Implemented | Shared web/native predicate covers idle, superseded, expired and active requests. Native alias deletion is available after disabling. Verify real browser state transitions. |
+
+Queue reconciliation before the web build under UADS §8. Compact horizontal tab navigation was superseded by four fixed main tabs and a vertical sidebar. Browser verification is next. The XHDD still does not appear as a writable guest disk, so production placement cannot be enabled. Public repository work still depends on historical secret and artifact remediation. Native build verification previously failed at runner allocation. Independent badge and email implementation is ready for an isolated browser run using the web export.

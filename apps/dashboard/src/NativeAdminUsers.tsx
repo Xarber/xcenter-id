@@ -1,3 +1,4 @@
+import TrustBadges from './TrustBadges';
 import ApplicationStorage from './ApplicationStorage';
 import {useEffect,useState} from 'react';
 import {Alert,Image,Pressable,Text,TextInput,View} from 'react-native';
@@ -6,7 +7,7 @@ import {accountHost,nativeRequest} from './native-account';
 import type {ManagedAccount} from './support-model';
 
 type Colors={ink:string;muted:string;accent:string;soft:string};
-type User=ManagedAccount&{admin:boolean;rootAdmin:boolean;verified:boolean;externalMailLimits?:{daily:number|null;monthly:number|null};name:string;devices:number;passkeys:number;apps:{client:string;label:string}[]};
+type User=ManagedAccount&{admin:boolean;rootAdmin:boolean;verified:boolean;externalMailLimits?:{daily:number|null;monthly:number|null};name:string;devices:number;passkeys:number;apps:{client:string;label:string;verified?:boolean}[]};
 type App={verified:boolean;id:string;name:string;status:string;restricted:boolean};
 function Avatar({user,token,colors}:{user:ManagedAccount;token:string;colors:Colors}){
   const [failed,setFailed]=useState(false);
@@ -49,7 +50,7 @@ export default function NativeAdminUsers({token,colors}:{token:string;colors:Col
   return <View style={{gap:14}}>
     {selected?<>{icon('All accounts','arrow-back',()=>{setSelected('');setDetails(null);setDeleting(false);setWarning(null);})}
       {user&&<>
-        <Avatar user={user} token={token} colors={colors}/><Text accessibilityRole="header" style={{color:colors.ink,fontSize:22,fontWeight:'700'}}>{user.name} · @{user.username}</Text>
+        <Avatar user={user} token={token} colors={colors}/><Text accessibilityRole="header" style={{color:colors.ink,fontSize:22,fontWeight:'700'}}>{user.name} · @{user.username}</Text><TrustBadges verified={user.verified} admin={user.admin} color={colors.ink}/>
         <Text style={{color:colors.muted}}>{user.locked?'Locked':'Active'} · {user.passkeys} passkeys · {user.devices} sessions</Text>
         <View style={{flexDirection:'row',gap:10,flexWrap:'wrap'}}>
           {icon(user.verified?'Remove user verification':'Verify user','checkmark-circle-outline',()=>run(async()=>{await api('admin/users/'+user.username,{action:'verify-user',enabled:!user.verified});}))}
@@ -89,10 +90,10 @@ export default function NativeAdminUsers({token,colors}:{token:string;colors:Col
             {icon('Cancel warning','close',()=>setWarning(null))}
           </View></>}
         <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Connected apps</Text>
-        {user.apps.map(app=><Text key={app.client} style={{color:colors.ink}}>{app.label}</Text>)}
+        {user.apps.map(app=><View key={app.client} style={{gap:4}}><Text style={{color:colors.ink}}>{app.label}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View>)}
         <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Registered apps</Text>
         {details.registered.filter(app=>app.status!=='revoked').map(app=><View key={app.id} style={{gap:8}}>
-          <Text style={{color:colors.ink}}>{app.name} · {app.status}{app.restricted?' · Restricted':''}</Text>
+          <Text style={{color:colors.ink}}>{app.name} · {app.status}{app.restricted?' · Restricted':''}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/>
           <View style={{flexDirection:'row',gap:8,flexWrap:'wrap'}}>{icon(app.verified?'Remove app verification':'Verify app','checkmark-circle-outline',()=>run(async()=>{await api('admin/apps',{type:'app',id:app.id,verified:!app.verified});}))}{app.status==='active'&&app.verified&&!app.restricted&&icon('Manage app storage','server-outline',()=>setStorageApp(app.id))}</View>
           {<View style={{flexDirection:'row',gap:10}}>
             {app.status==='active'&&icon(app.restricted?'Restore app':'Restrict app',app.restricted?'lock-open-outline':'lock-closed-outline',()=>run(async()=>{
@@ -111,7 +112,7 @@ export default function NativeAdminUsers({token,colors}:{token:string;colors:Col
       {users.filter(user=>user.username.includes(filter.trim().toLowerCase())).slice(0,40).map(user=>
         <Pressable accessibilityRole="button" key={user.username} onPress={()=>{setSelected(user.username);setDetails(null);}}
           style={{minHeight:60,flexDirection:'row',alignItems:'center',gap:12}}>
-          <Avatar user={user} token={token} colors={colors}/><Text style={{color:colors.ink}}>@{user.username}</Text>
+          <Avatar user={user} token={token} colors={colors}/><View style={{flexShrink:1,gap:4}}><Text style={{color:colors.ink}}>@{user.username}</Text><TrustBadges verified={user.verified} admin={user.admin} color={colors.ink}/></View>
           {user.locked&&<Ionicons name="lock-closed-outline" size={20} color={colors.muted}/>}
         </Pressable>)}</>}
     {status&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}

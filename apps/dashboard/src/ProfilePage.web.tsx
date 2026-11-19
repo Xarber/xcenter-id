@@ -1,3 +1,4 @@
+import TrustBadges from './TrustBadges.web';
 import PublicProfile from './PublicProfile.web';
 import IncomingEmail from './IncomingEmail.web';
 import { UsernameChange } from './UsernameChange.web';
@@ -27,7 +28,7 @@ export default function ProfilePage({ account, update, complete, section }: {
     finally { setBusy(false); }
   }
   if(profile&&section)return <><a className="xc-button xc-secondary xc-self-start" href="/profile">Back to profile</a>{section==='visibility'?<PublicProfile/>:section==='username'?<UsernameChange/>:<DeveloperIdentityPanel/>}</>;
-  if(profile&&!editing)return <><section className="xc-card xc-pad xc-stack"><h2>Personal information</h2><div className="xc-row-head"><div className="xc-avatar xc-avatar-large">{image?<img src={image} alt=""/>:<UserRound size={36}/>}</div><div><strong>{profile.givenName} {profile.surname}</strong><p>@{profile.username}</p></div></div><p>Age group: {profile.ageRange??'Not set'}</p><p>{profile.birthday?new Date(profile.birthday+'T12:00:00Z').toLocaleDateString(accountLocale(),{timeZone:'UTC'}):'Birthday not set'}</p><button className="xc-button xc-secondary" onClick={()=>setEditing(true)}>Edit profile</button></section>
+  if(profile&&!editing)return <><section className="xc-card xc-pad xc-stack"><h2>Personal information</h2><div className="xc-row-head"><div className="xc-avatar xc-avatar-large">{image?<img src={image} alt=""/>:<UserRound size={36}/>}</div><div><strong>{profile.givenName} {profile.surname}</strong><TrustBadges verified={account.verified} admin={account.admin}/><p>@{profile.username}</p></div></div><p>Age group: {profile.ageRange??'Not set'}</p><p>{profile.birthday?new Date(profile.birthday+'T12:00:00Z').toLocaleDateString(accountLocale(),{timeZone:'UTC'}):'Birthday not set'}</p><button className="xc-button xc-secondary" onClick={()=>setEditing(true)}>Edit profile</button></section>
     <nav className="xc-permission-directory" aria-label="Profile settings">
       {[['visibility','Public profile',ShieldCheck],['username','Change username',UserRound],['developer','Developer profile',Code2]].map(([path,label,Icon])=>{
         const Symbol=Icon as typeof UserRound;
@@ -85,7 +86,7 @@ export default function ProfilePage({ account, update, complete, section }: {
         <p>Only addresses you verify can be shared when signing in.</p></div></div>
       {account.mailbox && <div className="xc-info"><strong>Your X-Center mailbox</strong><span>{account.mailbox}</span>
         <small>External delivery depends on mail routing.</small></div>}
-      {account.emails.map(({address}) => <div className="xc-list-row" key={address}><span>{address}</span><span className="xc-pill"><Check size={13}/> Verified</span></div>)}
+      {account.emails.map(({address,verified}) => <div className="xc-list-row" key={address}><span>{address}</span><span className="xc-pill">{verified?<><Check size={13}/> Verified</>:'Unverified'}</span></div>)}
       <form className="xc-inline-form" onSubmit={event=>{event.preventDefault();
         void perform(async()=>{await api('email',{email});setNotice('Check your email for a verification link.');});}}>
         <label>Add email<input aria-label="Email address" type="email" value={email} onChange={event=>setEmail(event.target.value)} required/></label>

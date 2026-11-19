@@ -15,3 +15,7 @@ export function verificationStatus(info:VerificationStatus,address?:string){
   if(info.outgoing&&info.outgoing.address===target)return 'Verification link sent. Open it from your inbox and confirm it while signed into this account.';
   return target?'No active verification for this address. Request a new link or message.':'No active email verification.';
 }
+
+export function hasPendingDelivery(info:VerificationStatus|null,now=Date.now()){
+  return (info?.pending?.expires??0)>now||(info?.outgoing?.expires??0)>now;
+}

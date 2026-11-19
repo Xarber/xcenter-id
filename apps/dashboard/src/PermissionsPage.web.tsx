@@ -1,16 +1,17 @@
+import AppIcon from './AppIcon.web';
+import TrustBadges from './TrustBadges.web';
 import {isSampleClient} from './application-identity';
 import HostedDataPermissions from './HostedDataPermissions.web';
-import { ArrowDownLeft, ArrowLeft, ArrowUpRight, ChevronRight, FolderKey, Grid2X2, LockKeyhole, MapPin, NotebookPen, ShieldCheck, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowLeft, ArrowUpRight, ChevronRight, FolderKey, LockKeyhole, MapPin, NotebookPen, ShieldCheck, X } from 'lucide-react';
 import { useEffect,useState } from 'react';
 import { api } from './web-account';
 
-type App = { client:string; name:string };
+type App = { client:string; name:string; icon?:string|null; verified?:boolean; description?:string };
 type Grant = { source:string; destination:string; expires:number; dataset:string };
 type SamplePermission = { source:string;destination:string;sourceName:string;app:string;shared:boolean;expires:number|null };
 type Permissions = {apps:App[];linked:App[];grants:Grant[];samples:SamplePermission[]};
 const duration=(expiry:number)=>expiry===Number.MAX_SAFE_INTEGER?'Until revoked':'Expires '+new Date(expiry).toLocaleString();
 const appPath=(client:string)=>'/permissions/'+encodeURIComponent(client);
-const appIcon=(client:string)=>/trips|places/.test(client)?MapPin:/notes/.test(client)?NotebookPen:Grid2X2;
 
 export default function PermissionsPage({client}: {client?:string}) {
   const [state,setState]=useState<Permissions|null>(null);
@@ -21,10 +22,10 @@ export default function PermissionsPage({client}: {client?:string}) {
   const [error,setError]=useState('');
 
   async function load(){
-    const [registered,linked,assigned,example]=await Promise.all([api('apps'),api('connected-apps'),api('data-grants'),api('sample-grants')]);
+    const [registered,linked,assigned]=await Promise.all([api('apps'),api('connected-apps'),api('data-grants')]);
     setState({
       apps:registered.apps.filter((app:App)=>!isSampleClient(app.client)),
-      linked:linked.apps.map((app:{client:string;label:string})=>({client:app.client,name:app.label})),
+      linked:linked.apps.map(({label,...app}:Omit<App,'name'>&{label:string})=>({...app,name:label})),
       grants:assigned.grants.filter((grant:Grant)=>grant.dataset==='saved-place.v1'),
       samples:[],
     });
@@ -34,7 +35,11 @@ export default function PermissionsPage({client}: {client?:string}) {
     setError('');
     void load().catch(()=>setError('Permissions are temporarily unavailable.'));
   }
-  useEffect(refresh,[]);
+  useEffect(()=>{
+    refresh();
+    window.addEventListener('focus',refresh);
+    return ()=>window.removeEventListener('focus',refresh);
+  },[client]);
 
   async function change(path:string,method:'PUT'|'DELETE',from:string,to:string,keep=false){
     setBusy(true);setError('');setStatus('');
@@ -50,20 +55,19 @@ export default function PermissionsPage({client}: {client?:string}) {
     {error?<><p role="alert">{error}</p><button className="xc-button xc-secondary" onClick={refresh}>Try again</button></>:<p role="status">Loading apps…</p>}
   </section>;
 
-  const directory=new Map([...state.apps,...state.samples.map(item=>({client:item.destination,name:item.app})),...state.linked].map(app=>[app.client,app]));
+  const directory=new Map<string,App>([...state.apps,...state.samples.map(item=>({client:item.destination,name:item.app})),...state.linked].map(app=>[app.client,app]));
   const appName=(id:string)=>directory.get(id)?.name??id;
   const linked=new Set(state.linked.map(app=>app.client));
   const byName=(a:App,b:App)=>Number(linked.has(b.client))-Number(linked.has(a.client))||a.name.localeCompare(b.name);
 
   if(!client)return <><HostedDataPermissions/><section className="xc-permission-directory" aria-label="Apps">
     {[...directory.values()].sort(byName).map(app=>{
-      const Icon=appIcon(app.client);
       const sample=state.samples.some(item=>item.destination===app.client);
       const allowed=state.grants.filter(item=>item.destination===app.client).length
         +state.samples.filter(item=>item.destination===app.client&&item.expires).length;
       return <a className="xc-card xc-permission-link" key={app.client} href={appPath(app.client)}>
-        <span className="xc-symbol xc-lavender"><Icon size={21}/></span>
-        <span className="xc-permission-name"><strong>{app.name}</strong>
+        <AppIcon key={app.icon} icon={app.icon}/>
+        <span className="xc-permission-name"><strong className="xc-identity-label">{app.name}<TrustBadges kind="app" verified={app.verified}/></strong>
           <span>{allowed?allowed+' active '+(allowed===1?'permission':'permissions'):linked.has(app.client)?'Linked':sample?'Test app':'Registered app'}</span>
         </span><ChevronRight className="xc-permission-chevron" size={20} aria-hidden="true"/>
       </a>;
@@ -74,7 +78,6 @@ export default function PermissionsPage({client}: {client?:string}) {
   const selected=directory.get(client);
   const back=<a className="xc-permission-back" href="/permissions"><ArrowLeft size={16} aria-hidden="true"/> All apps</a>;
   if(!selected)return <>{back}<section className="xc-card xc-pad"><h2>App unavailable</h2><p>Choose an app from the permissions list.</p></section></>;
-  const Icon=appIcon(client);
   const incoming=state.grants.filter(item=>item.destination===client);
   const outgoing=state.grants.filter(item=>item.source===client);
   const incomingSamples=state.samples.filter(item=>item.destination===client);
@@ -82,7 +85,7 @@ export default function PermissionsPage({client}: {client?:string}) {
   const sources=state.apps.filter(app=>app.client!==client&&!incoming.some(item=>item.source===app.client));
   function savedPlaces(grant:Grant,other:string){
     return <div className="xc-list-row xc-permission-row" key={grant.source+grant.destination}>
-      <div className="xc-row-head"><MapPin size={18} aria-hidden="true"/><div><strong>{appName(other)}</strong>
+      <div className="xc-row-head"><MapPin size={18} aria-hidden="true"/><div><strong className="xc-identity-label">{appName(other)}<TrustBadges kind="app" verified={directory.get(other)?.verified}/></strong>
         <p>Saved places · Read only · {duration(grant.expires)}</p></div></div>
       <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>void change('data-grants','DELETE',grant.source,grant.destination)}>
         <X size={15} aria-hidden="true"/> Revoke access
@@ -110,8 +113,8 @@ export default function PermissionsPage({client}: {client?:string}) {
   return <>
     {back}<HostedDataPermissions client={client}/>
     <section className="xc-card xc-pad xc-permission-heading">
-      <span className="xc-symbol xc-lavender"><Icon size={24} aria-hidden="true"/></span>
-      <div><h2>{selected.name}</h2><p>{linked.has(client)?'Linked to your X-Center ID':'Manage what this app can share or access.'}</p></div>
+      <AppIcon key={selected.icon} icon={selected.icon}/>
+      <div><h2 className="xc-identity-label">{selected.name}<TrustBadges kind="app" verified={selected.verified}/></h2><p>{linked.has(client)?'Linked to your X-Center ID':'Manage what this app can share or access.'}</p>{selected.description&&<p>{selected.description}</p>}</div>
     </section>
     <section className="xc-card xc-pad">
       <div className="xc-row-head"><ArrowDownLeft size={20} aria-hidden="true"/><h2>Data this app can access</h2></div>

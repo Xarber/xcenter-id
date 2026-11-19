@@ -1,4 +1,5 @@
-import { ArrowLeft, BadgeCheck, ChevronRight, Database, Grid2X2, ImagePlus, Plus, Trash2, X } from 'lucide-react';
+import TrustBadges from './TrustBadges.web';
+import { ArrowLeft, ChevronRight, Database, Grid2X2, ImagePlus, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { developerApi, readAppIcon, type AppRegistration } from './developer-web';
 
@@ -41,7 +42,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
     <a href="/profile/developer">Manage your developer profile</a>
     {apps?.map(item=><button type="button" className="xc-card xc-permission-link xc-portal-app" onClick={()=>edit(item)} key={item.id}>
       <span className="xc-symbol xc-lavender">{item.icon?<img src={'data:image/png;base64,'+item.icon} alt=""/>:<Grid2X2 size={20}/>}</span>
-      <span className="xc-permission-name"><strong>{item.name}</strong><span>{item.verified?'Verified · ':''}{item.native?'Native app':'Website'} · {item.status}</span></span>
+      <span className="xc-permission-name"><strong className="xc-identity-label">{item.name}<TrustBadges kind="app" verified={item.verified}/></strong><span>{item.native?'Native app':'Website'} · {item.status}</span></span>
       <ChevronRight className="xc-permission-chevron" size={20}/>
     </button>)}
     {apps?.length===0&&<p className="xc-empty">You haven’t registered any apps yet.</p>}
@@ -55,7 +56,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
     {existing?.status==='active'&&existing.verified&&<a className="xc-button xc-secondary xc-self-start" href={'/developer/storage/'+existing.id}><Database size={17}/> Manage app storage</a>}
     <button type="button" className="xc-button xc-secondary xc-self-start" onClick={()=>edit(null)} disabled={busy}><ArrowLeft size={16}/> Registered apps</button>
     <div className="xc-row-head"><h2>{existing?.name??'Register an app'}</h2>
-      {existing?.verified&&<span className="xc-pill"><BadgeCheck size={15}/> Verified</span>}</div>
+      <TrustBadges kind="app" verified={existing?.verified}/></div>
     <form className="xc-stack" onSubmit={event=>{event.preventDefault();save();}}>
       <div className="xc-profile-head xc-portal-profile">
         <span className="xc-symbol xc-lavender">{draft.icon?<img alt="" src={'data:image/png;base64,'+draft.icon}/>:<Grid2X2 size={22}/>}</span>

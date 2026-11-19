@@ -1,3 +1,4 @@
+import TrustBadges from './TrustBadges.web';
 import AdminStorageVolumes from './AdminStorageVolumes.web';
 import AppIcon from './AppIcon.web';
 import Reauthenticate from './Reauthenticate.web';
@@ -343,7 +344,7 @@ function AdminContent() {
     <section className="xc-card xc-pad"><div className="xc-row-head"><BadgeCheck size={21}/><h2>Registered apps</h2></div>
       {apps.length===0&&<p className="xc-empty">No registered developer apps.</p>}
       {apps.filter(app=>app.status!=='revoked').map(app=><div className="xc-list-row xc-permission-row" key={app.id}>
-        <div><strong>{app.name}</strong><p>{app.developerName??'Developer'} · {app.status}</p>
+        <div><strong className="xc-identity-label">{app.name}<TrustBadges kind="app" verified={app.verified}/></strong><p>{app.developerName??'Developer'} · {app.status}</p>
           <p>{new URL(app.callback).hostname}</p>{app.repository&&<a href={app.repository} rel="noreferrer" target="_blank">Review repository</a>}</div>
         {app.status==='active'&&app.verified&&<a className="xc-button xc-secondary" href={'/developer/storage/'+app.id}><Database size={17}/> Manage app storage</a>}
         {app.status!=='revoked'&&<IconAction label={app.verified?'Remove verification':'Verify app'} disabled={busy}
@@ -355,7 +356,7 @@ function AdminContent() {
 }
 
 export function ConnectedApps() {
-  const [apps,setApps]=useState<{client:string;label:string;updated:number;icon?:string}[]|null>(null);
+  const [apps,setApps]=useState<{client:string;label:string;updated:number;icon?:string;verified?:boolean}[]|null>(null);
   const [status,setStatus]=useState('');
   const [confirm,setConfirm]=useState('');
   const [busy,setBusy]=useState(false);
@@ -363,7 +364,7 @@ export function ConnectedApps() {
   return <div className="xc-pad">
     <h2>Authorized apps</h2>
     {apps?.length===0 && <div className="xc-empty">No apps have been authorized yet.</div>}
-    {apps?.map(item=><div className="xc-list-row" key={item.client}><div className="xc-row-head"><AppIcon icon={item.icon}/><div><strong>{item.label}</strong><p>Last authorized {date(item.updated)}</p></div></div>
+    {apps?.map(item=><div className="xc-list-row" key={item.client}><div className="xc-row-head"><AppIcon key={item.icon} icon={item.icon}/><div><strong className="xc-identity-label">{item.label}<TrustBadges kind="app" verified={item.verified}/></strong><p>Last authorized {date(item.updated)}</p></div></div>
       <div className="xc-actions"><a href={'/permissions/'+encodeURIComponent(item.client)}>Manage data access</a>
         {confirm===item.client?<><span>This ends the app’s access.</span><button className="xc-button xc-secondary" disabled={busy} onClick={()=>{
           setBusy(true);

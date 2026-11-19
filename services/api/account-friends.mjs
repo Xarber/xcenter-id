@@ -104,9 +104,9 @@ export function createFriendRoutes({accounts,friends}) {
     if (req.method==='GET'&&path==='/account/friends') {
       const entries=friends.list(user.owner).flatMap(({id,owner,created})=>{
         const username=accounts.username(owner);
-        return username?[{id,username,created,avatar:accounts.publicProfileAvatar?.(username)?'/public/profiles/'+username+'/avatar':null}]:[];
+        return username?[{id,username,created,...accounts.profileBadges?.(owner),avatar:accounts.publicProfileAvatar?.(username)?'/public/profiles/'+username+'/avatar':null}]:[];
       });
-      return send(res,200,{friends:entries,requests:friends.pending(user.owner).flatMap(({id,sender})=>{const username=accounts.username(sender);return username?[{id,username}]:[];})});
+      return send(res,200,{friends:entries,requests:friends.pending(user.owner).flatMap(({id,sender})=>{const username=accounts.username(sender);return username?[{id,username,...accounts.profileBadges?.(sender)}]:[];})});
     }
     if (!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent'){
       return send(res,403,{error:'Open X-Center ID to change your friends.'});

@@ -1,3 +1,4 @@
+import TrustBadges from './TrustBadges';
 import ApplicationStorage from './ApplicationStorage';
 import { getDocumentAsync } from 'expo-document-picker';
 import { File } from 'expo-file-system';
@@ -7,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, useColorScheme, View } from 'react-native';
 import Animated, { Easing, FadeIn, ReduceMotion } from 'react-native-reanimated';
 
-type Registration = { id: string; name: string; callback: string; status: string; native?:boolean; client?: string; developerName?:string; icon?:string|null };
+type Registration = { id: string; name: string; callback: string; status: string; native?:boolean; client?: string; developerName?:string; icon?:string|null; verified?:boolean };
 const entering = FadeIn.duration(180).easing(Easing.bezier(0.23, 1, 0.32, 1)).reduceMotion(ReduceMotion.System);
 
 export default function DeveloperPortal({ back,token,colors }: { back: () => void;token?:string;colors?:{ink:string;accent:string;muted:string;soft:string} }) {
@@ -163,7 +164,7 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
       {branding()}
       {action('Submit for review', () => { void submit(); }, saving || !name.trim() || !callback.trim())}</> }
       {apps.filter(app=>app.status!=='revoked').map((app) => <View key={app.id} style={[styles.item, { borderColor: border }]}>
-        <Text style={{ color: ink, fontWeight: '700' }}>{app.name}</Text>
+        <Text style={{ color: ink, fontWeight: '700' }}>{app.name}</Text><TrustBadges kind="app" verified={app.verified} color={accent}/>
         <Text style={{ color: ink }}>{app.status} · {app.native?'Native':'Web'}{app.client ? ' · ' + app.client : ''}</Text>
         {app.developerName&&<Text style={{color:ink}}>Developer: {app.developerName}</Text>}
         {app.status!=='revoked'&& (editing===app.id?<>{branding()}

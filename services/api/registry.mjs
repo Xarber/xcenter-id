@@ -40,7 +40,7 @@ export function openRegistry(path) {
   return {
     registration:id=>db.prepare('SELECT c.id,c.client,c.developer,c.status,p.verified FROM clients c LEFT JOIN app_profiles p ON p.id=c.id WHERE c.id=?').get(id),
     clientForId:id=>db.prepare('SELECT client FROM clients WHERE id=?').get(id)?.client,
-    brand: (client) => db.prepare(`SELECT c.developer AS owner,coalesce(nullif(d.name,''),b.developer_name) AS developerName,
+    brand: (client) => db.prepare(`SELECT c.developer AS owner,c.name,coalesce(nullif(d.name,''),b.developer_name) AS developerName,
       b.icon,p.description,p.repository,p.verified,d.status AS developerStatus
       FROM clients c LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN app_profiles p ON p.id=c.id
       LEFT JOIN developer_profiles d ON d.owner=c.developer WHERE c.client=? AND c.status='active' AND c.id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)`).get(client),
@@ -119,7 +119,7 @@ export function openRegistry(path) {
       db.prepare('SELECT restricted FROM app_restrictions WHERE id=?').get(row.id)?.restricted===1})),
     lookup: (owner,id) => appView(lookup.get(id,owner)),
     list: (developer) => list.all(developer).map(appView),
-    published: () => db.prepare("SELECT client,name FROM clients WHERE status='active' AND id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1) ORDER BY name,client LIMIT 200").all(),
+    published: () => db.prepare("SELECT client,name,coalesce(p.verified,0) AS verified FROM clients LEFT JOIN app_profiles p USING(id) WHERE status='active' AND id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1) ORDER BY name,client LIMIT 200").all().map(app=>({...app,verified:!!app.verified})),
     revokeOwned: (owner,id) => db.prepare("UPDATE clients SET status='revoked' WHERE developer=? AND id=? AND status IN ('pending','active')").run(owner,id).changes === 1,
     has: (client) => Boolean(active.get(client)),
     approve: (id, client) => approve.run(client, id).changes === 1,

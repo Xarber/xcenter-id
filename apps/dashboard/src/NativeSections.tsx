@@ -1,3 +1,4 @@
+import TrustBadges from './TrustBadges';
 import MailClients from './MailClients';
 import AppIcon from './AppIcon';
 import PublicProfile from './PublicProfile';
@@ -13,7 +14,7 @@ import { accountGreeting, accountShortcuts, accountStatus } from './account-over
 import BirthdayPicker from './BirthdayPicker';
 import type { MailMessage, PrivateAddress } from './mail-message';
 import { pickDocumentAsync, pickProfilePhoto, shareDownload } from './native-files';
-import { Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, Share, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, AppState, Image, KeyboardAvoidingView, Modal, Platform, Pressable, Share, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useEffect, useState, type ReactNode } from 'react';
 import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -23,7 +24,7 @@ import type { Account } from './web-account';
 import DeveloperPortal from './DeveloperPortal';
 
 type Device = {id:string;label:string;created:number;current:boolean};
-type ConnectedApp = {client:string;label:string;icon?:string};
+type ConnectedApp = {client:string;label:string;icon?:string|null;verified?:boolean;description?:string};
 type Entry = {id:string;name:string;size:number};
 type Files = {folders:Entry[];files:Entry[];breadcrumbs:Entry[];categories:Record<string,number>;used:number;limit:number};
 type Mail = {id:string;received:number;size:number;subject?:string;from?:string;preview?:string};
@@ -92,7 +93,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [confirmMailDeletion,setConfirmMailDeletion]=useState(false);
   const [inviteMode,setInviteMode]=useState<'create'|'accept'|null>(null);
   const [friendUsername,setFriendUsername]=useState('');
-  const [friendRequests,setFriendRequests]=useState<{id:string;username:string}[]>([]);
+  const [friendRequests,setFriendRequests]=useState<Friend[]>([]);
   const [friends,setFriends]=useState<Friend[]>([]);
   const [incoming,setIncoming]=useState<SharedFile[]>([]);
   const [outgoing,setOutgoing]=useState<SharedFile[]>([]);
@@ -142,7 +143,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
     if(section==='devices')setDevices((await api('devices')).devices);
     if(section==='apps')setApps((await api('connected-apps')).apps);
     if(section==='permissions'){
-      const [active,samples,registered]=await Promise.all([api('data-grants'),api('sample-grants'),api('apps')]);
+      const [active,registered,linked]=await Promise.all([api('data-grants'),api('apps'),api('connected-apps')]);
+      setApps(linked.apps);
       setGrants(active.grants.filter((entry:Grant & {dataset:string})=>entry.dataset==='saved-place.v1'));
       setSampleGrants([]);
       setPublished(registered.apps);
@@ -160,6 +162,13 @@ export default function NativeSections({ section,token,account,colors,reload,exp
     }
   }
   useEffect(()=>{void load().catch(report);},[section,folder,token]);
+  useEffect(()=>{
+    if(section!=='apps'&&section!=='permissions')return;
+    const subscription=AppState.addEventListener('change',state=>{
+      if(state==='active')void load().catch(report);
+    });
+    return ()=>subscription.remove();
+  },[section,token]);
 
   function run(work:()=>Promise<unknown>,success?:string) {
     if(busy)return;
@@ -215,6 +224,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         <View style={[styles.overviewHero,{backgroundColor:colors.soft}]}>
           <Text accessibilityRole="header" style={[styles.overviewTitle,{color:colors.ink}]}>{accountGreeting(account.profile?.givenName||account.name)}</Text>
           {account.profile&&paragraph('@'+account.profile.username)}
+          <TrustBadges verified={account.verified} admin={account.admin} color={colors.ink}/>
           {button(accountMessage('viewProfile','View profile'),()=>navigate('profile'))}
         </View>
         {accountShortcuts().map(({id,label,description})=><Pressable key={id} accessibilityRole="button" onPress={()=>navigate(id)}
@@ -226,6 +236,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       break;
     case 'profile':
       content=<>{paragraph(account.profile?'@'+account.profile.username:'Complete your profile to finish creating your account.')}
+        <TrustBadges verified={account.verified} admin={account.admin} color={colors.ink}/>
         {editingProfile?<>{(picture||(picture===undefined&&account.profile?.hasPicture))&&<Image accessibilityLabel="Profile photo" style={styles.avatar}
           source={picture?{uri:'data:image/jpeg;base64,'+picture}:{
             uri:accountHost+'/account/avatar',
@@ -277,8 +288,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
     case 'apps':
       content=<>{apps.length===0&&paragraph('No linked apps yet.')}
         {apps.map(app=><View key={app.client} style={{gap:10,borderBottomWidth:1,borderColor:colors.soft,paddingVertical:12}}><View style={{flexDirection:'row',gap:12,alignItems:'center'}}>
-          <AppIcon icon={app.icon} color={colors.accent}/>
-          <Text style={{color:colors.ink,fontWeight:'700'}}>{app.label}</Text></View>
+          <AppIcon key={app.icon} icon={app.icon} color={colors.accent}/>
+          <View style={{flexShrink:1,gap:4}}><Text style={{color:colors.ink,fontWeight:'700'}}>{app.label}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View></View>
           {button('Manage permissions',()=>navigate('permissions'))}
           {button('Unlink app',()=>confirm('Unlink '+app.label+'?','This ends its active access and removes its sharing permissions.',()=>run(()=>mutate('connected-apps/unlink',{client:app.client}),'App unlinked.')))}</View>)}
         {button('Manage developer apps',()=>navigate('developer'))}</>;
@@ -287,11 +298,16 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       content=<DeveloperPortal back={()=>navigate('apps')} token={token} colors={colors}/>;
       break;
     case 'permissions': {
-      const appName=(id:string)=>published.find(app=>app.client===id)?.name??id;
+      const appName=(id:string)=>apps.find(app=>app.client===id)?.label??published.find(app=>app.client===id)?.name??id;
       const grantText=(expires:number)=>expires===Number.MAX_SAFE_INTEGER?'Until revoked':'Expires '+date(expires);
       const change=(route:string,grant:Pick<Grant,'source'|'destination'>,method:string,persistent=false)=>
         run(()=>mutate(route,{...grant,persistent,expires:Date.now()+86_400_000},method),method==='DELETE'?'Access revoked.':'Access allowed.');
-      content=<><HostedDataPermissions token={token} colors={colors}/>{grants.map(grant=>row(grant.source+grant.destination,appName(grant.source)+' → '+appName(grant.destination),
+      content=<>{apps.map(app=><View key={app.client} style={{flexDirection:'row',gap:12,alignItems:'center'}}>
+        <AppIcon key={app.icon} icon={app.icon} color={colors.accent}/>
+        <View style={{flexShrink:1,gap:4}}><Text style={{color:colors.ink,fontWeight:'700'}}>{app.label}</Text>
+          <TrustBadges kind="app" verified={app.verified} color={colors.ink}/>
+          {!!app.description&&paragraph(app.description)}</View>
+      </View>)}<HostedDataPermissions token={token} colors={colors}/>{grants.map(grant=>row(grant.source+grant.destination,appName(grant.source)+' → '+appName(grant.destination),
         'Saved places · '+grantText(grant.expires),button('Revoke access',()=>change('data-grants',grant,'DELETE'))))}
         {published.length>1&&<>{paragraph('Choose the app that owns the records')}{published.map(app=><View key={app.client}>
           {button((source===app.client?'✓ ':'')+app.name,()=>{setSource(app.client);setDestination('');})}</View>)}
@@ -350,7 +366,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         {button('Enter invitation code',()=>setInviteMode('accept'))}
         {field('Friend’s username',friendUsername,setFriendUsername,{maxLength:24,autoCapitalize:'none'})}
         {button('Send request',()=>run(async()=>{await api('friends/request',{username:friendUsername});setFriendUsername('');},'Request submitted.'),busy||!friendUsername.trim())}
-        {friendRequests.map(item=>row(item.id,'@'+item.username,'Friend request',<View>
+        {friendRequests.map(item=>row(item.id,'@'+item.username,'Friend request',<View><TrustBadges verified={item.verified} admin={item.admin} color={colors.ink}/>
           {button('Accept',()=>run(()=>mutate('friends/respond',{id:item.id,accept:true})))}
           {button('Decline',()=>run(()=>mutate('friends/respond',{id:item.id,accept:false})))}
         </View>))}
@@ -366,10 +382,14 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           {status&&paragraph(status)}
           {button('Close',()=>setInviteMode(null))}
         </MailScreen>}
-        {friends.map(friend=>row(friend.id,'@'+friend.username,'',button('Remove friend',()=>confirm(
-          'Remove friend?','Both accounts will lose access to files shared through this friendship.',
-          ()=>run(()=>mutate('friends/'+friend.id,{},'DELETE'),'Friend removed.'),
-        ))))}
+        {friends.map(friend=><View key={friend.id} style={{gap:8}}>
+          <View style={{flexDirection:'row',gap:10,alignItems:'center'}}>
+            {friend.avatar?<Image style={{width:36,height:36,borderRadius:18}} source={{uri:accountHost+friend.avatar}}/>:<Ionicons name="person-circle-outline" size={36} color={colors.muted}/>}
+            <View style={{flexShrink:1,gap:4}}>{paragraph('@'+friend.username)}<TrustBadges verified={friend.verified} admin={friend.admin} color={colors.ink}/></View>
+          </View>
+          {button('Remove friend',()=>confirm('Remove friend?','Both accounts will lose access to files shared through this friendship.',
+            ()=>run(()=>mutate('friends/'+friend.id,{},'DELETE'),'Friend removed.')))}
+        </View>)}
         <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Shared with you</Text>
         {incoming.map(file=>row(file.id,file.name,'From @'+file.from,fileAction('Download '+file.name,'download-outline',
           ()=>run(()=>shareDownload('files/shared/'+file.id,file.name,token)))))}
@@ -496,11 +516,14 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         {account.canReceiveMail&&button('Create private email address',()=>setCreatingAlias(!creatingAlias))}
         {creatingAlias&&<>{premiumAliases&&account.admin&&field('Address name (optional)',aliasName,setAliasName,{autoCapitalize:'none',maxLength:24})}{button('Create address',()=>run(async()=>{await api('mail/aliases',{name:aliasName||undefined});setCreatingAlias(false);setAliasName('');await load();},'Private address created.'))}</>}
         {aliases.length>0&&<Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>{accountMessage('privateAddresses','Hide My Email addresses')}</Text>}
-        {aliases.filter(item=>!item.active).map(item=>button('Turn on '+item.address,()=>run(async()=>{await api('mail/aliases/'+item.address,{active:true},'PUT');await load();} )))}
         {aliases.map(item=>row(item.address,item.address,item.active?'On · '+(item.premium?'Premium address':'Private address'):'Off · Not receiving mail',
-          item.active&&button(accountMessage('disableAddress','Disable address'),()=>confirm('Disable this address?','Future messages to this address will be rejected.',
+          item.active?button(accountMessage('disableAddress','Disable address'),()=>confirm('Disable this address?','Future messages to this address will be rejected.',
             ()=>run(async()=>{await api('mail/aliases/'+item.address,{},'DELETE');await load();},'Private address disabled.'),
-          ))))}
+          )):<View style={styles.actions}>
+            {button('Turn on',()=>run(async()=>{await api('mail/aliases/'+item.address,{active:true},'PUT');await load();},'Private address enabled.'))}
+            {button('Delete address',()=>confirm('Permanently delete '+item.address+'?','Future messages to this address will be rejected.',
+              ()=>run(async()=>{await api('mail/aliases/'+item.address+'?permanent=true',{},'DELETE');await load();},'Private address deleted.')))}
+          </View>))}
         {account.canSendMail&&button(accountMessage('newEmail','New email'),()=>{setStatus('');setCompose(true);})}
         {compose&&<MailScreen colors={colors} close={()=>{if(!busy)setCompose(false);}}>
           <View style={styles.composeHeader}>

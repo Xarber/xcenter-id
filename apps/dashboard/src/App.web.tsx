@@ -1,3 +1,4 @@
+import TrustBadges from './TrustBadges.web';
 import {introduction} from './introduction';
 import MailClients from './MailClients.web';
 import ApplicationStorage from './ApplicationStorage.web';
@@ -293,7 +294,7 @@ export default function WebApp(){
     const valid=!!challenge&&!!state&&nativeReturn.test('/native-session?challenge='+challenge+'&state='+state);
     return <div className="xc-setup"><Logo href="/"/><section className="xc-card xc-pad xc-stack">
       <h1>Sign in to X-Center ID on your device</h1>
-      <p>Continue as {account.profile.givenName} {account.profile.surname}.</p>
+      <p>Continue as {account.profile.givenName} {account.profile.surname}.</p><TrustBadges verified={account.verified} admin={account.admin}/>
       {valid?<button className="xc-button xc-primary" disabled={busy} onClick={()=>{
         setBusy(true);
         void api('native/authorize',{challenge,state}).then(({location})=>window.location.assign(location))
@@ -367,7 +368,7 @@ export default function WebApp(){
   </section></>;
   else content=<>
     <section className="xc-hero">
-      <div><p className="xc-kicker">{accountMessage('personalAccount','Personal account')}</p><h2>{accountGreeting(profile.givenName)}</h2><p>@{profile.username}</p>
+      <div><p className="xc-kicker">{accountMessage('personalAccount','Personal account')}</p><h2>{accountGreeting(profile.givenName)}</h2><p>@{profile.username}</p><TrustBadges verified={account.verified} admin={account.admin}/>
         <a className="xc-button xc-hero-button" href="/profile">{accountMessage('viewProfile','View profile')} <ArrowRight size={16}/></a></div>
       <div className="xc-avatar xc-hero-avatar">{picture?<img src={picture} alt=""/>:<UserRound size={43}/>}</div>
     </section>

@@ -125,6 +125,11 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   const q = (sql) => db.prepare(sql);
   const restriction=q('SELECT status FROM account_restrictions WHERE owner=?');
   const available=owner=>!!account.get(owner)&&!restriction.get(owner);
+  const badges=owner=>({verified:q('SELECT verified FROM account_flags WHERE owner=?').get(owner)?.verified===1,admin:isAdmin({owner})});
+  const linkedAppBrand=app=>{
+    const brand=appBrand(app.client);
+    return {...app,label:brand?.name??app.label,icon:brand?.icon??null,verified:!!brand?.verified,description:brand?.description??''};
+  };
   const storageCapacity=owner=>q('SELECT bytes FROM account_storage_caps WHERE owner=?').get(owner)?.bytes??standardStorage;
   const account = q('SELECT name FROM accounts WHERE id=?');
   const readProfile = q('SELECT username,given_name AS givenName,surname,age_range AS ageRange FROM identity_profiles WHERE owner=?');
@@ -291,9 +296,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         externalMail,
         externalMailSubmission:!!outboundMail?.external,
         mailbox:saved ? saved.username+'@mail.xcenter.it' : null,
-        admin:isAdmin(active),
+        ...badges(active.owner),
         externalMailLimits:outboundMail?.limits?.view(active.owner)??null,
-        verified:q('SELECT verified FROM account_flags WHERE owner=?').get(active.owner)?.verified===1,
       } };
     }
 
@@ -310,7 +314,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     }
     if (req.method === 'GET' && pathname === '/account/connected-apps') {
       requireCondition(active,401,'Sign in first.');
-      return {apps:q('SELECT client,label,updated FROM connected_apps WHERE owner=? ORDER BY updated DESC LIMIT 100').all(active.owner).map(app=>({...app,icon:appBrand(app.client)?.icon??null}))};
+      return {apps:q('SELECT client,label,updated FROM connected_apps WHERE owner=? ORDER BY updated DESC LIMIT 100').all(active.owner).map(linkedAppBrand)};
     }
     if (req.method === 'GET' && pathname === '/account/devices') {
       requireCondition(active,401,'Sign in first.');
@@ -327,7 +331,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       return {accounts:q(`SELECT p.username,p.owner,coalesce(e.premium_mail,0) AS premium FROM identity_profiles p
         LEFT JOIN account_entitlements e ON e.owner=p.owner ORDER BY p.username LIMIT 500`).all()
         .map(row=>({username:row.username,premium:!!row.premium,capacity:storageCapacity(row.owner),
-          locked:restriction.get(row.owner)?.status==='locked',protected:isAdmin({owner:row.owner}),hasPicture:!!profile(row.owner)?.picture}))};
+          locked:restriction.get(row.owner)?.status==='locked',protected:isAdmin({owner:row.owner}),...badges(row.owner),hasPicture:!!profile(row.owner)?.picture}))};
     }
     if(req.method==='GET'&&pathname==='/account/username-change'){
       requireCondition(active,401,'Sign in first.');
@@ -747,13 +751,13 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       if(!owner)return null;
       const person=profile(owner);
       return {owner,username,hasPicture:!!person?.picture,name:person?.givenName+' '+person?.surname,
-        locked:restriction.get(owner)?.status==='locked',protected:isAdmin({owner}),admin:isAdmin({owner}),rootAdmin:adminIds.has(owner),verified:q('SELECT verified FROM account_flags WHERE owner=?').get(owner)?.verified===1,capacity:storageCapacity(owner),
+        locked:restriction.get(owner)?.status==='locked',protected:isAdmin({owner}),...badges(owner),rootAdmin:adminIds.has(owner),capacity:storageCapacity(owner),
         externalMailLimits:outboundMail?.limits?.view(owner)??null,
         premium:q('SELECT premium_mail FROM account_entitlements WHERE owner=?').get(owner)?.premium_mail===1,
         created:q('SELECT created FROM accounts WHERE id=?').get(owner).created,
         devices:q('SELECT count(*) AS count FROM account_sessions WHERE owner=? AND expires>?').get(owner,now()).count,
         passkeys:keys.all(owner).length,
-        apps:q('SELECT client,label,updated FROM connected_apps WHERE owner=? ORDER BY updated DESC').all(owner)};
+        apps:q('SELECT client,label,updated FROM connected_apps WHERE owner=? ORDER BY updated DESC').all(owner).map(linkedAppBrand)};
     },
     createMailboxAlias(owner,candidate,client=null){
       requireCondition(available(owner)&&profile(owner),403,'Account unavailable.');
@@ -775,7 +779,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       if(enabled)requireCondition(q('SELECT premium_mail FROM account_entitlements WHERE owner=?').get(owner)?.premium_mail===1,403,'Premium private addresses are unavailable.');
       return q('UPDATE mailbox_aliases SET active=? WHERE owner=? AND local=?').run(Number(enabled),owner,local).changes===1;
     },
-    linkedAppLabel:(owner,client)=>q('SELECT label FROM connected_apps WHERE owner=? AND client=?').get(owner,client)?.label??appBrand(client)?.name,
+    linkedAppLabel:(owner,client)=>appBrand(client)?.name??q('SELECT label FROM connected_apps WHERE owner=? AND client=?').get(owner,client)?.label,
     isAdministrator:req=>isAdmin(session(req)),
     deleteMailboxAlias(owner,local){
       db.exec('BEGIN IMMEDIATE');
@@ -807,19 +811,20 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       q('UPDATE account_flags SET '+flag+'=? WHERE owner=?').run(Number(value),owner);
     },
     recentlyConfirmed:req=>confirmed(session(req)),
+    profileBadges:owner=>available(owner)?badges(owner):{verified:false,admin:false},
     badgeForAddress(address) {
       const user=q('SELECT owner FROM verified_emails WHERE address=?').get(address?.toLowerCase());
       const local=/^([a-z][a-z0-9]{2,23})@mail\.xcenter\.it$/.exec(address?.toLowerCase()??'');
       const owner=user?.owner??(local?(usernameOwner.get(local[1])?.owner??q('SELECT owner FROM mailbox_aliases WHERE local=? AND active=1').get(local[1])?.owner):null);
       if(!owner||!available(owner))return {verified:false,admin:false};
-      return {verified:q('SELECT verified FROM account_flags WHERE owner=?').get(owner)?.verified===1,admin:isAdmin({owner})};
+      return badges(owner);
     },
     publicProfile(username) {
       const owner=usernameOwner.get(username)?.owner;
       if(!owner||!available(owner))return null;
       const fields=JSON.parse(q('SELECT public_fields FROM account_flags WHERE owner=?').get(owner)?.public_fields??'[]');
       if(!fields.length)return null;
-      const person=profile(owner), result={username};
+      const person=profile(owner), trust=badges(owner), result={username,...(trust.verified?{verified:true}:{}),...(trust.admin?{admin:true}:{})};
       for(const field of fields)if(['givenName','surname'].includes(field))result[field]=person[field];
       if(fields.includes('picture'))result.avatar=person.picture?'/public/profiles/'+username+'/avatar':null;
       return result;
@@ -912,7 +917,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       if(!available(owner))return undefined;
       const found = profile(owner);
       return found ? { username:found.username, givenName:found.givenName,surname:found.surname,
-        ageRange:found.ageRange, hasPicture:!!found.picture, emails:emails.all(owner) } : null;
+        ageRange:found.ageRange, hasPicture:!!found.picture, emails:emails.all(owner),...badges(owner) } : null;
     },
   };
 }

@@ -1,4 +1,4 @@
-export type Friend = {id:string;avatar?:string|null; username:string};
+export type Friend = {id:string;avatar?:string|null; username:string; verified?:boolean; admin?:boolean};
 export type SharedFile = {id:string;name:string;size:number;from?:string;to?:string};
 
 export type SavedPlace = {label:string;latitude:number;longitude:number};
