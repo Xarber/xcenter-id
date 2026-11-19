@@ -1,6 +1,9 @@
-import { useState, type ReactNode } from 'react';
-import { Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View, useColorScheme, type ImageSourcePropType } from 'react-native';
+import { useRef, useState, type ReactNode } from 'react';
+import { Image, Linking, Platform, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View, useColorScheme, type ImageSourcePropType } from 'react-native';
+import {dismissAuthSession,openAuthSessionAsync} from 'expo-web-browser';
 import {authorizeNative} from './authorize-native';
+import {authorizeIOSBackend,type IOSBackendSignIn} from './backend-signin';
+import {webSignInUrl} from './managed-signin-urls';
 import type {RegisteredAppSignInProps} from './registered-signin';
 
 export type OverviewProfile = {
@@ -25,6 +28,8 @@ export type AccountOverviewProps = {
   profile: OverviewProfile | null;
   clientId?: string;
   signIn?: RegisteredAppSignInProps;
+  iosBackendSignIn?: IOSBackendSignIn;
+  webSignIn?: {startPath:string};
   onSignIn?: () => void | Promise<void>;
   onSignOut?: () => void | Promise<void>;
   syncOptions?: readonly OverviewSyncOption[];
@@ -39,23 +44,31 @@ const palettes = {
 };
 
 /** Account entry and details. The host validates and stores its own session. */
-export function AccountOverview({profile,clientId,signIn,onSignIn,onSignOut,syncOptions=[],settings,onOpenSettings,onManageAccount}:AccountOverviewProps) {
+export function AccountOverview({profile,clientId,signIn,iosBackendSignIn,webSignIn,onSignIn,onSignOut,syncOptions=[],settings,onOpenSettings,onManageAccount}:AccountOverviewProps) {
   const palette=useColorScheme()==='dark'?palettes.dark:palettes.light;
   const [pictureFailed,setPictureFailed]=useState<ImageSourcePropType>();
   const [error,setError]=useState('');
   const [details,setDetails]=useState(false);
   const [pending,setPending]=useState(false);
+  const signingIn=useRef(false);
+  const backend=Platform.OS==='ios'?iosBackendSignIn:undefined;
+  const website=Platform.OS==='web'?webSignIn:undefined;
+  const native=Platform.OS==='ios'||Platform.OS==='android'?signIn:undefined;
 
   async function start(){
+    if(signingIn.current)return;
+    signingIn.current=true;
     setPending(true);setError('');
     try{
       if(onSignIn)await onSignIn();
-      else if(signIn){
-        const result=await authorizeNative({...signIn,issuer:'https://id.xcenter.it'});
-        if(result)await signIn.onAuthorized(result);
+      else if(website)window.location.assign(webSignInUrl(website.startPath,window.location.origin));
+      else if(backend)await authorizeIOSBackend(backend,url=>openAuthSessionAsync(url,null),dismissAuthSession);
+      else if(native){
+        const result=await authorizeNative({...native,issuer:'https://id.xcenter.it'});
+        if(result)await native.onAuthorized(result);
       }
     }catch(failure){setError(failure instanceof Error?failure.message:'Could not sign in.');}
-    finally{setPending(false);}
+    finally{signingIn.current=false;setPending(false);}
   }
   async function signOut(){
     setPending(true);setError('');
@@ -91,7 +104,7 @@ export function AccountOverview({profile,clientId,signIn,onSignIn,onSignOut,sync
   if(!profile)return <View style={[styles.hero,{backgroundColor:palette.hero}]}>
     {brand}
     <Text accessibilityRole="header" style={[styles.name,{color:palette.ink}]}>Sign in or create an account</Text>
-    {(onSignIn||signIn)&&action(pending?'Opening sign-in…':'Continue with X-Center ID',()=>void start())}
+    {(onSignIn||native||backend||website)&&action(pending?'Opening sign-in…':'Continue with X-Center ID',()=>void start())}
     {!!error&&<Text accessibilityRole="alert" style={{color:palette.ink}}>{error}</Text>}
   </View>;
   const showPhoto=profile.photo&&profile.photo!==pictureFailed;

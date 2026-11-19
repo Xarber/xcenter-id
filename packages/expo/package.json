@@ -1,6 +1,6 @@
 {
   "name": "@authnjs/expo",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "./index.tsx",
@@ -10,6 +10,8 @@
     "README.md",
     "LICENSE",
     "authorize-native.ts",
+    "backend-signin.ts",
+    "managed-signin-urls.ts",
     "assets",
     "registered-signin.tsx",
     "account-overview.tsx"

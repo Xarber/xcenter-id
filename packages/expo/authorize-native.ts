@@ -1,6 +1,7 @@
 import { AuthRequest, CodeChallengeMethod, ResponseType, fetchDiscoveryAsync } from 'expo-auth-session';
 import { randomUUID } from 'expo-crypto';
 import { Platform } from 'react-native';
+import {matchesNativeCallback} from './managed-signin-urls';
 
 export type NativeAuthorizationOptions = {
   issuer: string;
@@ -32,6 +33,9 @@ export async function authorizeNative({ issuer, clientId, redirectUri,scopes=['o
   if (!https(issuer) || !https(redirectUri) || !clientId) {
     throw new Error('Expected an HTTPS issuer, verified HTTPS app link and registered public client');
   }
+  if(Platform.OS==='ios'&&Number.parseFloat(Platform.Version)<17.4){
+    throw new Error('This registered HTTPS callback requires iOS 17.4 or newer. Use the secure backend sign-in handoff on this device.');
+  }
   const discovery = await fetchDiscoveryAsync(issuer);
   if (discovery.discoveryDocument?.issuer !== issuer ||
     !discovery.authorizationEndpoint || !https(discovery.authorizationEndpoint) ||
@@ -49,7 +53,7 @@ export async function authorizeNative({ issuer, clientId, redirectUri,scopes=['o
   const result = await request.promptAsync(discovery,{preferUniversalLinks:true});
   if (result.type === 'cancel' || result.type === 'dismiss') return null;
   if (result.type !== 'success' || result.params.state !== request.state ||
-    !result.params.code || !request.codeVerifier) {
+    !result.params.code || !request.codeVerifier || !matchesNativeCallback(result.url,redirectUri)) {
     throw new Error('Authorization could not be completed');
   }
   return { code: result.params.code, verifier: request.codeVerifier, nonce, redirectUri };

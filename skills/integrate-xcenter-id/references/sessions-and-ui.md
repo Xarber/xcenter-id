@@ -43,7 +43,7 @@ Optional `scopes` request the app’s capabilities, `nonce` supplies a pre-creat
 
 ### AccountOverview
 
-Mount `AccountOverview` at the top of Settings. Pass `profile={null}` while signed out. Supply `signIn` with the registered app's HTTPS callback and `onAuthorized` code exchange handler to use the secure system browser. For a backend, use `onSignIn` instead and initiate your existing verified browser handoff. The host validates, persists and clears its product session. Set the controlled profile after sign-in. The component switches from the branded sign-in banner to the profile in the same space.
+**Preferred integration.** Mount one `AccountOverview` at the top of Settings. Reuse it for account entry and management. Pass `profile={null}` while signed out. Supply `signIn` with the registered app's HTTPS callback and `onAuthorized` code exchange handler to use the secure system browser. Use the platform-specific managed options below or supply `onSignIn` for an existing custom implementation. The host validates, persists and clears its product session. Set the controlled profile after sign-in. The component switches from the branded sign-in banner to the profile in the same space.
 
 **Manage account & data** opens a detail sheet with **Open dashboard**, **Manage app**, and the small red **Sign out** action. Provide `clientId` if it is absent from `signIn` and implement `onSignOut` with your session cleanup. Reuse those actions in the overview. `settings` and `syncOptions` add host-specific details in the sheet. You can supply `onManageAccount` to override detail navigation if the host owns that route.
 
@@ -57,3 +57,12 @@ Mount `AccountOverview` at the top of Settings. Pass `profile={null}` while sign
   ]}
 />
 ```
+
+
+#### Managed sign-in and closing the browser
+
+- **iOS with a registered app link.** `signIn` uses Expo AuthSession, backed by Apple’s `ASWebAuthenticationSession`. Use an associated-domain HTTPS callback on iOS 17.4 or newer. The OS dismisses the sheet when it receives the matching callback. The SDK checks the exact callback and state, then invokes `onAuthorized`. Verify and persist the session before rendering the profile.
+- **iOS without an app callback.** Supply `iosBackendSignIn.begin(signal)`. It returns an HTTPS `url` and `complete(signal)`. Run the proof-bound backend pickup in `complete`, validate and persist the product session, and resolve only after success. The SDK opens and dismisses `ASWebAuthenticationSession` automatically. Implement a short timeout and honor the abort signal so closing the sheet stops polling.
+- **Android.** `signIn` uses the system Custom Tab via Expo AuthSession and finishes through the exact registered Android App Link. Keep PKCE and state checks.
+- **Web.** Supply `webSignIn={{ startPath: '/sign-in/xcenter' }}`. The overview navigates to a same-origin HTTPS backend start route. Complete OIDC on the backend, create the product session, and redirect to Settings so the same overview shows the profile. This works when browsers block pop-ups. If your existing web implementation uses an auth pop-up, complete it from the verified same-origin callback and close it after it hands control back to the signed-in page.
+- **Custom sign-in.** `onSignIn` overrides managed sign-in. On iOS use `ASWebAuthenticationSession` directly or an API verified to use it, such as Expo's `openAuthSessionAsync`. Finish and dismiss automatically. Use supported system authentication surfaces throughout, keeping issuer and product credentials out of untrusted browser messages and URLs.
