@@ -58,3 +58,10 @@ The developer portal's app management page can restrict sign-in to an allowlist.
 Confidential app owners can rotate or revoke the OAuth client secret after confirming identity. Rotation immediately replaces the sole active secret. Revocation stops confidential client authentication and regeneration retains the existing client ID. Copy a new secret when it is shown and update the app backend. This credential is separate from database keys. Existing account sessions and access-token expiry are separate from client authentication.
 
 A linked app's email address is read-only at sign-in. The issuer shows the previously selected address while it is available. To choose a different address, first unlink the app, which deletes the user data it saved in X-Center ID, then link it again.
+
+
+### DNS-free registrations
+
+Developer Apps can activate a confidential backend without public DNS. Use an exact HTTP loopback callback on `127.0.0.1` or `[::1]` with an explicit port for local browser use. A remote self-hosted installation without DNS can use the device authorization flow with the same backend credential. Store the secret only on the backend. The issuer labels this registration **Unsecure app**, defaults it to private, and keeps its identity separate from DNS-verified apps. It cannot receive a verified app badge or provision its own service database.
+
+The source publisher controls who can read its shared collections. **Secure apps** is the default and requires DNS activation. **Verified apps only** additionally requires administrator verification. **All apps** lets local or custom-hosted apps request hosted collection access after showing an explicit warning. Each grant still requires the owner’s approval. The current trust setting, registration status and grants are checked on reads. The older saved-place cross-app endpoint accepts DNS-verified registrations.

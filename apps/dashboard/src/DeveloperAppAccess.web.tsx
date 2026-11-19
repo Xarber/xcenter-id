@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react';
 import {developerApi} from './developer-web';
 import {api} from './web-account';
 
-type Access = {private:boolean;requests:boolean;members:{username:string;approved:boolean}[]};
+type Access = {readerTrust:'secure'|'verified'|'any';private:boolean;requests:boolean;members:{username:string;approved:boolean}[]};
 
 export default function DeveloperAppAccess({id}:{id:string}){
   const [access,setAccess]=useState<Access|null>(null);
@@ -25,7 +25,13 @@ export default function DeveloperAppAccess({id}:{id:string}){
   }
   return <section className="xc-stack">
     <h3>Who can use this app</h3>
-    {access&&<><label className="xc-device-option"><span>Private app</span>
+    {access&&<><label>Apps allowed to read shared data
+      <select value={access.readerTrust} disabled={busy} onChange={event=>{
+        const mode=event.target.value;
+        if(mode==='any'&&!window.confirm('Allow unsecure apps to request access to shared records? Users must still approve.'))return;
+        void change({action:'reader-trust',mode});
+      }}><option value="secure">Secure apps</option><option value="verified">Verified apps only</option><option value="any">All apps, including unsecure apps</option></select>
+    </label><label className="xc-device-option"><span>Private app</span>
       <input type="checkbox" role="switch" checked={access.private} disabled={busy} onChange={event=>void change({action:'settings',private:event.target.checked,requests:access.requests})}/></label>
       {access.private&&<>
         <p>Only you and approved accounts can sign in to this app.</p>

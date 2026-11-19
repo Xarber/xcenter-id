@@ -43,16 +43,17 @@ Optional `scopes` request the app’s capabilities, `nonce` supplies a pre-creat
 
 ### AccountOverview
 
-Import from `@authnjs/expo/account-overview`. Pass `profile` with `name` and `username`. Optional fields are `email`, `photo` as a React Native image source, `verified`, and `administrator`.
+Mount `AccountOverview` at the top of Settings. Pass `profile={null}` while signed out. Supply `signIn` with the registered app's HTTPS callback and `onAuthorized` code exchange handler to use the secure system browser. For a backend, use `onSignIn` instead and initiate your existing verified browser handoff. The host validates, persists and clears its product session. Set the controlled profile after sign-in. The component switches from the branded sign-in banner to the profile in the same space.
 
-Pass `syncOptions` for controlled switches. Each item has `id`, `label`, `enabled`, and `onChange(enabled)`, with optional `description` and `disabled`. Use `settings` for additional inline React content or `onOpenSettings` for a separate app settings screen. The default **Manage X-Center ID** action opens the website profile. Override it with `onManageAccount` to open a supported native route.
+**Manage account & data** opens a detail sheet with **Open dashboard**, **Manage app**, and the small red **Sign out** action. Provide `clientId` if it is absent from `signIn` and implement `onSignOut` with your session cleanup. Reuse those actions in the overview. `settings` and `syncOptions` add host-specific details in the sheet. You can supply `onManageAccount` to override detail navigation if the host owns that route.
 
 ```tsx
 <AccountOverview
-  profile={{ name: profile.name, username: profile.preferred_username, photo }}
+  profile={profile ? { name: profile.name, username: profile.preferred_username, photo } : null}
+  signIn={{ clientId, redirectUri, onAuthorized: finishVerifiedSignIn }}
+  onSignOut={clearProductSession}
   syncOptions={[
     { id: 'preferences', label: 'Sync preferences', enabled: syncEnabled, onChange: saveSyncPreference },
   ]}
-  onOpenSettings={openAppSettings}
 />
 ```

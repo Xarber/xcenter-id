@@ -15,6 +15,8 @@ export function openRegistry(path) {
     CREATE TABLE IF NOT EXISTS client_native(id TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS app_profiles(id TEXT PRIMARY KEY, description TEXT NOT NULL, repository TEXT NOT NULL, callbacks TEXT NOT NULL, verified INTEGER NOT NULL DEFAULT 0) STRICT;
     CREATE TABLE IF NOT EXISTS app_requirements(id TEXT PRIMARY KEY, email INTEGER NOT NULL, age_range INTEGER NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS app_local_registrations(id TEXT PRIMARY KEY) STRICT;
+    CREATE TABLE IF NOT EXISTS app_reader_trust(id TEXT PRIMARY KEY,mode TEXT NOT NULL CHECK(mode IN ('any','secure','verified'))) STRICT;
     CREATE TABLE IF NOT EXISTS app_access_policy (
       id TEXT PRIMARY KEY, private INTEGER NOT NULL, requests INTEGER NOT NULL DEFAULT 0
     ) STRICT;
@@ -35,10 +37,11 @@ export function openRegistry(path) {
   const setBrand=db.prepare(`INSERT INTO client_brand VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET
     developer_name=excluded.developer_name,icon=excluded.icon`);
   const readRequirements=db.prepare("SELECT email,age_range FROM app_requirements WHERE id=?");
+  const isLocal=db.prepare("SELECT 1 FROM app_local_registrations WHERE id=?");
   const appView=row=>row?{...row,description:row.description??'',repository:row.repository??'',
-    callbacks:row.callbacks?JSON.parse(row.callbacks):[row.callback],verified:!!row.verified,...(row.id?{requirements:requirements(row.id)}:{})}:undefined;
+    callbacks:row.callbacks?JSON.parse(row.callbacks):[row.callback],verified:!!row.verified,...(row.id?{requirements:requirements(row.id),local:!!isLocal.get(row.id)}:{})}:undefined;
   const requirements=id=>{const row=readRequirements.get(id);return {email:!!row?.email,age_range:!!row?.age_range};};
-  const detailByClient=db.prepare(`SELECT c.name,c.callback,p.callbacks FROM clients c LEFT JOIN app_profiles p ON p.id=c.id
+  const detailByClient=db.prepare(`SELECT c.id,c.name,c.callback,p.callbacks FROM clients c LEFT JOIN app_profiles p ON p.id=c.id
     WHERE c.client=? AND c.status='active' AND c.id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)`);
   const writeAppProfile=db.prepare(`INSERT INTO app_profiles(id,description,repository,callbacks) VALUES(?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET description=excluded.description,repository=excluded.repository,callbacks=excluded.callbacks,verified=0`);
@@ -57,6 +60,20 @@ export function openRegistry(path) {
   };
   return {
     access,
+    readerTrust(id){return db.prepare('SELECT mode FROM app_reader_trust WHERE id=?').get(id)?.mode??'secure';},
+    setReaderTrust(owner,id,mode){
+      if(lookup.get(id,owner)?.status==='revoked'||!lookup.get(id,owner))return false;
+      db.prepare('INSERT INTO app_reader_trust VALUES(?,?) ON CONFLICT(id) DO UPDATE SET mode=excluded.mode').run(id,mode);
+      return true;
+    },
+    crossReadAllowed(source,destination){
+      const from=accessByClient.get(source),to=accessByClient.get(destination);
+      if(!from||!to||!active.get(source)||!active.get(destination))return false;
+      const mode=this.readerTrust(from.id);
+      if(mode==='any')return true;
+      if(isLocal.get(to.id))return false;
+      return mode==='secure'||!!db.prepare('SELECT verified FROM app_profiles WHERE id=?').get(to.id)?.verified;
+    },
     accessSettings(owner,id){
       const app=lookup.get(id,owner);
       if(!app||app.status==='revoked')return null;
@@ -86,7 +103,7 @@ export function openRegistry(path) {
     registration:id=>db.prepare('SELECT c.id,c.client,c.developer,c.status,p.verified FROM clients c LEFT JOIN app_profiles p ON p.id=c.id WHERE c.id=?').get(id),
     clientForId:id=>db.prepare('SELECT client FROM clients WHERE id=?').get(id)?.client,
     brand: (client) => db.prepare(`SELECT c.developer AS owner,c.name,coalesce(nullif(d.name,''),b.developer_name) AS developerName,
-      b.icon,p.description,p.repository,p.verified,d.status AS developerStatus,r.email AS requiresEmail,r.age_range AS requiresAgeRange
+      b.icon,p.description,p.repository,p.verified,EXISTS(SELECT 1 FROM app_local_registrations l WHERE l.id=c.id) AS local,d.status AS developerStatus,r.email AS requiresEmail,r.age_range AS requiresAgeRange
       FROM clients c LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN app_profiles p ON p.id=c.id
       LEFT JOIN developer_profiles d ON d.owner=c.developer LEFT JOIN app_requirements r ON r.id=c.id WHERE c.client=? AND c.status='active' AND c.id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)`).get(client),
     publicDetails: client=>appView(detailByClient.get(client)),
@@ -135,6 +152,7 @@ export function openRegistry(path) {
         .map(developer=>({...developer,repository:readOpenSource.get(developer.owner)?.repository??null,githubProfile:githubProfile.get(developer.owner)?.url??null})),
     }),
     verifyApp(id,verified){
+      if(verified&&isLocal.get(id))return false;
       const item=db.prepare("SELECT callback FROM clients WHERE id=? AND status IN ('pending','active')").get(id);
       if(!item)return false;
       db.prepare(`INSERT INTO app_profiles VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET verified=excluded.verified`)
@@ -153,7 +171,7 @@ export function openRegistry(path) {
       db.prepare('UPDATE app_profiles SET verified=0 WHERE id=?').run(id);
       return true;
     },
-    submit(developer, name, callback, brand, native = false, profile) {
+    submit(developer, name, callback, brand, native = false, profile, local = false) {
       const id = randomUUID();
       db.exec('BEGIN IMMEDIATE');
       try {
@@ -161,8 +179,12 @@ export function openRegistry(path) {
         if(brand)setBrand.run(id,brand.developerName,brand.icon);
         if(profile)writeAppProfile.run(id,profile.description,profile.repository,JSON.stringify(profile.callbacks));
         if(native)db.prepare('INSERT INTO client_native VALUES(?)').run(id);
+        if(local){
+          db.prepare('INSERT INTO app_local_registrations VALUES(?)').run(id);
+          db.prepare('INSERT INTO app_access_policy VALUES(?,1,0)').run(id);
+        }
         db.exec('COMMIT');
-        return {id,name,callback,status:'pending',...brand,...profile,...(native?{native:true}:{})};
+        return {id,name,callback,status:'pending',...brand,...profile,local,...(native?{native:true}:{})};
       } catch(error){db.exec('ROLLBACK');throw error;}
     },
     moderate(owner,id,action){

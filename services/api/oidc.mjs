@@ -144,6 +144,12 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
   const knownClient=(client)=>clients.some(item=>item.client_id===client)||!!registry?.has(client);
   const policy=interactionPolicy.base();
   policy.get('login').checks.add(new interactionPolicy.Check('account_session','Sign in to X-Center ID',ctx=>{
+    const client=ctx.oidc.client;
+    if(registry?.brand(client.clientId)?.local&&ctx.oidc.params.redirect_uri&&!client.redirectUris.includes(ctx.oidc.params.redirect_uri)){
+      const error=new errors.InvalidRequest('Use the exact registered loopback callback.');
+      error.allow_redirect=false;
+      throw error;
+    }
     if(ctx.oidc.result?.login)return false;
     const active=accounts.current(ctx.req);
     return !active||ctx.oidc.session.accountId!==active.owner;
@@ -326,6 +332,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const emailUnavailable=requiredEmail&&!chooseEmail&&!sharedEmail;
     const showAge=scopes.has('age_range')&&(missing.has('age_range')||!existingGrant||explicitConsent||requiredAge&&!existingScopes.has('age_range'));
     const appData=scopes.has('app_data');
+    const ownsStorage=appData&&(!brand||brand.verified)&&!brand?.local;
     const showFriends=scopes.has('friends')&&(missing.has('friends')||explicitConsent);
     const showOffline=scopes.has('offline_access')&&(missing.has('offline_access')||explicitConsent);
     if (req.method === 'POST') {
@@ -355,6 +362,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const primary=selected==='primary';
       const email = selected==='current'?sharedEmail:premium || alias || (primary?person.username+'@mail.xcenter.it':selected);
       if (selected!=='current' && email && !alias && !premium && !primary && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
+      if(appData&&brand?.local&&input.get('confirm-unsecure')!=='yes')return html(res,'<h1>Confirm unsecure app access</h1><p>Confirm the warning in the authorization form.</p>',400);
       const dataChanged=appData&&applicationData?.authorize(active.owner,client.client_id,input.getAll('data-permission'));
       const keepSession=showOffline&&input.getAll('permission').includes('offline_access');
       const shareFriends=showFriends&&input.getAll('permission').includes('friends');
@@ -402,6 +410,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       ${device?'<p>You’re approving sign-in on your other device.</p>':''}
       ${incremental?`<p>${escape(title)} is already linked to your X-Center ID. Review its permissions before continuing.</p>`:''}
       ${brand?.description?`<p>${escape(brand.description)}</p>`:''}
+      ${brand?.local?'<p role="alert">Unsecure app. Its hosting domain has not been verified. Continue only if you trust this installation.</p>':''}
       ${brand?.verified?badgeRow('<span class="badge">✓ Verified app</span>'):''}
       <div class="context"><strong>${escape(person.givenName)} ${escape(person.surname)}</strong>${badgeRow(personBadges)}
       <div>Developed by ${escape(developerName)} at <strong>${escape(client.host)}</strong></div>
@@ -413,9 +422,10 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         ${requiredAge||!showAge&&existingScopes.has('age_range')?fixed('age','Age range',requiredAge?requiredNote:''):''}
         ${showFriends?`<li><label class="permission-toggle">${glyph('user')}<span>Friends list<small>Share accepted friends and identify those who already use this app.</small></span><input type="checkbox" role="switch" name="permission" value="friends" aria-label="Friends list"${existingScopes.has('friends')?' checked':''}></label></li>`:existingScopes.has('friends')?fixed('user','Friends list'):''}
         ${showOffline?`<li><label class="permission-toggle">${glyph('id')}<span>Stay signed in<small>Let this app renew your session while you use it.</small></span><input type="checkbox" role="switch" name="permission" value="offline_access" aria-label="Stay signed in"${existingScopes.has('offline_access')||!incremental?' checked':''}></label></li>`:existingScopes.has('offline_access')?fixed('id','Stay signed in'):''}
-        ${appData||existingScopes.has('app_data')?fixed('records','Private app storage','This app can save and access your records in its own storage.'):''}
+        ${ownsStorage?fixed('records','Private app storage','This app can save and access your records in its own storage.'):''}
         ${!chooseEmail&&sharedEmail?fixed('mail','Email address',escape(sharedEmail)+(requiredEmail?` · ${requiredNote}`:'')):''}
       </ul>
+      ${appData&&brand?.local?'<p role="alert">Granting data access shares records with an unsecure app.</p><label><input type="checkbox" name="confirm-unsecure" value="yes">I understand the risk of granting this app access.</label>':''}
       ${appData?(applicationData?.requested(client.client_id)??[]).map(item=>`<label class="permission-toggle"><span>${escape(item.label)}<small> · Read ${escape(item.collection)} from ${escape(registry.publicDetails(item.source)?.name??item.source)}</small></span><input type="checkbox" role="switch" name="data-permission" value="${escape(item.source+'/'+item.collection)}"${activeDataPermissions.some(permission=>permission.source===item.source&&permission.collection===item.collection)?' checked':''}></label>`).join(''):''}
       <p>You can review app access in X-Center ID.</p>
       ${emailUnavailable?'<p role="alert">This app needs a verified email address. Unlink it in <a href="/apps">Linked apps</a>, then link it again to choose an address.</p>':''}
@@ -477,7 +487,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const client_secret = application.native?null:randomBytes(48).toString('base64url');
       const metadata = {
         client_id, client_name:application.name,
-        ...(client_secret?{client_secret}:{}), application_type:application.native?'native':'web',
+        ...(client_secret?{client_secret}:{}), application_type:application.native||application.local?'native':'web',
         redirect_uris:application.callbacks??[application.callback], grant_types:['authorization_code','refresh_token'], response_types:['code'],
         token_endpoint_auth_method:application.native?'none':'client_secret_basic', subject_type:'pairwise',
       };

@@ -120,6 +120,7 @@ const resolver = new Resolver({ timeout:2500, tries:1 });
 const verificationAttempts = new Map();
 const dataApi = provider && store ? createApiHandler({
   registry, store, apps:registry,
+  canGrant:(owner,source,destination)=>registry.access(owner,source).allowed&&!accounts.isDisconnected(owner,source)&&!registry.brand(destination)?.local&&registry.crossReadAllowed(source,destination),
   authenticate(req) {
     const token = /^Bearer ([A-Za-z0-9_-]{20,200})$/.exec(req.headers.authorization ?? '')?.[1];
     return token ? provider.dataAccess(token) : null;
@@ -136,16 +137,17 @@ async function activateApplication(req,res,id) {
   const active = accounts.current(req);
   const app = active && registry.lookup(active.owner,id);
   if (!app || app.status !== 'pending') return json(404,{error:'registration_unavailable'});
+  if(app.local&&!accounts.recentlyConfirmed(req))return json(403,{error:'Confirm your identity to activate a local registration.'});
   const time = Date.now();
   for (const [key,after] of verificationAttempts) if (after <= time) verificationAttempts.delete(key);
   if (verificationAttempts.has(id) || verificationAttempts.size >= 100) return json(429,{error:'retry_later'});
   verificationAttempts.set(id,time+30_000);
   const host = new URL(app.callback).hostname;
-  if (host.replace(/\.$/,'') === new URL(origin).hostname) return json(422,{error:'use_separate_app_domain'});
-  if (!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(host) ||
-      /\.(?:localhost|local|internal|test|example)$/i.test(host)) return json(422,{error:'public_domain_required'});
-  const check = await resolver.resolveTxt('_xcenter-id.'+host).catch(() => []);
-  if (!check.some((pieces) => pieces.join('') === 'xcenter-id='+id)) return json(422,{error:'domain_proof_unavailable'});
+  if (!app.local&&host.replace(/\.$/,'') === new URL(origin).hostname) return json(422,{error:'use_separate_app_domain'});
+  if (!app.local&&(!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(host) ||
+      /\.(?:localhost|local|internal|test|example)$/i.test(host))) return json(422,{error:'public_domain_required'});
+  const check = app.local?[]:await resolver.resolveTxt('_xcenter-id.'+host).catch(() => []);
+  if (!app.local&&!check.some((pieces) => pieces.join('') === 'xcenter-id='+id)) return json(422,{error:'domain_proof_unavailable'});
   const credentials = await provider.provision(app);
   if (!registry.approve(id,credentials.clientId)) {
     await credentials.discard();
@@ -156,7 +158,7 @@ async function activateApplication(req,res,id) {
 
 const consentApi = provider && store ? createApiHandler({
   registry, store, apps:registry, consoleClient:'account-consent-session', allowPersistentGrants:true,
-  canGrant:(owner,source,destination)=>registry.access(owner,source).allowed&&registry.access(owner,destination).allowed&&!accounts.isDisconnected(owner,source)&&!accounts.isDisconnected(owner,destination),
+  canGrant:(owner,source,destination)=>registry.access(owner,source).allowed&&registry.access(owner,destination).allowed&&!registry.brand(destination)?.local&&registry.crossReadAllowed(source,destination)&&!accounts.isDisconnected(owner,source)&&!accounts.isDisconnected(owner,destination),
   authenticate(req) {
     const session = accounts.current(req);
     return session ? {owner:session.owner,client:'account-consent-session'} : null;
@@ -323,7 +325,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     if(!owner||!accounts.identity(owner))return answer(403,{error:'Sign in to manage app access.'});
     const view=()=>{
       const settings=registry.accessSettings(owner,accessId);
-      return settings?{...settings,members:settings.members.flatMap(({account,approved})=>{
+      return settings?{...settings,readerTrust:registry.readerTrust(accessId),members:settings.members.flatMap(({account,approved})=>{
         const username=accounts.username(account);
         return username?[{username,approved:!!approved}]:[];
       })}:null;
@@ -338,6 +340,11 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
       const input=await readJson(req,2048);
       if(!allowed())return answer(403,{error:'Sign in to manage app access.'});
       if(!registry.accessSettings(owner,accessId))return answer(404,{error:'App unavailable.'});
+      if(input.action==='reader-trust'){
+        if(!['secure','verified','any'].includes(input.mode))return answer(422,{error:'Choose a valid reader trust level.'});
+        registry.setReaderTrust(owner,accessId,input.mode);
+        return answer(200,view());
+      }
       if(input.action==='settings'){
         if(typeof input.private!=='boolean'||typeof input.requests!=='boolean')return answer(422,{error:'Choose valid access settings.'});
       }else if(['approve','remove'].includes(input.action)&&typeof input.username==='string'&&/^[a-z][a-z0-9]{2,23}$/.test(input.username)){

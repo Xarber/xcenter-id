@@ -6,7 +6,7 @@ import { ArrowLeft, ChevronRight, Database, Grid2X2, ImagePlus, Plus, Trash2, X 
 import { useEffect, useState } from 'react';
 import { developerApi, optionalClaims, readAppIcon, type AppRegistration } from './developer-web';
 
-type Draft=Pick<AppRegistration,'name'|'description'|'repository'|'icon'|'callbacks'|'native'>;
+type Draft=Pick<AppRegistration,'name'|'description'|'repository'|'icon'|'callbacks'|'native'|'local'>;
 const blank=():Draft=>({name:'',description:'',repository:'',icon:null,callbacks:[''],native:false});
 
 export default function DeveloperPortal({back}:{back:()=>void}){
@@ -53,7 +53,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
     <a href="/profile/developer">Manage your developer profile</a>
     {apps?.map(item=><button type="button" className="xc-card xc-permission-link xc-portal-app" onClick={()=>edit(item)} key={item.id}>
       <span className="xc-symbol xc-lavender">{item.icon?<img src={'data:image/png;base64,'+item.icon} alt=""/>:<Grid2X2 size={20}/>}</span>
-      <span className="xc-permission-name"><strong className="xc-identity-label">{item.name}<TrustBadges compact kind="app" verified={item.verified}/></strong><span>{item.native?'Native app':'Website'} · {item.status}</span></span>
+      <span className="xc-permission-name"><strong className="xc-identity-label">{item.name}<TrustBadges compact kind="app" verified={item.verified}/></strong><span>{item.local?'Unsecure local app':item.native?'Native app':'Website'} · {item.status}</span></span>
       <ChevronRight className="xc-permission-chevron" size={20}/>
     </button>)}
     {apps?.length===0&&<p className="xc-empty">You haven’t registered any apps yet.</p>}
@@ -65,7 +65,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
   const existing=selection==='create'?null:selection;
   return <div className="xc-stack">
     <button type="button" className="xc-button xc-secondary xc-self-start" onClick={()=>{history.replaceState(history.state,'','/developer');edit(null);}} disabled={busy}><ArrowLeft size={16}/> Registered apps</button>
-    {existing?.status==='active'&&existing.verified&&<a className="xc-button xc-secondary xc-self-start" href={'/developer/storage/'+existing.id}><Database size={17}/> Manage app storage</a>}
+    {existing?.status==='active'&&<a className="xc-button xc-secondary xc-self-start" href={'/developer/storage/'+existing.id}><Database size={17}/> {existing.verified?'Manage app storage':'Manage sharing requests'}</a>}
     <div><h2>{existing?.name??'Register an app'}</h2><TrustBadges kind="app" verified={existing?.verified}/></div>
     <form className="xc-stack" onSubmit={event=>{event.preventDefault();save();}}>
       <div className="xc-profile-head xc-portal-profile">
@@ -83,11 +83,11 @@ export default function DeveloperPortal({back}:{back:()=>void}){
       </div>
       <label>Description<textarea aria-label="Description" value={draft.description} maxLength={500} rows={3}
         onChange={event=>setDraft({...draft,description:event.target.value})}/></label>
-      {!existing&&<label>App type<select value={draft.native?'native':'web'} onChange={event=>setDraft({...draft,native:event.target.value==='native'})}>
-        <option value="web">Website backend</option><option value="native">Native app with a verified HTTPS link</option></select></label>}
+      {!existing&&<label>App type<select value={draft.local?'local':draft.native?'native':'web'} onChange={event=>setDraft({...draft,native:event.target.value==='native',local:event.target.value==='local',callbacks:['']})}>
+        <option value="web">Website backend</option><option value="native">Native app with a verified HTTPS link</option><option value="local">Local or custom hosted without DNS</option></select></label>}
       <fieldset className="xc-callbacks">
         <legend>Callback addresses</legend>
-        <p>Use exact HTTPS paths on one verified origin.</p>
+        <p>{draft.local?'Unsecure app. Use a loopback callback such as http://127.0.0.1:8080/callback. Remote installations can use device sign-in.':'Use exact HTTPS paths on one verified origin.'}</p>
         {draft.callbacks.map((callback,index)=><div className="xc-callback-row" key={index}>
           <label>Callback {index+1}<input type="url" required maxLength={512} value={callback}
             placeholder="https://your-app.example/callback"
@@ -115,13 +115,14 @@ export default function DeveloperPortal({back}:{back:()=>void}){
         <button className="xc-button xc-secondary" disabled={busy||(requirements.email===!!existing.requirements?.email&&requirements.age_range===!!existing.requirements?.age_range)}>Save permissions</button>
       </fieldset>
     </form>}
-    {existing?.status==='pending'&&<div className="xc-info"><strong>Verify your callback domain</strong>
-      <code>{'_xcenter-id.'+new URL(existing.callback).hostname}</code><code>{'xcenter-id='+existing.id}</code>
+    {existing?.status==='pending'&&<div className="xc-info"><strong>{existing.local?'Activate unsecure app':'Verify your callback domain'}</strong>
+      {!existing.local&&<><code>{'_xcenter-id.'+new URL(existing.callback).hostname}</code><code>{'xcenter-id='+existing.id}</code></>}
       <button className="xc-button xc-secondary" disabled={busy} onClick={()=>work(async()=>{
+        if(existing.local&&!(await api('session/access')).confirmed)await confirmIdentity();
         const result=await developerApi('apps/'+existing.id+'/verify',{});
         setSecret(result);
         setSelection({...existing,status:'active',client:result.clientId});await load();setNotice('App activated.');
-      })}>Verify domain and activate</button>
+      })}>{existing.local?'Activate local registration':'Verify domain and activate'}</button>
     </div>}
     {secret&&<div className="xc-info" role="status"><strong>Save the credentials securely</strong><code>{secret.clientId}</code>
       {secret.clientSecret&&<code>{secret.clientSecret}</code>}<button className="xc-button xc-secondary" onClick={()=>setSecret(null)}>Hide credentials</button></div>}

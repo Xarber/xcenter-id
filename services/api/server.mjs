@@ -105,7 +105,9 @@ export function createApiHandler({ store, authenticate, apps, consoleClient, dev
             return json(res,200,{requirements});
           }
           if(kind==='profile'){
-            const profile=await validateApplicationProfile(input).catch(error=>{throw new HttpError(422,error.message);});
+            const registration=registry.lookup(owner,id);
+            if(!registration)throw new HttpError(404,'registration_unavailable');
+            const profile=await validateApplicationProfile(input,{local:registration.local}).catch(error=>{throw new HttpError(422,error.message);});
             const item=registry.saveApp(owner,id,profile);
             if(!item)throw new HttpError(422,'Keep the verified callback origin or register a new app.');
             return json(res,200,item);
@@ -117,8 +119,10 @@ export function createApiHandler({ store, authenticate, apps, consoleClient, dev
         if (method === 'GET') return json(res, 200, { apps: registry.list(owner) });
         if (method !== 'POST') throw new HttpError(405, 'method_not_allowed');
         const input=await readJson(req,64_000);
-        const profile=await validateApplicationProfile(input).catch(error=>{throw new HttpError(422,error.message);});
-        const app=registry.submit(owner,profile.name,profile.callbacks[0],{icon:profile.icon,developerName:profile.developerName},input.native===true,profile);
+        const local=input.local===true;
+        if(local&&input.native===true)throw new HttpError(422,'Use a local backend registration.');
+        const profile=await validateApplicationProfile(input,{local}).catch(error=>{throw new HttpError(422,error.message);});
+        const app=registry.submit(owner,profile.name,profile.callbacks[0],{icon:profile.icon,developerName:profile.developerName},input.native===true,profile,local);
         if (!app) throw new HttpError(409, 'registration_quota_reached');
         return json(res, 201, app);
       }
@@ -169,6 +173,7 @@ export function createApiHandler({ store, authenticate, apps, consoleClient, dev
       if (method === 'GET') {
         const source = url.searchParams.get('source') ?? client;
         if (!apps.has(source)) throw new HttpError(404, 'not_found');
+        if(source!==client&&!canGrant(owner,source,client))throw new HttpError(403,'consent_required');
         const after = url.searchParams.get('after');
         if (after !== null && !uuid.test(after)) throw new HttpError(422, 'invalid_cursor');
         const page = store.read(owner, source, client, dataset, after ?? '');

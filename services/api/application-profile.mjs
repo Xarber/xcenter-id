@@ -1,6 +1,6 @@
 import { validateApplicationBrand } from './application-brand.mjs';
 
-export async function validateApplicationProfile(input) {
+export async function validateApplicationProfile(input,{local=false}={}) {
   const name=typeof input.name==='string'?input.name.trim():'';
   const description=typeof input.description==='string'?input.description.trim():'';
   const repository=typeof input.repository==='string'?input.repository.trim():'';
@@ -11,8 +11,9 @@ export async function validateApplicationProfile(input) {
   const callbacks=[...new Set(raw.map(value=>{
     if(typeof value!=='string'||value.length>512)throw new Error('Enter a valid callback.');
     const url=new URL(value);
-    if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname==='/'||url.pathname.includes('*')){
-      throw new Error('Callbacks must use exact HTTPS paths.');
+    const validOrigin=local?url.protocol==='http:'&&['127.0.0.1','[::1]'].includes(url.hostname)&&!!url.port:url.protocol==='https:';
+    if(!validOrigin||url.username||url.password||url.search||url.hash||url.pathname==='/'||url.pathname.includes('*')){
+      throw new Error(local?'Use an exact HTTP loopback callback with an explicit port.':'Callbacks must use exact HTTPS paths.');
     }
     return url.href;
   }))];

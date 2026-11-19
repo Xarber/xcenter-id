@@ -24,8 +24,8 @@ test('registered device flow confirms linking and issues a single nonce-bound to
     storageKey:'71'.repeat(32),subjectKey:'83'.repeat(32),cookieKeys:['e2'.repeat(32)],
     clients:[],jwks:{keys:[{...jwk,kid:'device-fixture',alg:'RS256',use:'sig'}]},
   }});
-  async function register(name,native=false){
-    const registration=registry.submit('developer',name,'https://tv.example.test/callback',undefined,native);
+  async function register(name,native=false,local=false){
+    const registration=registry.submit('developer',name,local?'http://127.0.0.1:8400/callback':'https://tv.example.test/callback',undefined,native,undefined,local);
     const credentials=await provider.provision(registration);
     registry.approve(registration.id,credentials.clientId);
     return credentials;
@@ -33,6 +33,7 @@ test('registered device flow confirms linking and issues a single nonce-bound to
   const client=await register('Example TV');
   const other=await register('Different TV');
   const publicClient=await register('Native public',true);
+  const local=await register('Local backend',false,true);
   const server=createServer((req,res)=>{
     const url=new URL(req.url,issuer);
     if(url.pathname.startsWith('/interaction/')){
@@ -70,6 +71,14 @@ test('registered device flow confirms linking and issues a single nonce-bound to
   const begin=(credentials,scope='openid friends')=>http('/device/auth',{credentials,form:{client_id:credentials.clientId,nonce,scope}});
   try {
     assert.equal((await begin(publicClient)).status,400);
+    assert.equal((await begin(local)).status,200);
+    const source=registry.managed('developer').find(app=>app.name==='Different TV');
+    assert.equal(registry.crossReadAllowed(other.clientId,local.clientId),false);
+    assert.equal(registry.setReaderTrust('developer',source.id,'any'),true);
+    assert.equal(registry.crossReadAllowed(other.clientId,local.clientId),true);
+    assert.equal(registry.setReaderTrust('developer',source.id,'verified'),true);
+    assert.equal(registry.crossReadAllowed(other.clientId,local.clientId),false);
+    assert.equal(registry.crossReadAllowed(other.clientId,client.clientId),false);
     assert.notEqual((await begin({clientId:client.clientId})).status,200);
     const created=await begin(client);
     assert.equal(created.status,200,await created.clone().text());

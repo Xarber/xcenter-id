@@ -24,7 +24,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
   const accountUsage=db.prepare('SELECT coalesce(sum(bytes),0) AS used FROM app_records WHERE owner=?');
   const containers=db.prepare('SELECT client,sum(bytes) AS bytes,count(*) AS records FROM app_records WHERE owner=? GROUP BY client ORDER BY bytes DESC,client');
   const usage=client=>serviceUsage.get(client);
-  const requested=client=>JSON.parse(setting(client)?.requests??'[]').filter(item=>active(item.source)&&JSON.parse(setting(item.source)?.shared??'[]').includes(item.collection));
+  const requested=client=>JSON.parse(setting(client)?.requests??'[]').filter(item=>active(item.source)&&registry.crossReadAllowed(item.source,client)&&JSON.parse(setting(item.source)?.shared??'[]').includes(item.collection));
   const aad=r=>Buffer.from(JSON.stringify(['xcenter.appdata.v1',r.client,r.owner,r.collection,r.id,r.revision,r.public,r.readers]));
   function decode(row){
     const encrypted=Buffer.from(row.envelope),cipher=createDecipheriv('aes-256-gcm',key,encrypted.subarray(0,12));
@@ -51,7 +51,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         db.exec('COMMIT');
       }catch(error){db.exec('ROLLBACK');throw error;}
     },
-    permissions(owner){return registry.published().filter(app=>accounts.linkedGrant(owner,app.client)&&registry.access(owner,app.client).allowed).flatMap(app=>requested(app.client).map(item=>({...item,destination:app.client,destinationName:app.name,sourceName:registry.publicDetails(item.source)?.name??item.source,
+    permissions(owner){return registry.published().filter(app=>accounts.linkedGrant(owner,app.client)&&registry.access(owner,app.client).allowed).flatMap(app=>requested(app.client).map(item=>({...item,destination:app.client,destinationName:app.name,unsecure:!!registry.brand(app.client)?.local,sourceName:registry.publicDetails(item.source)?.name??item.source,
       enabled:!!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(owner,item.source,app.client,item.collection)})));},
     authorize(owner,client,selected){
       const allowed=new Set(selected);
@@ -76,12 +76,13 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         if(req.method==='OPTIONS')return answer(204,{});
         if(url.pathname==='/account/app-data-permissions'){
           const session=accounts.current(req);if(!session)fail(401,'Sign in first.');
-          const requestedForOwner=registry.published().filter(app=>accounts.linkedGrant(session.owner,app.client)&&registry.access(session.owner,app.client).allowed).flatMap(app=>requested(app.client).map(item=>({...item,destination:app.client,destinationName:app.name,sourceName:registry.publicDetails(item.source)?.name??item.source,
+          const requestedForOwner=registry.published().filter(app=>accounts.linkedGrant(session.owner,app.client)&&registry.access(session.owner,app.client).allowed).flatMap(app=>requested(app.client).map(item=>({...item,destination:app.client,destinationName:app.name,unsecure:!!registry.brand(app.client)?.local,sourceName:registry.publicDetails(item.source)?.name??item.source,
             enabled:!!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(session.owner,item.source,app.client,item.collection)})));
           if(req.method==='GET')return answer(200,{permissions:requestedForOwner});
           if(req.method!=='PUT'||!accounts.allowsMutation(req))fail(403,'Change permissions from your account.');
           const input=await body(req);const permission=requestedForOwner.find(p=>p.source===input.source&&p.destination===input.destination&&p.collection===input.collection);
           if(!permission||typeof input.enabled!=='boolean')fail(422,'Choose a requested app permission.');
+          if(permission.unsecure&&input.confirmUnsecure!==true)fail(422,'Confirm that you want to edit permissions for this unsecure app.');
           const update=input.enabled
             ?db.prepare('INSERT OR IGNORE INTO app_data_grants VALUES(?,?,?,?)').run(session.owner,permission.source,permission.destination,permission.collection)
             :db.prepare('DELETE FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').run(session.owner,permission.source,permission.destination,permission.collection);
@@ -98,12 +99,16 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
           const app=owned??all;
           // A verification badge never substitutes for active callback ownership.
           const client=app?.client??(all&&registry.clientForId(management));
-          if(!client||!active(client))fail(409,'Activate and verify this app first.');
+          if(!client||!registry.has(client))fail(409,'Activate this app first.');
+          const verified=active(client);
+          const unsecure=!!registry.brand(client)?.local;
           db.prepare('INSERT OR IGNORE INTO app_storage(client) VALUES(?)').run(client);
-          if(req.method==='GET')return answer(200,{...usage(client),capacity:setting(client).capacity,hasKey:!!setting(client).secret,
+          if(req.method==='GET')return answer(200,{...usage(client),capacity:setting(client).capacity,hasKey:!!setting(client).secret,verified,unsecure,
             shared:JSON.parse(setting(client).shared),requests:JSON.parse(setting(client).requests)});
           if(req.method!=='POST'||!accounts.allowsMutation(req)||!accounts.recentlyConfirmed(req))fail(403,'Confirm your identity before changing app storage.');
           const input=await body(req);
+          if(!verified&&(input.action!=='sharing'||!Array.isArray(input.shared)||input.shared.length))fail(403,'Service storage requires a verified app.');
+          if(unsecure&&input.confirmUnsecure!==true)fail(422,'Confirm editing sharing for an unsecure app.');
           if(input.action==='rotate-key'){
             const secret='xid-db-'+randomBytes(32).toString('base64url');
             db.prepare('UPDATE app_storage SET secret=? WHERE client=?').run(hash(secret),client);
@@ -141,10 +146,10 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         let principal;
         if(token?.startsWith('xid-db-')&&setting(client)?.secret===hash(token))principal={client,owner:'~app'};
         else if(token)principal=await authenticate(token);
-        if(!principal?.owner||!active(principal.client))fail(401,'A valid registered application credential is required.');
+        if(!principal?.owner||!registry.has(principal.client)||!accounts.available(registry.brand(principal.client)?.owner))fail(401,'A valid registered application credential is required.');
         const own=principal.client===client;
         if(!own){
-          if(req.method!=='GET'||registry.access(principal.owner,client).allowed===false||accounts.isDisconnected(principal.owner,client)||!JSON.parse(setting(client)?.shared??'[]').includes(collection)||!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(principal.owner,client,principal.client,collection))fail(403,'This data permission has not been granted.');
+          if(req.method!=='GET'||!registry.crossReadAllowed(client,principal.client)||registry.access(principal.owner,client).allowed===false||accounts.isDisconnected(principal.owner,client)||!JSON.parse(setting(client)?.shared??'[]').includes(collection)||!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(principal.owner,client,principal.client,collection))fail(403,'This data permission has not been granted.');
         }
         const params=[client,principal.owner,collection];
         if(req.method==='GET'){
