@@ -1,3 +1,5 @@
+import DeviceSignIn from './DeviceSignIn';
+import LinkedAppPermissions from './LinkedAppPermissions';
 import TrustBadges from './TrustBadges';
 import MailClients from './MailClients';
 import AppIcon from './AppIcon';
@@ -26,7 +28,7 @@ import DeveloperPortal from './DeveloperPortal';
 type Device = {id:string;label:string;created:number;current:boolean};
 type ConnectedApp = {client:string;label:string;icon?:string|null;verified?:boolean;description?:string};
 type Entry = {id:string;name:string;size:number};
-type Files = {folders:Entry[];files:Entry[];breadcrumbs:Entry[];categories:Record<string,number>;used:number;limit:number};
+type Files = {appContainers?:{client:string;name:string;bytes:number}[];folders:Entry[];files:Entry[];breadcrumbs:Entry[];categories:Record<string,number>;used:number;limit:number};
 type Mail = {id:string;received:number;size:number;subject?:string;from?:string;preview?:string};
 type Grant = {source:string;destination:string;expires:number};
 type SampleGrant = {source:string;destination:string;sourceName:string;app:string;shared:boolean;expires:number|null};
@@ -75,6 +77,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [requests,setRequests]=useState<SupportRequest[]>([]);
   const [request,setRequest]=useState<{id:string;message:SupportMessage}|null>(null);
   const [devices,setDevices]=useState<Device[]>([]);
+  const [permissionClient,setPermissionClient]=useState('');
   const [apps,setApps]=useState<ConnectedApp[]>([]);
   const [grants,setGrants]=useState<Grant[]>([]);
   const [sampleGrants,setSampleGrants]=useState<SampleGrant[]>([]);
@@ -270,9 +273,9 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         <PublicProfile token={token} colors={colors}/></>;
       break;
     case 'devices':
-      content=devices.map(device=>row(device.id,device.label,device.current?'This device':'Signed in '+date(device.created),
+      content=<><DeviceSignIn colors={colors}/>{devices.map(device=>row(device.id,device.label,device.current?'This device':'Signed in '+date(device.created),
         !device.current&&button('Sign out device',()=>confirm('Sign out this device?','It will need to sign in again.',
-          ()=>run(()=>mutate('devices/revoke',{id:device.id}),'Device signed out.')))));
+          ()=>run(()=>mutate('devices/revoke',{id:device.id}),'Device signed out.')))))}</>;
       break;
     case 'security':
       content=<>{account.passkeys.map(key=>row(key.id,key.label,'Added '+date(key.created),<View style={styles.actions}>
@@ -290,7 +293,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         {apps.map(app=><View key={app.client} style={{gap:10,borderBottomWidth:1,borderColor:colors.soft,paddingVertical:12}}><View style={{flexDirection:'row',gap:12,alignItems:'center'}}>
           <AppIcon key={app.icon} icon={app.icon} color={colors.accent}/>
           <View style={{flexShrink:1,gap:4}}><Text style={{color:colors.ink,fontWeight:'700'}}>{app.label}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View></View>
-          {button('Manage permissions',()=>navigate('permissions'))}
+          {button('Manage permissions',()=>{setPermissionClient(app.client);navigate('permissions');})}
           {button('Unlink app',()=>confirm('Unlink '+app.label+'?','This ends its active access and removes its sharing permissions.',()=>run(()=>mutate('connected-apps/unlink',{client:app.client}),'App unlinked.')))}</View>)}
         {button('Manage developer apps',()=>navigate('developer'))}</>;
       break;
@@ -302,11 +305,20 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       const grantText=(expires:number)=>expires===Number.MAX_SAFE_INTEGER?'Until revoked':'Expires '+date(expires);
       const change=(route:string,grant:Pick<Grant,'source'|'destination'>,method:string,persistent=false)=>
         run(()=>mutate(route,{...grant,persistent,expires:Date.now()+86_400_000},method),method==='DELETE'?'Access revoked.':'Access allowed.');
-      content=<>{apps.map(app=><View key={app.client} style={{flexDirection:'row',gap:12,alignItems:'center'}}>
+      const selected=apps.find(app=>app.client===permissionClient);
+      if(selected){
+        content=<>{button('All apps',()=>setPermissionClient(''))}
+          <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>{selected.label}</Text>
+          <LinkedAppPermissions key={selected.client} client={selected.client} token={token} colors={colors}/>
+          <HostedDataPermissions token={token} colors={colors} client={selected.client}/></>;
+        break;
+      }
+      content=<>{apps.map(app=><View key={app.client} style={{gap:12}}>
         <AppIcon key={app.icon} icon={app.icon} color={colors.accent}/>
         <View style={{flexShrink:1,gap:4}}><Text style={{color:colors.ink,fontWeight:'700'}}>{app.label}</Text>
           <TrustBadges kind="app" verified={app.verified} color={colors.ink}/>
           {!!app.description&&paragraph(app.description)}</View>
+        {button('Manage permissions for '+app.label,()=>setPermissionClient(app.client))}
       </View>)}<HostedDataPermissions token={token} colors={colors}/>{grants.map(grant=>row(grant.source+grant.destination,appName(grant.source)+' → '+appName(grant.destination),
         'Saved places · '+grantText(grant.expires),button('Revoke access',()=>change('data-grants',grant,'DELETE'))))}
         {published.length>1&&<>{paragraph('Choose the app that owns the records')}{published.map(app=><View key={app.client}>
@@ -336,6 +348,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           <View style={[styles.dot,{backgroundColor:color}]}/><Text style={{color:colors.ink}}>{label}</Text>
           <Text style={{color:colors.muted}}>{formatBytes(files.categories[id]??0)}</Text>
         </View>)}
+        {!!files.appContainers?.length&&<><Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>App containers in your account</Text>
+          {files.appContainers.map(app=>row(app.client,app.name,formatBytes(app.bytes)))}</>}
       </>;
       break;
     case 'files':

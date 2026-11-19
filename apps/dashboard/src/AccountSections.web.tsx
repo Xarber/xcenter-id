@@ -20,7 +20,7 @@ const size = (value:number)=>value>1024*1024 ? (value/(1024*1024)).toFixed(1)+' 
 type Session = { id:string;label:string;created:number;current:boolean };
 type StoredFile = { id:string;name:string;size:number;created:number };
 type FolderItem = {id:string;name:string};
-type Files = { files:StoredFile[]; folders:FolderItem[]; breadcrumbs:FolderItem[]; categories:Record<string,number>; used:number; total:number; limit:number };
+type Files = { appContainers?:{client:string;name:string;bytes:number}[]; files:StoredFile[]; folders:FolderItem[]; breadcrumbs:FolderItem[]; categories:Record<string,number>; used:number; total:number; limit:number };
 
 export function DevicesPage() {
   const [devices,setDevices]=useState<Session[]>([]);
@@ -31,6 +31,7 @@ export function DevicesPage() {
   useEffect(()=>{void load().catch(error=>setStatus(notice(error)));},[]);
   return <section className="xc-card xc-pad">
     <div className="xc-row-head"><span className="xc-symbol xc-sky"><Monitor size={21}/></span><div><h2>Signed-in devices</h2><p>Review and end active browser sessions.</p></div></div>
+    <p><a className="xc-button xc-secondary" href="/device">Enter a device code</a></p>
     {devices.map(device=><div className="xc-list-row" key={device.id}>
       <div className="xc-row-head"><Laptop size={20}/><div><strong>{device.label}</strong><p>Signed in {date(device.created)}</p></div></div>
       {device.current?<span className="xc-pill">This device</span>:<button type="button" className="xc-button xc-secondary" disabled={busy}
@@ -69,13 +70,15 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
   }
   return <section className="xc-card xc-pad">
     <div className="xc-row-head"><span className="xc-symbol xc-lavender">{summary?<HardDrive size={21}/>:<File size={21}/>}</span>
-      <div><h2>{summary?'Account file storage':'Your private files'}</h2><p>{summary?'Storage used by files in this account.':'Uploads are available only in your X-Center ID account.'}</p></div></div>
+      <div><h2>{summary?'Account storage':'Your private files'}</h2><p>{summary?'Files, app containers and other data in this account.':'Uploads are available only in your X-Center ID account.'}</p></div></div>
     {state && summary && <><div className="xc-storage"><strong>{formatBytes(state.used)}</strong><span> of {formatBytes(state.limit)} used</span></div>
       <div className="xc-storage-meter" role="meter" aria-label="Account storage" aria-valuemin={0} aria-valuemax={state.limit} aria-valuenow={Math.min(state.limit,state.used)}>
         {storageCategories.map(([id,,color])=><span aria-hidden="true" key={id} style={{backgroundColor:color,flex:state.categories[id]??0}}/>)}
         {state.limit>state.used&&<span style={{flex:state.limit-state.used}}/>}
       </div>
       <ul className="xc-storage-legend">{storageCategories.map(([id,label,color])=><li key={id}><span style={{backgroundColor:color}}/>{label}<strong>{formatBytes(state.categories[id]??0)}</strong></li>)}</ul>
+      {!!state.appContainers?.length&&<div className="xc-stack"><h3>App containers in your account</h3>
+        {state.appContainers.map(app=><div className="xc-list-row" key={app.client}><span>{app.name}</span><strong>{formatBytes(app.bytes)}</strong></div>)}</div>}
       <a href="/files">Open file browser →</a></>}
 
     {!summary && <>
@@ -312,7 +315,7 @@ export function MailPage({ account }:{account:Account}) {
 }
 
 type AdminApp={id:string;name:string;status:string;callback:string;developerName?:string;repository?:string;verified:boolean};
-type AdminDeveloper={owner:string;name:string;status:string;repository?:string};
+type AdminDeveloper={owner:string;name:string;status:string;githubProfile?:string};
 function AdminContent() {
   const [apps,setApps]=useState<AdminApp[]>([]);
   const [developers,setDevelopers]=useState<AdminDeveloper[]>([]);
@@ -336,7 +339,7 @@ function AdminContent() {
       {developers.length===0&&<p className="xc-empty">No developer reviews.</p>}
       {developers.map(developer=><div className="xc-list-row xc-permission-row" key={developer.owner}>
         <div><strong>{developer.name}</strong><p>{developer.status==='verified'?'Verified':'Review requested'}</p>
-          {developer.repository&&<a href={developer.repository} target="_blank" rel="noreferrer">Review GitHub repository</a>}</div>
+          {developer.githubProfile&&<a href={developer.githubProfile} target="_blank" rel="noreferrer">Review GitHub profile</a>}</div>
         <IconAction label={developer.status==='verified'?'Remove verification':'Verify developer'} disabled={busy} onClick={()=>
           save('admin/apps',{type:'developer',id:developer.owner,verified:developer.status!=='verified'},'Developer verification updated.')}><BadgeCheck size={20}/></IconAction>
       </div>)}
@@ -346,9 +349,9 @@ function AdminContent() {
       {apps.filter(app=>app.status!=='revoked').map(app=><div className="xc-list-row xc-permission-row" key={app.id}>
         <div><strong className="xc-identity-label">{app.name}<TrustBadges compact kind="app" verified={app.verified}/></strong><p>{app.developerName??'Developer'} · {app.status}</p>
           <p>{new URL(app.callback).hostname}</p>{app.repository&&<a href={app.repository} rel="noreferrer" target="_blank">Review repository</a>}</div>
-        {app.status==='active'&&app.verified&&<a className="xc-button xc-secondary" href={'/developer/storage/'+app.id}><Database size={17}/> Manage app storage</a>}
+        <div className="xc-actions xc-registration-actions">{app.status==='active'&&app.verified&&<a className="xc-button xc-secondary" href={'/developer/storage/'+app.id+'?from=admin'}><Database size={17}/> Manage app storage</a>}
         {app.status!=='revoked'&&<IconAction label={app.verified?'Remove verification':'Verify app'} disabled={busy}
-          onClick={()=>save('admin/apps',{type:'app',id:app.id,verified:!app.verified},'App verification updated.')}><BadgeCheck size={20}/></IconAction>}
+          onClick={()=>save('admin/apps',{type:'app',id:app.id,verified:!app.verified},'App verification updated.')}><BadgeCheck size={20}/></IconAction>}</div>
       </div>)}
     </section>
     {status&&<p className="xc-notice" role="status">{status}</p>}

@@ -1,6 +1,5 @@
-import nodemailer from 'nodemailer';
+import {localAccountMessage} from './account-mail.mjs';
 
-const transport=nodemailer.createTransport({streamTransport:true,buffer:true,disableFileAccess:true,disableUrlAccess:true});
 export function createAdminUsers({accounts,registry,mail}){
   return async(req,res,username)=>{
     const send=(code,value)=>res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(value));
@@ -31,8 +30,8 @@ export function createAdminUsers({accounts,registry,mail}){
       const text=typeof input.text==='string'&&input.text.trim();
       if(!text||text.length>3000)return send(422,{error:'Enter a warning of up to 3000 characters.'});
       if(!mail)return send(503,{error:'Mailbox delivery unavailable.'});
-      const {message}=await transport.sendMail({from:'X-Center Administration <support@id.xcenter.it>',
-        subject:'Account warning from X-Center',text});
+      const message=await localAccountMessage({from:'X-Center Administration <support@id.xcenter.it>',
+        subject:'Account warning from X-Center',text,paragraphs:[text]});
       if(!permits())return send(403,{error:'Confirm administrator access.'});
       if(!mail.notice(owner,message))return send(409,{error:'The mailbox is full.'});
     }else if(['restrict','restore','delete'].includes(input.action)){

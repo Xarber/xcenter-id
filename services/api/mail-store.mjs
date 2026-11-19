@@ -204,7 +204,7 @@ export function openMailStore({ accountsPath, mailPath, configuration,accountSer
           text:parsed?.text??'',reply:response?.text??null};
       }));
     },
-    notice(owner,content) {return !!deliver(owner,content,{admin:true});},
+    notice(owner,content,trust={admin:true}) {return transaction(()=>!!deliver(owner,content,trust));},
     trust(owner,id){return get.get(owner,id)?db.prepare('SELECT verified,admin FROM inbox_trust WHERE id=?').get(id)??{verified:0,admin:0}:{verified:0,admin:0};},
     listSupport() {
       const listRequests=db.prepare(`SELECT i.id,i.received,r.replied,r.owner IS NULL AS external

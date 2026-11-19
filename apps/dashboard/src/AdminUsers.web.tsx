@@ -94,13 +94,12 @@ export function AdminAccounts(){
         {!registrations.length&&<p>No registered apps.</p>}
         {registrations.map(app=><div key={app.id} className="xc-list-row xc-permission-row">
           <div><strong className="xc-identity-label">{app.name}<TrustBadges compact kind="app" verified={app.verified}/></strong><p>{app.status}{app.restricted?' · Restricted':''}</p><p>{new URL(app.callback).hostname}</p></div>
-          <div className="xc-actions"><IconAction label={app.verified?'Remove app verification':'Verify app'} disabled={busy} onClick={()=>run(()=>mutate('admin/apps',{type:'app',id:app.id,verified:!app.verified}))}><ShieldCheck size={20}/></IconAction>{app.status==='active'&&app.verified&&!app.restricted&&<a className="xc-button xc-secondary" href={'/developer/storage/'+app.id+'?account='+user.username}><Database size={17}/> Manage app storage</a>}</div>
-          {<div className="xc-actions">
+          <div className="xc-actions xc-registration-actions"><IconAction label={app.verified?'Remove app verification':'Verify app'} disabled={busy} onClick={()=>run(()=>mutate('admin/apps',{type:'app',id:app.id,verified:!app.verified}))}><ShieldCheck size={20}/></IconAction>{app.status==='active'&&app.verified&&!app.restricted&&<a className="xc-button xc-secondary" href={'/developer/storage/'+app.id+'?from=admin&account='+user.username}><Database size={17}/> Manage app storage</a>}
             {app.status==='active'&&<IconAction label={app.restricted?'Restore app':'Restrict app'} disabled={busy} onClick={()=>run(()=>mutate('admin/users/'+user.username,
               {action:app.restricted?'restore':'restrict',app:app.id}))}>{app.restricted?<Unlock size={20}/>:<LockKeyhole size={20}/>}</IconAction>}
             <IconAction label="Delete registered app" disabled={busy} onClick={()=>{setAction('app-'+app.id);setConfirmation('');}}><Trash2 size={20}/></IconAction>
-          </div>}
-          {action==='app-'+app.id&&<div className="xc-stack"><p>Delete this registration and stop its future sign-ins?</p>
+          </div>
+          {action==='app-'+app.id&&<div className="xc-stack xc-registration-confirm"><p>Delete this registration and stop its future sign-ins?</p>
             <IconAction label="Confirm app deletion" disabled={busy} onClick={()=>run(()=>mutate('admin/users/'+user.username,{action:'delete',app:app.id,confirmation:app.id}))}><Check size={20}/></IconAction>
             <IconAction label="Cancel app deletion" disabled={busy} onClick={()=>setAction('')}><X size={20}/></IconAction></div>}
         </div>)}</section>

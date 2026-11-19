@@ -1,3 +1,4 @@
+import {accountMessage} from './account-mail.mjs';
 import nodemailer from 'nodemailer';
 export function createSupportMailer(config,limits){
  if(!config)return null;
@@ -6,6 +7,6 @@ export function createSupportMailer(config,limits){
  return async(owner,to,subject,text)=>{
   if(!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(to)||/[\r\n\0]/.test(subject)||subject.length>120||text.length>3000)throw new Error('Invalid support reply');
   if(limits&&!limits.reserve(owner))throw new Error('External mail allowance reached');
-  await transport.sendMail({from:'X-Center Support <support@id.xcenter.it>',to,subject,text,headers:{'Auto-Submitted':'auto-replied'}});
+  await transport.sendMail({from:'X-Center Support <support@id.xcenter.it>',to,subject,...accountMessage({title:'Reply from X-Center Support',paragraphs:[text]}),headers:{'Auto-Submitted':'auto-replied'}});
  };
 }

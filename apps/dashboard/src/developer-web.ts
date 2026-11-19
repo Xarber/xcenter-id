@@ -1,4 +1,4 @@
-export type DeveloperIdentity={name:string;status:'unverified'|'requested'|'verified'};
+export type DeveloperIdentity={name:string;githubProfile?:string;status:'unverified'|'requested'|'verified'};
 export type ClaimRequirements={email:boolean;age_range:boolean};
 export const optionalClaims:ClaimRequirements={email:false,age_range:false};
 export type AppRegistration={id:string;name:string;description:string;repository:string;icon:string|null;callbacks:string[];

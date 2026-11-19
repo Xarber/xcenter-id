@@ -5,7 +5,7 @@ const fileLimit = 2 * 1024 * 1024;
 const storageLimit = 10 * 1024 * 1024;
 const fileId = /^[0-9a-f]{8}-[0-9a-f-]{27}$/;
 
-export function createAccountFiles({ database, key, accounts, origin, friends, usage = () => ({}) }) {
+export function createAccountFiles({ database, key, accounts, origin, friends, usage = () => ({}), appContainers = () => [] }) {
   if (!key || key.length !== 32) return null;
   const db = new DatabaseSync(database);
   db.exec(`PRAGMA busy_timeout = 3000; PRAGMA foreign_keys = ON;
@@ -91,7 +91,7 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     res.end(file.data);
   }
 
-  return async (req,res,path)=>{
+  const handle=async (req,res,path)=>{
     const identity=accounts.current(req);
     if(!identity) return json(res,401,{error:'Sign in to manage your files.'});
     const owner=identity.owner;
@@ -159,7 +159,7 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
         const folder=location||null;
         return json(res,200,{files:forFolder.all(owner,folder).map(row=>unpack(row,false)),
           folders:children.all(owner,folder).map(({id,envelope,size,created})=>unpack({id,owner,envelope,size,created},false)),
-          breadcrumbs,categories,used:Object.values(categories).reduce((total,value)=>total+value,0),total:stats.total,limit:capacity});
+          breadcrumbs,categories,appContainers:appContainers(owner),used:Object.values(categories).reduce((total,value)=>total+value,0),total:stats.total,limit:capacity});
       }
       const row=individual&&select.get(owner,id);
       if(!row)return json(res,404,{error:'File unavailable.'});
@@ -227,4 +227,5 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
       return json(res,201,{id:next});
     } catch(error){db.exec('ROLLBACK');throw error;}
   };
+  return Object.assign(handle,{fileBytes:owner=>count.get(owner).bytes});
 }

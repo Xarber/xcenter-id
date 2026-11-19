@@ -19,6 +19,7 @@
       "expo-web-browser",
       "expo-secure-store",
       "expo-sharing",
+      ["expo-camera", { "cameraPermission": "Allow X-Center ID to scan a device sign-in code.", "recordAudioAndroid": false }],
       "@react-native-community/datetimepicker"
     ],
     "icon": "./public/authnjs-512.png"

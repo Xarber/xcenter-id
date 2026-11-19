@@ -1,8 +1,6 @@
-import nodemailer from 'nodemailer';
+import {localAccountMessage} from './account-mail.mjs';
 
-const output = nodemailer.createTransport({streamTransport:true, buffer:true, disableFileAccess:true, disableUrlAccess:true});
-const message = async (subject,text) => (await output.sendMail({from:'X-Center Support <support@id.xcenter.it>',
-  subject,text,headers:{'Auto-Submitted':'auto-generated'}})).message;
+const message=(subject,text)=>localAccountMessage({from:'X-Center Support <support@id.xcenter.it>',subject,text,paragraphs:[text]});
 const paths = /^\/account\/(support|admin\/support)(?:\/([0-9a-f-]{36}))?$/;
 const answer = (res,code,value) => res.writeHead(code,{'Cache-Control':'no-store',
   'Content-Type':'application/json','X-Content-Type-Options':'nosniff'}).end(JSON.stringify(value));

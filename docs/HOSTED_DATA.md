@@ -19,7 +19,7 @@ Publishers can create one-time backend keys from the application's database page
 
 Collection and record identifiers are bounded names, not filesystem paths. User-owned, app-owned and cross-app namespaces remain separate. Public/shared IDs are opaque and bound to the app with HMAC, preventing a stable global user identifier from leaking between apps. Each response contains at most 100 records and an optional `nextCursor`; follow it without constructing a cursor manually.
 
-Payloads are limited to 60 KB and requests to 64 KB. Quotas account for payload, a 1 KB record overhead and reader ACL overhead. Administrators can change app capacity from 1 MB to 100 TB, but never below current usage. A quota is not a disk reservation; writes also stop when host storage has less than 256 MB free. Service-level capacity planning remains necessary.
+Payloads are limited to 60 KB and requests to 64 KB. Quotas account for payload, a 1 KB record overhead and reader ACL overhead. Administrators can change the service database capacity from 1 MB to 100 TB, down to its current usage. User-owned records follow the account capacity described below. A quota is not a disk reservation; writes also stop when host storage has less than 256 MB free. Service-level capacity planning remains necessary.
 
 AES-256-GCM authenticates the client, owner, collection, ID, revision, public flag and reader list. Explicit reader ACLs are bound into the encrypted record context. An ACL-index alteration alone cannot expose a private record. Ordinary users cannot alter those indexes through the API.
 
@@ -40,3 +40,9 @@ Management endpoints are `/account/app-storage/:registrationId` and `/account/ap
 The API supports bounded JSON collections and private recipient sharing, not arbitrary SQL, custom server execution, background functions, search indexes or a complete push/real-time messaging service. Apps may poll the authorized collection API. Account recovery, authentication and native package installation remain separate concerns.
 
 Regression tests cover app/user isolation, private/public reads, cross-app grant/revocation, recipient-only messaging, stale writes, backend key isolation/revocation and restriction. Native installed-device use and production verification are tracked separately in ACTIVE_TASKS.md. The new database must be included in online snapshots and restoration with the same protected profile key; never restore the database without its key.
+
+## Account containers and service storage
+
+The normal user-token route stores records in the owner's account container for that app. For example, a user's Velunivo backup uses that user's account capacity and is listed under Velunivo in Account → Storage. The app's backend key uses the separate service database namespace and counts against the app's service quota. Service data includes publisher-owned catalogs and other records owned by the service. A user's record still belongs to the user when they grant reader access or mark it public.
+
+The existing encrypted records already carry the app and owner IDs, so this accounting change preserves IDs, revisions, permissions, payloads, and API paths. Existing records are counted under their owner immediately. Writes that increase usage are blocked when the corresponding quota is full. Reads and deletions remain available. Both namespaces share the encrypted SQLite storage engine. The account quota covers hosted records, account metadata, mail and files. This change does not relocate records to a different physical volume.

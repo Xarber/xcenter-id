@@ -2,26 +2,44 @@ import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { errors, interactionPolicy, Provider } from 'oidc-provider';
 import { openOidcStore } from './oidc-store.mjs';
 
+const deviceGrant = 'urn:ietf:params:oauth:grant-type:device_code';
+const deviceCodePattern = /^[BCDFGHJKLMNPQRSTVWXZ]{6}$/;
 const refreshIdleSeconds = 14 * 24 * 60 * 60;
+const accountPermissions = ['profile','app_data','email','age_range','friends','offline_access'];
+
+function approveScopes(grant, scopes) {
+  if(grant.rejected?.openid?.scope){
+    grant.rejected.openid.scope=grant.getRejectedOIDCScope().split(' ').filter(scope=>!scopes.includes(scope)).join(' ');
+  }
+  grant.addOIDCScope(scopes);
+}
 
 const escape = (value) => String(value).replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[c]);
 
-function html(res, content, status = 200, callbackOrigin = '') {
-  res.writeHead(status, {
-    'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'same-origin',
+function pageHeaders(callbackOrigin = '') {
+  return {
+    'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer',
     'Content-Security-Policy': `default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'self' ${callbackOrigin}; base-uri 'none'`,
-  });
-  res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  };
+}
+
+function html(res, content, status = 200, callbackOrigin = '') {
+  res.writeHead(status, pageHeaders(callbackOrigin)).end(page(content));
+}
+
+function page(content) {
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Continue with X-Center ID</title><style>
     :root{color-scheme:light dark;font:1rem/1.5 system-ui;--bg:#f4f7fc;--card:#fff;--text:#17223a;--muted:#526078;--border:#dbe3ef;--action:#214fbe;--soft:#edf2ff}
     *{box-sizing:border-box}body{margin:0;padding:clamp(1rem,5vw,3rem);background:var(--bg);color:var(--text)}
     main{max-width:34rem;margin:clamp(0rem,4vh,3rem) auto;padding:clamp(1.25rem,5vw,2.25rem);background:var(--card);border:1px solid var(--border);border-radius:1.45rem}
     h1{font-size:clamp(1.55rem,6vw,2.15rem);line-height:1.12;letter-spacing:-.04em;overflow-wrap:anywhere}p{color:var(--muted)}
     .badge{display:inline-block;border:1px solid currentColor;border-radius:1rem;padding:.1rem .5rem;font-size:.8rem;font-weight:700}.brand{font-weight:800;letter-spacing:-.03em;color:var(--action)}.context{padding:.8rem 1rem;border-radius:.8rem;background:var(--soft);overflow-wrap:anywhere}
-    .badge-row{display:flex;flex-wrap:wrap;gap:.35rem;margin:.5rem 0}.permission-toggle input:disabled{cursor:default}.permission-toggle small{display:block;color:var(--muted)}
+    .badge-row{display:flex;flex-wrap:wrap;gap:.35rem;margin:.5rem 0}.permission-toggle.permission-fixed{cursor:default}.permission-check{margin-inline-start:auto;color:var(--action);font-weight:800}.permission-toggle small{display:block;color:var(--muted)}
     fieldset{border:1px solid var(--border);border-radius:.85rem;padding:.6rem 1rem;margin:1.2rem 0;min-width:0}legend{font-weight:700}
+    .device-code{font-size:1.6rem;font-weight:750;letter-spacing:.15em}.device-entry input{width:100%;min-height:44px;padding:.5rem .7rem;border-radius:.6rem;font:inherit;border:1px solid var(--border);background:var(--card);color:var(--text);text-transform:uppercase}
     label{display:flex;gap:.7em;align-items:baseline;padding:.5em 0;overflow-wrap:anywhere}input{accent-color:var(--action)}
     button,.action{display:inline-block;font:inherit;font-weight:700;padding:.6em 1em;margin:.45rem .4rem 0 0;border-radius:.65rem;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer}
     button[value=approve],.action{background:var(--action);color:#fff;text-decoration:none;border-color:transparent}
@@ -36,7 +54,7 @@ function html(res, content, status = 200, callbackOrigin = '') {
     .permission-list li{display:flex;align-items:center;gap:.7rem}.permission-list svg,.connection svg{width:20px;height:20px;flex:none}
     :focus{outline:none}:focus-visible{box-shadow:0 0 0 2px #6b94ff}
     @media(prefers-color-scheme:dark){:root{--bg:#101522;--card:#192132;--text:#f3f6ff;--muted:#b1c1dc;--border:#35445e;--action:#375fce;--soft:#23355d}.brand{color:#adc5ff}}
-    </style><main><span class="brand">X-Center ID</span>${content}</main></html>`);
+    </style><main><span class="brand">X-Center ID</span>${content}</main></html>`;
 }
 
 const iconPaths={
@@ -61,26 +79,37 @@ async function form(req) {
   return new URLSearchParams(value);
 }
 
-export function createIdentityProvider({ issuer, database, accounts, configuration, mail, registry, applicationData }) {
+export function createIdentityProvider({ issuer, database, accounts, configuration, mail, registry, applicationData, notify=()=>{} }) {
   const storageKey = Buffer.from(configuration.storageKey, 'hex');
   const subjectKey = Buffer.from(configuration.subjectKey, 'hex');
   if (subjectKey.length !== 32) throw new Error('Invalid stable subject key');
   const subjectFor=(owner,clientId)=>createHmac('sha256',subjectKey).update(JSON.stringify(['pairwise',clientId,owner])).digest('base64url');
   const StorageAdapter = openOidcStore(database, storageKey);
   class Adapter extends StorageAdapter {
+    async upsert(id,value,ttl) {
+      if(this.model==='DeviceCode'&&value.params?.nonce)value={...value,nonce:value.params.nonce};
+      return super.upsert(id,value,ttl);
+    }
     async find(id) {
       if(this.model!=='Client')return super.find(id);
       const app=registry?.publicDetails(id);
       if(!app)return undefined;
       const saved=await super.find(id);
-      return saved?{...saved,client_name:app.name,redirect_uris:app.callbacks,grant_types:['authorization_code','refresh_token']}:undefined;
+      if(!saved)return undefined;
+      const deviceCapable=saved.token_endpoint_auth_method==='client_secret_basic';
+      return {...saved,client_name:app.name,redirect_uris:app.callbacks,
+        // The OAuth device grant uses the same client-bound subject as browser sign-in.
+        // For secret-authenticated clients, return that subject directly in claims().
+        subject_type:deviceCapable?'public':'pairwise',
+        grant_types:['authorization_code','refresh_token',...(deviceCapable?[deviceGrant]:[])],
+      };
     }
     async consume(id) {
       try { await super.consume(id); }
       catch(error) {
-        if(this.model==='RefreshToken'&&error.code==='already_consumed'){
-          if(error.grantId)await revokeGrant(error.grantId);
-          throw new errors.InvalidGrant('refresh token already used');
+        if(['RefreshToken','DeviceCode'].includes(this.model)&&error.code==='already_consumed'){
+          if(this.model==='RefreshToken'&&error.grantId)await revokeGrant(error.grantId);
+          throw new errors.InvalidGrant('Authorization already used');
         }
         throw error;
       }
@@ -134,13 +163,20 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     if(brand?.requiresAgeRange&&!granted.has('age_range'))return true;
     return requestParamOIDCScopes.has('app_data')&&!granted.has('app_data');
   }));
+  policy.get('consent').checks.add(new interactionPolicy.Check('confirm_linked_signin','Confirm sign-in to the linked app',ctx=>
+    !ctx.oidc.result?.consent?.grantId&&!!accounts.linkedGrant(ctx.oidc.session.accountId,ctx.oidc.client.clientId)));
+  const deviceAttempts=new Map();
+  function devicePage(ctx,content) {
+    ctx.set(pageHeaders());
+    ctx.body=page(content);
+  }
   const provider = new Provider(issuer, {
     clients, adapter: Adapter, jwks: configuration.jwks,
     cookies: { keys: configuration.cookieKeys, short: { secure: true, httpOnly: true, sameSite: 'lax' },
       long: { secure: true, httpOnly: true, sameSite: 'lax' } },
-    claims: scopeClaims, scopes: ['openid','profile','email','age_range','app_data','friends','offline_access'], subjectTypes: ['pairwise'],
+    claims: scopeClaims, scopes: ['openid','profile','email','age_range','app_data','friends','offline_access'], subjectTypes: ['pairwise','public'],
     pkce: { required: () => true },
-    ttl: { AccessToken:600, AuthorizationCode:90, Interaction:300, RefreshToken:refreshIdleSeconds, Grant:refreshIdleSeconds },
+    ttl: { AccessToken:600, AuthorizationCode:90, DeviceCode:300, Interaction:300, RefreshToken:refreshIdleSeconds, Grant:refreshIdleSeconds },
     async issueRefreshToken(ctx,client,source) {
       if(!registry?.has(client.clientId)||!source.scopes.has('offline_access'))return false;
       if(!grantStorage.renewGrant(ctx.oidc.entities.Grant.jti,refreshIdleSeconds))throw new errors.InvalidGrant('App grant expired');
@@ -156,7 +192,40 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const id=ctx.oidc.result?.consent?.grantId ?? (owner&&client&&accounts.linkedGrant(owner,client));
       return id&&knownClient(client)&&accounts.grantAllowed(owner,client,id)?ctx.oidc.provider.Grant.find(id):undefined;
     },
-    features: { devInteractions: { enabled: false } },
+    features: {
+      devInteractions: { enabled: false },
+      deviceFlow: {
+        enabled:true, charset:'base-20', mask:'******',
+        deviceInfo(ctx) {
+          const {client,params}=ctx.oidc;
+          const brand=registry?.brand(client.clientId);
+          const requested=new Set(String(params.scope??'').split(' '));
+          if(!brand||client.clientAuthMethod!=='client_secret_basic')throw new errors.UnauthorizedClient('Device sign-in requires an active confidential registration.');
+          if(brand.requiresEmail&&!requested.has('email')||brand.requiresAgeRange&&!requested.has('age_range'))throw new errors.InvalidScope('Request the required app permissions.');
+          if(!/^[A-Za-z0-9_-]{22,128}$/.test(params.nonce??''))throw new errors.InvalidRequest('Supply a transaction nonce.');
+          const minute=Math.floor(Date.now()/60_000);
+          for(const [id,entry] of deviceAttempts)if(entry.minute!==minute)deviceAttempts.delete(id);
+          const prior=deviceAttempts.get(client.clientId);
+          if((prior?.count??0)>=60)throw new errors.InvalidRequest('Too many device authorizations. Try again in a minute.');
+          deviceAttempts.set(client.clientId,{minute,count:(prior?.count??0)+1});
+          return {};
+        },
+        userCodeInputSource(ctx,form,_out,error) {
+          const help=error?'That device code is unavailable. Enter a new code from your device.':'Enter the six-character code shown on your TV or other device.';
+          devicePage(ctx,`<h1>Sign in on another device</h1><p>${help}</p><div class="device-entry">${form.replace('placeholder="Enter code"','aria-label="Device code" maxlength="6" placeholder="Device code"')}</div><button value="approve" form="op.deviceInputForm">Continue</button>`);
+        },
+        userCodeConfirmSource(ctx,form,client,_info,code) {
+          devicePage(ctx,`<h1>Confirm sign-in on this device?</h1><p>Sign in to <strong>${escape(client.clientName)}</strong> on your other device.</p>
+            <p>Continue only if you started this sign-in and this code matches the one on your device.</p>
+            <p class="device-code">${escape(code)}</p>${form}
+            <button value="approve" form="op.deviceConfirmForm">Continue</button>
+            <button form="op.deviceConfirmForm" name="abort" value="yes">Cancel</button>`);
+        },
+        successSource(ctx) {
+          devicePage(ctx,'<h1>Device sign-in approved</h1><p>You can close this page and return to your other device.</p>');
+        },
+      },
+    },
     interactions: { policy, url: (_ctx, interaction) => '/interaction/' + interaction.uid },
     async pairwiseIdentifier(_ctx, accountId, client) {
       return subjectFor(accountId,client.clientId);
@@ -178,7 +247,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         accountId: owner,
         async claims() {
           return {
-            sub: owner,
+            sub:ctx.oidc.client?.subjectType==='public'?subjectFor(owner,client):owner,
             name: person.givenName + ' ' + person.surname, given_name: person.givenName,
             family_name: person.surname, preferred_username:person.username, age_range: person.ageRange,
             ...(person.verified?{xcenter_verified:true}:{}),
@@ -192,6 +261,11 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
   });
   // Only the loopback-bound application receives requests from the trusted reverse proxy.
   provider.proxy = true;
+  provider.on('device_authorization.success',(ctx,result)=>{
+    result.verification_uri=issuer+'/device';
+    result.verification_uri_complete=issuer+'/device?code='+result.user_code;
+    result.interval=5;
+  });
 
   async function interaction(req, res, path) {
     let details;
@@ -215,17 +289,19 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       res.writeHead(303,{Location:location,'Cache-Control':'no-store'}).end();
       return;
     }
-    if(req.method==='GET'&&prompt.name==='login'&&params.prompt!=='login'&&params.max_age===undefined&&accounts.linkedGrant(active.owner,client.client_id)){
+    const device=!!details.deviceCode;
+    if(req.method==='GET'&&prompt.name==='login'&&params.prompt!=='login'&&params.max_age===undefined&&(device||accounts.linkedGrant(active.owner,client.client_id))){
       await provider.interactionFinished(req,res,{login:{accountId:active.owner,ts:Math.floor(active.created/1000)}},{mergeWithLastSubmission:false});
       return;
     }
     const linked=accounts.linkedGrant(active.owner,client.client_id);
     const existingGrant=linked&&await provider.Grant.find(linked);
     const existingScopes=new Set(existingGrant?.getOIDCScope().split(' '));
-    const chooseEmail=missing.has('email')||(requiredEmail&&(!existingScopes.has('email')||!await grantedEmail(active.owner,person,linked)));
-    const showAge=missing.has('age_range')||(requiredAge&&scopes.has('age_range'));
-    const appData=scopes.has('app_data');
+    const sharedEmail=existingScopes.has('email')?await grantedEmail(active.owner,person,linked):undefined;
     const explicitConsent=String(params.prompt??'').split(' ').includes('consent');
+    const chooseEmail=scopes.has('email')&&(missing.has('email')||!existingGrant||explicitConsent||requiredEmail&&!sharedEmail);
+    const showAge=scopes.has('age_range')&&(missing.has('age_range')||!existingGrant||explicitConsent||requiredAge&&!existingScopes.has('age_range'));
+    const appData=scopes.has('app_data');
     const showFriends=scopes.has('friends')&&(missing.has('friends')||explicitConsent);
     const showOffline=scopes.has('offline_access')&&(missing.has('offline_access')||explicitConsent);
     if (req.method === 'POST') {
@@ -244,7 +320,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         return html(res,'<h1>The signed-in account changed</h1><p>Start again from the app.</p>',409);
       }
       const selected=chooseEmail&&scopes.has('email')?input.get('email'):null;
-      if(requiredEmail&&chooseEmail&&!selected)return html(res,'<h1>Choose an email address</h1><p>This app requires this info to work. Go back to choose an address, or cancel the request.</p>',400);
+      if(requiredEmail&&chooseEmail&&(!selected||selected==='current'&&!sharedEmail))return html(res,'<h1>Choose an email address</h1><p>This app requires this info to work. Go back to choose an address, or cancel the request.</p>',400);
       const eligible = accounts.premiumEligible(active.owner);
       const premium = (selected === 'premium'||selected==='masked') && eligible && mail?.premiumAvailable ? mail?.premiumAlias(active.owner,client.client_id) : null;
       if(selected === 'premium' && !premium) return html(res,'<h1>Premium Hide My Email is unavailable</h1>',409);
@@ -252,23 +328,24 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       if (selected === 'masked' && !alias && !premium) return html(res,'<h1>Hide My Email is unavailable</h1>',409);
       if(selected==='primary'&&!mail)return html(res,'<h1>Select a verified address</h1>',400);
       const primary=selected==='primary';
-      const email = premium || alias || (primary?person.username+'@mail.xcenter.it':selected);
-      if (email && !alias && !premium && !primary && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
-      if(applicationData&&appData)applicationData.authorize(active.owner,client.client_id,input.getAll('data-permission'));
+      const email = selected==='current'?sharedEmail:premium || alias || (primary?person.username+'@mail.xcenter.it':selected);
+      if (selected!=='current' && email && !alias && !premium && !primary && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
+      const dataChanged=appData&&applicationData?.authorize(active.owner,client.client_id,input.getAll('data-permission'));
       const keepSession=showOffline&&input.getAll('permission').includes('offline_access');
       const shareFriends=showFriends&&input.getAll('permission').includes('friends');
       const ageAllowed=scopes.has('age_range')&&showAge&&(requiredAge||input.getAll('permission').includes('age_range'));
       const allowed=['openid','profile',...(ageAllowed?['age_range']:[]),...(appData?['app_data']:[]),...(shareFriends?['friends']:[]),...(keepSession?['offline_access']:[]),...(email?['email']:[])];
       const denied=[...(showAge&&!ageAllowed?['age_range']:[]),...(chooseEmail&&!email?['email']:[]),...(showFriends&&!shareFriends?['friends']:[]),...(showOffline&&!keepSession?['offline_access']:[])];
       const grant=existingGrant||new provider.Grant({accountId:active.owner,clientId:client.client_id});
-      if(grant.rejected?.openid?.scope){
-        grant.rejected.openid.scope=grant.getRejectedOIDCScope().split(' ').filter(scope=>!allowed.includes(scope)).join(' ');
-      }
-      grant.addOIDCScope(allowed);
+      approveScopes(grant, allowed);
       if(denied.length)grant.rejectOIDCScope(denied);
       const grantId = await grant.save();
-      if (email) await selections.upsert(grantId,premium||alias ? { privateAddress:email, client:client.client_id } : primary?{primary:true}:{ email });
+      if (email && selected!=='current') await selections.upsert(grantId,premium||alias ? { privateAddress:email, client:client.client_id } : primary?{primary:true}:{ email });
       accounts.rememberApp(active.owner,client.client_id,client.client_name ?? client.client_id,grantId);
+      const after=grant.getOIDCScope().split(' ');
+      const scopeChanged=after.length!==existingScopes.size||after.some(scope=>!existingScopes.has(scope));
+      if(!linked)notify(active.owner,client.client_id,'linked');
+      else if(dataChanged||scopeChanged||email&&email!==sharedEmail)notify(active.owner,client.client_id,'permissions');
       await provider.interactionFinished(req,res,{ consent:{ grantId } });
       return;
     }
@@ -284,15 +361,17 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       return html(res,`<h1>Choose your account</h1><p>Continue to ${escape(title)} as ${escape(person.givenName)} ${escape(person.surname)}.</p>${badgeRow(personBadges)}
         <form method="post"><button name="action" value="approve">Continue</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin);
     }
-    const incremental=!!linked;
+    const incremental=!!existingGrant;
     const requiredNote='This app requires this info to work.';
     const activeDataPermissions=appData?(applicationData?.permissions(active.owner)??[]).filter(item=>item.destination===client.client_id&&item.enabled):[];
-    const hasEmailChoice=!!(mail||person.emails.length);
+    const hasEmailChoice=!!(sharedEmail||mail||person.emails.length);
+    const fixed=(icon,label,note='')=>`<li><div class="permission-toggle permission-fixed">${glyph(icon)}<span>${label}${note?`<small>${note}</small>`:''}</span><span class="permission-check" role="img" aria-label="Allowed">✓</span></div></li>`;
     return html(res,`<div class="connection" aria-hidden="true">
       <span class="avatar">${person.hasPicture?'<img alt="" src="/account/avatar">':glyph('user')}</span>${glyph('link')}
       <span class="avatar">${brand?.icon?`<img alt="" src="data:image/png;base64,${escape(brand.icon)}">`:visual?glyph(visual):escape(title.slice(0,2).toUpperCase())}</span></div>
-      <h1>${incremental?'Authorize permissions':'Link '+escape(title)+' to X-Center ID'}</h1>
-      ${incremental?`<p>${escape(title)} is requesting additional access.</p>`:''}
+      <h1>${incremental?'Authorize logging back into '+escape(title)+'?':'Link '+escape(title)+' to X-Center ID'}</h1>
+      ${device?'<p>You’re approving sign-in on your other device.</p>':''}
+      ${incremental?`<p>${escape(title)} is already linked to your X-Center ID. Review its permissions before continuing.</p>`:''}
       ${brand?.description?`<p>${escape(brand.description)}</p>`:''}
       ${brand?.verified?badgeRow('<span class="badge">✓ Verified app</span>'):''}
       <div class="context"><strong>${escape(person.givenName)} ${escape(person.surname)}</strong>${badgeRow(personBadges)}
@@ -300,21 +379,24 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       ${developerProfile?.status==='verified'?badgeRow('<span class="badge">✓ Verified developer</span>'):''}</div>
       <form method="post"><h2>Permissions</h2>
       <ul class="permission-list">
-        ${!incremental?`<li>${glyph('id')}<span>App-specific account ID, name, username and profile photo · required</span></li>`:''}
-        ${showAge?`<li><label class="permission-toggle">${glyph('age')}<span>Age range${requiredAge?`<small>${requiredNote}</small>`:''}</span><input aria-label="Age range" type="checkbox" role="switch" name="permission" value="age_range"${requiredAge?' checked disabled':''}></label></li>`:''}
-        ${showFriends?`<li><label class="permission-toggle">${glyph('user')}<span>Friends list<small>Share accepted friends and identify those who already use this app.</small></span><input type="checkbox" role="switch" name="permission" value="friends" aria-label="Friends list"${existingScopes.has('friends')?' checked':''}></label></li>`:''}
-        ${showOffline?`<li><label class="permission-toggle">${glyph('id')}<span>Stay signed in<small>Let this app renew your session while you use it.</small></span><input type="checkbox" role="switch" name="permission" value="offline_access" aria-label="Stay signed in" checked></label></li>`:''}
-        ${appData?`<li><label class="permission-toggle">${glyph('records')}<span>Private app storage<small>This app can save and access your records in its own storage.</small></span><input aria-label="Private app storage" type="checkbox" role="switch" checked disabled></label></li>`:''}
+        ${fixed('id','Account ID, name, username and profile photo',requiredNote)}
+        ${showAge&&!requiredAge?`<li><label class="permission-toggle">${glyph('age')}<span>Age range</span><input aria-label="Age range" type="checkbox" role="switch" name="permission" value="age_range"${existingScopes.has('age_range')?' checked':''}></label></li>`:''}
+        ${requiredAge||!showAge&&existingScopes.has('age_range')?fixed('age','Age range',requiredAge?requiredNote:''):''}
+        ${showFriends?`<li><label class="permission-toggle">${glyph('user')}<span>Friends list<small>Share accepted friends and identify those who already use this app.</small></span><input type="checkbox" role="switch" name="permission" value="friends" aria-label="Friends list"${existingScopes.has('friends')?' checked':''}></label></li>`:existingScopes.has('friends')?fixed('user','Friends list'):''}
+        ${showOffline?`<li><label class="permission-toggle">${glyph('id')}<span>Stay signed in<small>Let this app renew your session while you use it.</small></span><input type="checkbox" role="switch" name="permission" value="offline_access" aria-label="Stay signed in"${existingScopes.has('offline_access')||!incremental?' checked':''}></label></li>`:existingScopes.has('offline_access')?fixed('id','Stay signed in'):''}
+        ${appData||existingScopes.has('app_data')?fixed('records','Private app storage','This app can save and access your records in its own storage.'):''}
+        ${!chooseEmail&&sharedEmail?fixed('mail','Email address',escape(sharedEmail)+(requiredEmail?` · ${requiredNote}`:'')):''}
       </ul>
       ${appData?(applicationData?.requested(client.client_id)??[]).map(item=>`<label class="permission-toggle"><span>${escape(item.label)}<small> · Read ${escape(item.collection)} from ${escape(registry.publicDetails(item.source)?.name??item.source)}</small></span><input type="checkbox" role="switch" name="data-permission" value="${escape(item.source+'/'+item.collection)}"${activeDataPermissions.some(permission=>permission.source===item.source&&permission.collection===item.collection)?' checked':''}></label>`).join(''):''}
       <p>You can review app access in X-Center ID.</p>
       ${chooseEmail ? `<fieldset><legend>Email address to share</legend>
-      ${requiredEmail?`<p>${requiredNote}</p>${hasEmailChoice?'':'<p>Add and verify an email in X-Center ID, then return to the app to start again.</p>'}`:'<label><input type="radio" name="email" value="" checked>Do not share an email address</label>'}
+      ${requiredEmail?`<p>${requiredNote}</p>${hasEmailChoice?'':'<p>Add and verify an email in X-Center ID, then return to the app to start again.</p>'}`:`<label><input type="radio" name="email" value=""${sharedEmail?'':' checked'}>Do not share an email address</label>`}
+      ${sharedEmail?`<label><input type="radio" name="email" value="current" checked>Keep sharing ${escape(sharedEmail)}</label>`:''}
       ${mail?`<label><input type="radio" name="email" value="primary">X-Center ID · ${escape(person.username)}@mail.xcenter.it</label>`:''}
       ${(mail?.maskedAvailable||mail?.premiumAvailable&&accounts.premiumEligible(active.owner)) ? '<label><input type="radio" name="email" value="masked">Hide my email</label>' : ''}
       ${person.emails.map(({address}) => `<label><input type="radio" name="email" value="${escape(address)}">${escape(address)}</label>`).join('')}
       </fieldset>` : ''}
-      <button name="action" value="approve"${requiredEmail&&chooseEmail&&!hasEmailChoice?' disabled':''}>${incremental?'Authorize selected permissions':'Link app'}</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin);
+      <button name="action" value="approve"${requiredEmail&&chooseEmail&&!hasEmailChoice?' disabled':''}>${incremental?(missing.size||explicitConsent?'Authorize selected permissions':'Authorize sign-in'):'Link app'}</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin);
   }
 
   async function activeGrant(access) {
@@ -322,8 +404,33 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     return provider.Grant.find(access.grantId);
   }
 
+  async function connectedPermissions(owner,client,change) {
+    const linked=accounts.linkedGrant(owner,client);
+    const grant=linked&&knownClient(client)&&await activeGrant({accountId:owner,clientId:client,grantId:linked});
+    if(!grant||grant.accountId!==owner||grant.clientId!==client)return null;
+    const brand=registry?.brand(client);
+    const current=new Set(grant.getOIDCScope().split(' '));
+    const encountered=new Set(grant.getOIDCScopeEncountered().split(' '));
+    const email=await grantedEmail(owner,accounts.identity(owner),linked);
+    const required=scope=>scope==='profile'||scope==='app_data'||scope==='email'&&!!brand?.requiresEmail||scope==='age_range'&&!!brand?.requiresAgeRange;
+    if(change){
+      const {scope,enabled}=change;
+      if(!accountPermissions.includes(scope)||!encountered.has(scope)||required(scope)||enabled&&scope==='email'&&!email) return false;
+      const changed=current.has(scope)!==enabled;
+      if(enabled){approveScopes(grant,[scope]);current.add(scope);}
+      else{grant.rejectOIDCScope([scope]);current.delete(scope);}
+      if(!accounts.grantAllowed(owner,client,linked)) return null;
+      await grant.save();
+      if(changed)notify(owner,client,'permissions');
+    }
+    return accountPermissions.filter(scope=>scope==='profile'||encountered.has(scope)||scope!=='app_data'&&required(scope)).map(scope=>({
+      scope,required:required(scope),enabled:scope==='profile'||current.has(scope)&&(scope!=='email'||!!email),
+      canEnable:scope!=='email'||!!email,...(scope==='email'&&current.has(scope)&&email?{address:email}:{}),
+    }));
+  }
+
   return {
-    oidc: provider.callback(), interaction,
+    oidc: provider.callback(), interaction, connectedPermissions, deviceCodePattern,
     async provision(application) {
       const client_id = 'xid-' + randomUUID();
       const client_secret = application.native?null:randomBytes(48).toString('base64url');

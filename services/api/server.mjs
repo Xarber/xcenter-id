@@ -29,7 +29,7 @@ function json(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-async function readJson(req,limit=jsonLimit) {
+export async function readJson(req,limit=jsonLimit) {
   if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] ?? '')) {
     throw new HttpError(415, 'expected_json');
   }
@@ -85,7 +85,12 @@ export function createApiHandler({ store, authenticate, apps, consoleClient, dev
           const input=await readJson(req);
           const name=typeof input.name==='string'?input.name.trim():'';
           if(!name||name.length>80||/[\p{Cc}\p{Cf}]/u.test(name))throw new HttpError(422,'Enter a developer display name.');
-          const developer=registry.saveDeveloper(owner,name,input.requestVerification===true);
+          const github=input.githubProfile;
+          if(github!==undefined&&(typeof github!=='string'||!/^https:\/\/github\.com\/[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?\/?$/i.test(github.trim())&&github.trim()!=='')){
+            throw new HttpError(422,'Enter a GitHub profile URL such as https://github.com/username.');
+          }
+          const profileUrl=github?.trim().replace(/\/$/,'').toLowerCase();
+          const developer=registry.saveDeveloper(owner,name,input.requestVerification===true,profileUrl);
           if(!developer)throw new HttpError(422,'Add a public GitHub repository to an active app before requesting review.');
           return json(res,200,developer);
         }

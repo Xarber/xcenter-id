@@ -1,3 +1,4 @@
+import LinkedAppPermissions from './LinkedAppPermissions.web';
 import AppIcon from './AppIcon.web';
 import TrustBadges from './TrustBadges.web';
 import {isSampleClient} from './application-identity';
@@ -111,11 +112,13 @@ export default function PermissionsPage({client}: {client?:string}) {
   }
 
   return <>
-    {back}<HostedDataPermissions client={client}/>
+    {back}
     <section className="xc-card xc-pad xc-permission-heading">
       <AppIcon key={selected.icon} icon={selected.icon}/>
       <div><h2 className="xc-identity-label">{selected.name}<TrustBadges compact kind="app" verified={selected.verified}/></h2><p>{linked.has(client)?'Linked to your X-Center ID':'Manage what this app can share or access.'}</p>{selected.description&&<p>{selected.description}</p>}</div>
     </section>
+    {linked.has(client)&&<LinkedAppPermissions key={client} client={client}/>}
+    <HostedDataPermissions client={client}/>
     <section className="xc-card xc-pad">
       <div className="xc-row-head"><ArrowDownLeft size={20} aria-hidden="true"/><h2>Data this app can access</h2></div>
       {incoming.map(grant=>savedPlaces(grant,grant.source))}

@@ -1,3 +1,4 @@
+import {accountMessage} from './account-mail.mjs';
 import { randomBytes, createHash } from 'node:crypto';
 import nodemailer from 'nodemailer';
 
@@ -20,11 +21,17 @@ export function createVerificationMailer(config,limits) {
   });
   return async ({ address, link, code }) => {
     if(limits&&!limits.reserve('~verification-'+digest(address.toLowerCase())))throw new Error('Verification sending allowance reached');
+    const subject=code?'Your X-Center ID sign-in code':'Verify your email for X-Center ID';
+    const content=code?{
+      paragraphs:['Use this code to sign in. It expires in 5 minutes.','If you didn’t request this code, you can ignore this email.'],code,
+    }:{
+      paragraphs:['Open the link and sign in to verify that you own this address. The link expires in 20 minutes.','If you didn’t add this address, you can ignore this email.'],
+      action:{label:'Verify email address',url:link},
+    };
     return transport.sendMail({
-    from: { name: 'X-Center ID', address: from }, to: address,
-    subject: code?'Your X-Center ID sign-in code':'Verify your email for X-Center ID',
-    text: code?'Use this code to sign in to X-Center ID: '+code+'\nIt expires in 5 minutes.': 'Verify ownership of this address by opening the link and signing in to your X-Center ID account. The link expires in 20 minutes.\n\n' + link,
-  });
+      from:{name:'X-Center ID',address:from},to:address,subject,...accountMessage({title:subject,...content}),
+      headers:{'Auto-Submitted':'auto-generated'},
+    });
   };
 }
 

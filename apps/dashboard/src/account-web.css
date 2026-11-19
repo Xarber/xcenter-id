@@ -168,3 +168,13 @@ input:is([type=checkbox],[type=radio]){inline-size:1.2rem;block-size:1.2rem;min-
 .xc-trust-compact .xc-trust-badge{padding:2px 4px}
 .xc-stack .xc-claim-settings label{flex-direction:row;align-items:center;gap:8px;margin-block:10px}
 .xc-stack .xc-claim-settings input{width:1rem;height:1rem;flex:none;accent-color:var(--blue)}
+
+.xc-permission-row .xc-registration-actions{margin-inline-start:auto;justify-content:flex-end}
+.xc-registration-confirm{flex-basis:100%}
+.xc-permission-switch{flex:none;display:grid;place-items:center;padding:0;width:48px;height:44px;background:none;border:0;cursor:pointer}
+.xc-permission-switch span{width:44px;height:25px;padding:3px;border:1px solid var(--line);border-radius:999px;background:var(--soft)}
+.xc-permission-switch span::before{display:block;content:"";width:17px;height:17px;border-radius:50%;background:var(--muted);transition:transform 160ms ease}
+.xc-permission-switch[aria-checked=true] span{background:var(--blue);border-color:var(--blue)}
+.xc-permission-switch[aria-checked=true] span::before{background:var(--surface);transform:translateX(18px)}
+.xc-permission-switch:disabled{cursor:default;opacity:.55}
+@media(prefers-reduced-motion:reduce){.xc-permission-switch span::before{transition:none}}

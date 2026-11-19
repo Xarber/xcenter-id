@@ -9,15 +9,22 @@ test('verified app databases isolate users and services, encrypt records and gat
  const registry=openRegistry(':memory:');
  const registrations=['a','b'].map(client=>{const r=registry.submit('developer',client,'https://'+client+'.example.test/callback');registry.approve(r.id,client);registry.verifyApp(r.id,true);return r;});
  const principal=token=>({['a'.repeat(25)]:{owner:'user1',client:'a'},['b'.repeat(25)]:{owner:'user1',client:'b'},['c'.repeat(25)]:{owner:'user2',client:'a'}}[token]);
- const accounts={ownerForUsername:username=>username==='bob'?'user2':username==='alice'?'user1':null,linkedGrant:()=>({id:'fixture-grant'}),available:()=>true,isDisconnected:()=>false,current:req=>req.headers.cookie==='session'?{owner:'developer'}:null,
+ let extraBytes=0;
+ const accounts={storageCapacity:()=>4096,ownerForUsername:username=>username==='bob'?'user2':username==='alice'?'user1':null,linkedGrant:()=>({id:'fixture-grant'}),available:()=>true,isDisconnected:()=>false,current:req=>req.headers.cookie==='session'?{owner:'developer'}:null,
   allowsMutation:req=>req.headers.origin==='https://id.example.test',recentlyConfirmed:()=>true,adminStatus:()=>403,auditAdmin:()=>{}};
- const data=openApplicationData({path:':memory:',key:Buffer.alloc(32,7),registry,accounts,authenticate:principal});
+ const data=openApplicationData({path:':memory:',key:Buffer.alloc(32,7),registry,accounts,authenticate:principal,otherUsage:()=>extraBytes});
  const server=createServer((req,res)=>void data.handle(req,res,new URL(req.url,'http://localhost'))).listen(0,'127.0.0.1');await once(server,'listening');
  const base='http://127.0.0.1:'+server.address().port;
  const request=(path,{token,body,method='GET',revision,...extra}={})=>fetch(base+path,{method,headers:{...(token?{authorization:'Bearer '+token}:{}),...(body?{'content-type':'application/json'}:{}),...(revision?{'if-match':revision}:{}),...extra},...(body?{body:JSON.stringify(body)}:{})});
  try{
   assert.equal((await request('/v1/apps/a/data/posts/one',{method:'PUT',body:{data:'secret',public:false},revision:'"0"'})).status,401);
   const write=await request('/v1/apps/a/data/posts/one',{token:'a'.repeat(25),method:'PUT',body:{data:{text:'private'},public:false},revision:'"0"'});assert.equal(write.status,200);
+  assert.equal(data.containers('user1')[0].client,'a');
+  assert.ok(data.accountUsage('user1')>1024);
+  assert.equal(data.accountUsage('user2'),0);
+  extraBytes=3500;
+  assert.equal((await request('/v1/apps/b/data/posts/two',{token:'b'.repeat(25),method:'PUT',body:{data:'backup',public:false},revision:'"0"'})).status,409);
+  extraBytes=0;
   assert.equal((await request('/v1/apps/a/data/posts/one',{token:'b'.repeat(25)})).status,403);
   assert.equal((await request('/v1/apps/a/data/posts/one',{token:'c'.repeat(25)})).status,404);
   assert.deepEqual((await (await request('/public/apps/a/data/posts')).json()).records,[]);
@@ -42,6 +49,9 @@ test('verified app databases isolate users and services, encrypt records and gat
   assert.equal((await request('/v1/apps/b/data/posts/one',{token:key.secret})).status,401);
   assert.equal((await request('/v1/apps/a/data/posts/one',{token:key.secret})).status,404);
   assert.equal((await request('/v1/apps/a/data/posts/service',{token:key.secret,method:'PUT',revision:'"0"',body:{data:'backend only',public:false}})).status,200);
+  const database=await (await request('/account/app-storage/'+registrations[0].id,{cookie:'session'})).json();
+  assert.equal(database.records,1);
+  assert.ok(database.used<data.accountUsage('user1'));
   assert.equal((await manage(0,{action:'capacity',capacity:1024**3})).status,403);
   await manage(0,{action:'revoke-key'});assert.equal((await request('/v1/apps/a/data/posts/service',{token:key.secret})).status,401);
   registry.moderate('developer',registrations[0].id,'restrict');assert.equal((await request('/public/apps/a/data/posts')).status,404);

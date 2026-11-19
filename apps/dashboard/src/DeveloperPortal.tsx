@@ -6,7 +6,7 @@ import { File } from 'expo-file-system';
 import { accountHost } from './native-account';
 import { fileAsBase64 } from './web-account';
 import { useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Switch, Text, TextInput, useColorScheme, View } from 'react-native';
+import { Image, Linking, Pressable, StyleSheet, Switch, Text, TextInput, useColorScheme, View } from 'react-native';
 import Animated, { Easing, FadeIn, ReduceMotion } from 'react-native-reanimated';
 
 type Registration = { id: string; name: string; callback: string; status: string; native?:boolean; client?: string; developerName?:string; icon?:string|null; verified?:boolean; requirements?:ClaimRequirements };
@@ -28,6 +28,7 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
   const border = dark ? '#5a7192' : '#62738c';
   const [profile,setProfile]=useState<DeveloperIdentity|null>(null);
   const [profileName,setProfileName]=useState('');
+  const [githubProfile,setGitHubProfile]=useState('');
   const [editingDeveloper,setEditingDeveloper]=useState(false);
   const [permissionApp,setPermissionApp]=useState('');
   const [requirements,setRequirements]=useState(optionalClaims);
@@ -66,7 +67,7 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
       const response=await request('/developer-profile');
       if(!response.ok)throw new Error();
       const result=await response.json();
-      setProfile(result);setProfileName(result.name);setEditingDeveloper(true);setNotice('');
+      setProfile(result);setProfileName(result.name);setGitHubProfile(result.githubProfile??'');setEditingDeveloper(true);setNotice('');
     }catch{setNotice('Could not load the developer profile.');}
     finally{setSaving(false);}
   }
@@ -74,10 +75,10 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
   async function saveDeveloper(requestVerification=false){
     setSaving(true);
     try{
-      const response=await request('/developer-profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:profileName,requestVerification})});
+      const response=await request('/developer-profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:profileName,githubProfile,requestVerification})});
       const result=await response.json();
       if(!response.ok)throw new Error(result.error);
-      setProfile(result);setProfileName(result.name);setNotice(requestVerification?'Verification request submitted.':'Developer profile saved.');
+      setProfile(result);setProfileName(result.name);setGitHubProfile(result.githubProfile??'');setNotice(requestVerification?'Verification request submitted.':'Developer profile saved.');
     }catch(error){setNotice(error instanceof Error?error.message:'Could not save the developer profile.');}
     finally{setSaving(false);}
   }
@@ -194,8 +195,11 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
     {profile?.status==='requested'&&<Text style={{color:ink}}>Verification in review</Text>}
     <Text style={{color:ink}}>Developer display name</Text>
     <TextInput accessibilityLabel="Developer display name" value={profileName} onChangeText={setProfileName} maxLength={80} style={[styles.input,{color:ink,borderColor:border}]}/>
-    {profile?.status==='verified'&&profile.name!==profileName.trim()&&<Text accessibilityLiveRegion="polite" style={{color:ink}}>Changing your developer name removes its verified badge. You’ll need to request verification again.</Text>}
-    {action('Save developer name',()=>void saveDeveloper(),saving||!profileName.trim())}
+    {!!profile?.githubProfile&&action('View GitHub profile',()=>void Linking.openURL(profile.githubProfile!).catch(()=>setNotice('Could not open GitHub.')))}
+    <Text style={{color:ink}}>GitHub profile URL</Text>
+    <TextInput accessibilityLabel="GitHub profile URL" value={githubProfile} onChangeText={setGitHubProfile} autoCapitalize="none" keyboardType="url" maxLength={80} style={[styles.input,{color:ink,borderColor:border}]}/>
+    {profile?.status==='verified'&&(profile.name!==profileName.trim()||(profile.githubProfile??'')!==githubProfile.trim().replace(/\/$/,'').toLowerCase())&&<Text accessibilityLiveRegion="polite" style={{color:ink}}>Changing your developer name or GitHub profile removes the verified developer badge. You’ll need to request verification again.</Text>}
+    {action('Save developer profile',()=>void saveDeveloper(),saving||!profileName.trim())}
     {profile?.status==='unverified'&&action('Request verification',()=>void saveDeveloper(true),saving||!profileName.trim())}
     {notice&&<Text accessibilityLiveRegion="polite" style={{color:ink}}>{notice}</Text>}
   </View>;

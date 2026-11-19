@@ -9,9 +9,12 @@ export default function ApplicationStorage({id,admin=false}:{id:string;admin?:bo
  async function load(){const data=await api('app-storage/'+id);setState(data);setShared(data.shared.join('\n'));setRequests(JSON.stringify(data.requests,null,2));setCapacity(String(data.capacity/1024**2));}
  useEffect(()=>{void load().catch(error=>setStatus(error.message));return ()=>setSecret('');},[id]);
  function act(data:object){setBusy(true);setStatus('');void (async()=>{if(!(await api('session/access')).confirmed)await confirmIdentity();return api('app-storage/'+id,data);})().then(async result=>{if(result.secret)setSecret(result.secret);await load();setStatus('Saved.');}).catch(error=>setStatus(error.message)).finally(()=>setBusy(false));}
- const account=new URLSearchParams(location.search).get('account');
- return <section className="xc-card xc-pad xc-stack"><a href={admin&&account&&/^[a-z][a-z0-9]{2,23}$/.test(account)?'/admin/users/'+account:admin?'/admin':'/developer'}>Back to apps</a><h2>Application database</h2>
- <p>Private by default. Public records can be read by anyone. App database records are separate from account file storage.</p>
+ const query=new URLSearchParams(location.search);
+ const account=query.get('account');
+ const fromAdmin=admin&&query.get('from')==='admin';
+ const back=fromAdmin?(account&&/^[a-z][a-z0-9]{2,23}$/.test(account)?'/admin/users/'+account:'/admin'):'/developer?app='+encodeURIComponent(id);
+ return <section className="xc-card xc-pad xc-stack"><a href={back}>{fromAdmin?'Back to administration':'Back to registered app'}</a><h2>Application database</h2>
+ <p>This quota covers the app’s service database. User records use the storage of the account that owns them. Public records can be read by anyone.</p>
  {state&&<><p>{formatBytes(state.used)} of {formatBytes(state.capacity)} · {state.records} records</p>
  <button className="xc-button xc-secondary" onClick={()=>setEdit(!edit)}>{edit?'Close settings':'Edit database settings'}</button>
  {edit&&<><label>Collections available for user-approved sharing<textarea value={shared} onChange={e=>setShared(e.target.value)} placeholder="One collection name per line"/></label>

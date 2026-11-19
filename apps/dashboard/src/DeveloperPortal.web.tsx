@@ -17,9 +17,15 @@ export default function DeveloperPortal({back}:{back:()=>void}){
   const [secret,setSecret]=useState<{clientId:string;clientSecret?:string}|null>(null);
   async function load(){
     const result=await developerApi('apps');
-    setApps(result.apps.filter((app:AppRegistration)=>app.status!=='revoked'));
+    const available:AppRegistration[]=result.apps.filter((app:AppRegistration)=>app.status!=='revoked');
+    setApps(available);
+    return available;
   }
-  useEffect(()=>{void load().catch(error=>setNotice(error.message));},[]);
+  useEffect(()=>{void load().then(available=>{
+    const id=new URLSearchParams(location.search).get('app');
+    const restored=available.find(app=>app.id===id);
+    if(restored)edit(restored);
+  }).catch(error=>setNotice(error.message));},[]);
   function edit(item:AppRegistration|'create'|null){
     setSelection(item);setDeleteConfirm(false);setNotice('');setSecret(null);
     setRequirements(item&&item!=='create'?(item.requirements??optionalClaims):optionalClaims);
@@ -55,8 +61,8 @@ export default function DeveloperPortal({back}:{back:()=>void}){
 
   const existing=selection==='create'?null:selection;
   return <div className="xc-stack">
+    <button type="button" className="xc-button xc-secondary xc-self-start" onClick={()=>{history.replaceState(history.state,'','/developer');edit(null);}} disabled={busy}><ArrowLeft size={16}/> Registered apps</button>
     {existing?.status==='active'&&existing.verified&&<a className="xc-button xc-secondary xc-self-start" href={'/developer/storage/'+existing.id}><Database size={17}/> Manage app storage</a>}
-    <button type="button" className="xc-button xc-secondary xc-self-start" onClick={()=>edit(null)} disabled={busy}><ArrowLeft size={16}/> Registered apps</button>
     <div><h2>{existing?.name??'Register an app'}</h2><TrustBadges kind="app" verified={existing?.verified}/></div>
     <form className="xc-stack" onSubmit={event=>{event.preventDefault();save();}}>
       <div className="xc-profile-head xc-portal-profile">

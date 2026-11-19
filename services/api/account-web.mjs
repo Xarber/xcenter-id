@@ -1,3 +1,4 @@
+import {localAccountMessage} from './account-mail.mjs';
 import {parseStorageVolumes,storageVolumeStatus} from './storage-volumes.mjs';
 import {createSupportMailer} from './service-mail.mjs';
 import {openMailLimits} from './mail-limits.mjs';
@@ -20,7 +21,7 @@ import { createAccounts } from './accounts.mjs';
 import { openMailStore } from './mail-store.mjs';
 import { createSamplePermissions } from './sample-permissions.mjs';
 import { createSamples } from './samples.mjs';
-import { createApiHandler } from './server.mjs';
+import { createApiHandler, readJson } from './server.mjs';
 import { openRegistry } from './registry.mjs';
 import { openStore } from './store.mjs';
 import { createIdentityProvider } from './oidc.mjs';
@@ -52,12 +53,12 @@ const state = process.env.AUTHNJS_DATA_DIR;
 const storageVolumes=parseStorageVolumes(process.env.AUTHNJS_STORAGE_VOLUMES);
 const friends = configuration ? openFriends(join(state,'accounts.sqlite'),accounts.available) : null;
 const friendRoutes = friends && createFriendRoutes({accounts,friends});
-const otherStorage=(owner)=>{
+const otherStorage=(owner,includeHosted=true)=>{
   const data=accounts.usage(owner);
-  return {...data,apps:data.apps+(store?.usage(owner)??0),mail:mail?.usage(owner)??0};
+  return {...data,apps:data.apps+(store?.usage(owner)??0)+(includeHosted?applicationData?.accountUsage(owner)??0:0),mail:mail?.usage(owner)??0};
 };
 const accountFiles = configuration ? createAccountFiles({
-  usage:otherStorage,friends,
+  usage:otherStorage,friends,appContainers:owner=>applicationData?.containers(owner)??[],
   database:join(state,'user-files.sqlite'),accounts,origin,
   key:Buffer.from(hkdfSync('sha256',Buffer.from(configuration.profileKey,'hex'),'','authnjs.files.v1',32)),
 }) : null;
@@ -65,15 +66,37 @@ const registry = openRegistry(join(state, 'apps.sqlite'));
 const reviewApps=createAdminAppRoutes({accounts,registry});
 const mail = mailConfig?.inboundDomains?.length ? openMailStore({ configuration:mailConfig,
   accountService:accounts,accountsPath:join(state,'accounts.sqlite'), mailPath:join(state,'mail.sqlite') }) : null;
+function notifyAppChange(owner,client,kind){
+  if(!mail||!accounts.available(owner))return;
+  const username=accounts.username(owner);
+  if(!username)return;
+  const name=registry.publicDetails(client)?.name??accounts.linkedAppLabel(owner,client)??'A connected app';
+  const message={
+    linked:['New app linked',name+' was linked to your X-Center ID.'],
+    permissions:['App permissions updated','Permissions for '+name+' were updated.'],
+    unlinked:['App unlinked',name+' was removed from your X-Center ID.'],
+  }[kind];
+  if(!message)return;
+  const [subject,summary]=message;
+  void localAccountMessage({
+    from:'X-Center ID Security <security@id.xcenter.it>',to:username+'@mail.xcenter.it',subject,
+    paragraphs:[summary,'If you don’t recognize this activity, review your linked apps and contact Support.'],
+    action:{label:'Review linked apps',url:origin+'/apps'},
+  }).then(content=>{
+    if(accounts.available(owner)&&!mail.notice(owner,content,{verified:true}))console.warn('Account activity notice could not be delivered.');
+  }).catch(()=>console.warn('Account activity notice could not be generated.'));
+}
 const support = createSupportRoutes({accounts,mail,sendExternal:createSupportMailer(mailConfig?.submission,mailLimits)});
 const adminUsers=createAdminUsers({accounts,registry,mail});
 let provider;
 const applicationData=configuration?openApplicationData({path:join(state,'app-data.sqlite'),registry,accounts,
   key:Buffer.from(hkdfSync('sha256',Buffer.from(configuration.profileKey,'hex'),'','xcenter.appdata.v1',32)),
   authenticate:token=>provider?.dataAccess(token,{native:true}),
+  otherUsage:owner=>accountFiles.fileBytes(owner)+Object.values(otherStorage(owner,false)).reduce((sum,value)=>sum+value,0),
+  notify:notifyAppChange,
 }):null;
 provider = configuration ? createIdentityProvider({
-  issuer: origin, database: join(state, 'oidc.sqlite'), accounts, configuration, mail:mailConfig?.publicDelivery?mail:null, registry,applicationData,
+  issuer: origin, database: join(state, 'oidc.sqlite'), accounts, configuration, mail:mailConfig?.publicDelivery?mail:null, registry,applicationData,notify:notifyAppChange,
 }) : null;
 const store = configuration ? openStore(join(state, 'sample-data.sqlite'), Buffer.from(configuration.sampleKey, 'hex')) : null;
 const friendRecordRoutes = friends && store && createFriendRecordRoutes({ accounts, records:openFriendRecords({
@@ -139,13 +162,14 @@ const consentApi = provider && store ? createApiHandler({
     return session ? {owner:session.owner,client:'account-consent-session'} : null;
   },
 }) : null;
-const oidcRoutes = /^\/(?:\.well-known\/openid-configuration|auth(?:\/[^/]+)?|token|jwks|me|session\/end(?:\/[^/]+)?)$/;
+const oidcRoutes = /^\/(?:\.well-known\/openid-configuration|auth(?:\/[^/]+)?|device(?:\/[A-Za-z0-9_-]+)?|token|jwks|me|session\/end(?:\/[^/]+)?)$/;
 const types = new Map(Object.entries({
   html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8',
   webmanifest: 'application/manifest+json', json: 'application/json', png: 'image/png',
   svg: 'image/svg+xml', css:'text/css; charset=utf-8', ttf: 'font/ttf', txt: 'text/plain',
 }));
 
+const deviceVerificationAttempts=new Map();
 const appFriendRoutes=provider&&friends&&createAppFriendRoutes({
   accounts,friends,authorize:provider.friendAccess,subject:provider.friendSubject,
 });
@@ -242,6 +266,26 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void consentApi(req,res);
     return;
   }
+  const permissionsClient=/^\/account\/connected-apps\/([A-Za-z0-9_-]{1,100})\/permissions$/.exec(path)?.[1];
+  if(provider&&permissionsClient){
+    const identity=accounts.current(req);
+    const answer=(status,result)=>res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(result));
+    if(!identity)return answer(401,{error:'Sign in to view connected app permissions.'});
+    if(req.method!=='GET'&&req.method!=='PUT')return answer(405,{error:'Method unavailable.'});
+    const write=req.method==='PUT';
+    if(write&&(!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent')){
+      return answer(403,{error:'Change permissions from your account.'});
+    }
+    void (async()=>{
+      const change=write?await readJson(req,1024):undefined;
+      if(change&&(typeof change.scope!=='string'||typeof change.enabled!=='boolean'))return answer(422,{error:'Choose a valid permission.'});
+      if(accounts.current(req)?.owner!==identity.owner)return answer(401,{error:'Sign in again to continue.'});
+      const permissions=await provider.connectedPermissions(identity.owner,permissionsClient,change);
+      return permissions===null?answer(404,{error:'This app has no active sign-in grant.'}):
+        permissions===false?answer(422,{error:'This permission cannot be changed here.'}):answer(200,{permissions});
+    })().catch(error=>answer(error.status??503,{error:'Could not access app permissions.'}));
+    return;
+  }
   if(provider && req.method==='POST' && path==='/account/connected-apps/unlink'){
     const identity=accounts.current(req);
     const answer=(status,result)=>res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(result));
@@ -260,6 +304,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
       const unlinked = await provider.unlink(identity.owner,client);
       if(!unlinked && !accounts.isDisconnected(identity.owner,client))return answer(404,{error:'App is already unlinked.'});
       store?.revokeApp(identity.owner,client);applicationData?.revokeApp(identity.owner,client);
+      if(unlinked)notifyAppChange(identity.owner,client,'unlinked');
       return answer(200,{ok:true});
     })().catch(()=>answer(400,{error:'Could not unlink the app.'}));
     return;
@@ -306,6 +351,22 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     return;
   }
   if (provider && oidcRoutes.test(path)) {
+    if(path==='/device'){
+      if(req.method==='POST'){
+        // The service is loopback-only. The reverse proxy appends the actual peer last.
+        const peer=String(req.headers['x-forwarded-for']??req.socket.remoteAddress).split(',').at(-1).trim();
+        const minute=Math.floor(Date.now()/60_000);
+        for(const [key,value] of deviceVerificationAttempts)if(value.minute!==minute)deviceVerificationAttempts.delete(key);
+        const previous=deviceVerificationAttempts.get(peer);
+        if((previous?.count??0)>=16||!previous&&deviceVerificationAttempts.size>=2048){
+          return res.writeHead(429,{'Cache-Control':'no-store','Retry-After':'60'}).end('Try again in a minute.');
+        }
+        deviceVerificationAttempts.set(peer,{minute,count:(previous?.count??0)+1});
+      }else if(req.method==='GET'){
+        const code=target.searchParams.get('code')?.toUpperCase();
+        req.url=code&&provider.deviceCodePattern.test(code)?'/device?user_code='+code:'/device';
+      }
+    }
     void provider.oidc(req, res);
     return;
   }

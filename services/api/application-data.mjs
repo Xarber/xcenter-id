@@ -5,13 +5,14 @@ import {DatabaseSync} from 'node:sqlite';
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const name=/^[a-zA-Z0-9_-]{1,80}$/;
 const fail=(status,message)=>{throw Object.assign(new Error(message),{status});};
-export function openApplicationData({path,key,registry,accounts,authenticate}){
+export function openApplicationData({path,key,registry,accounts,authenticate,otherUsage=()=>0,notify=()=>{}}){
   if(key?.length!==32)throw new Error('Application data requires a 256-bit storage key');
   const db=new DatabaseSync(path);
   db.exec(`PRAGMA busy_timeout=3000;
     CREATE TABLE IF NOT EXISTS app_records(client TEXT NOT NULL,owner TEXT NOT NULL,collection TEXT NOT NULL,id TEXT NOT NULL,
       public_key TEXT NOT NULL,readers TEXT NOT NULL,public INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL,bytes INTEGER NOT NULL,envelope BLOB NOT NULL,
       PRIMARY KEY(client,owner,collection,id)) STRICT;
+    CREATE INDEX IF NOT EXISTS app_records_owner ON app_records(owner,client);
     CREATE TABLE IF NOT EXISTS app_readers(client TEXT NOT NULL,owner TEXT NOT NULL,collection TEXT NOT NULL,id TEXT NOT NULL,reader TEXT NOT NULL,PRIMARY KEY(client,owner,collection,id,reader)) STRICT;
     CREATE TABLE IF NOT EXISTS app_storage(client TEXT PRIMARY KEY,capacity INTEGER NOT NULL DEFAULT 10485760,
       secret TEXT,shared TEXT NOT NULL DEFAULT '[]',requests TEXT NOT NULL DEFAULT '[]') STRICT;
@@ -19,7 +20,10 @@ export function openApplicationData({path,key,registry,accounts,authenticate}){
       PRIMARY KEY(owner,source,destination,collection)) STRICT;`);
   const setting=client=>db.prepare('SELECT * FROM app_storage WHERE client=?').get(client);
   const active=client=>registry.has(client)&&!!registry.brand(client)?.verified&&accounts.available(registry.brand(client)?.owner);
-  const usage=client=>db.prepare('SELECT coalesce(sum(bytes),0) AS used,count(*) AS records FROM app_records WHERE client=?').get(client);
+  const serviceUsage=db.prepare("SELECT coalesce(sum(bytes),0) AS used,count(*) AS records FROM app_records WHERE client=? AND owner='~app'");
+  const accountUsage=db.prepare('SELECT coalesce(sum(bytes),0) AS used FROM app_records WHERE owner=?');
+  const containers=db.prepare('SELECT client,sum(bytes) AS bytes,count(*) AS records FROM app_records WHERE owner=? GROUP BY client ORDER BY bytes DESC,client');
+  const usage=client=>serviceUsage.get(client);
   const requested=client=>JSON.parse(setting(client)?.requests??'[]').filter(item=>active(item.source)&&JSON.parse(setting(item.source)?.shared??'[]').includes(item.collection));
   const aad=r=>Buffer.from(JSON.stringify(['xcenter.appdata.v1',r.client,r.owner,r.collection,r.id,r.revision,r.public,r.readers]));
   function decode(row){
@@ -36,20 +40,26 @@ export function openApplicationData({path,key,registry,accounts,authenticate}){
   }
   return {
     requested,
+    accountUsage:owner=>accountUsage.get(owner).used,
+    containers:owner=>containers.all(owner).map(row=>({...row,name:registry.publicDetails(row.client)?.name??'App storage'})),
     revokeApp(owner,client){db.prepare('DELETE FROM app_data_grants WHERE owner=? AND (source=? OR destination=?)').run(owner,client,client);},
     permissions(owner){return registry.published().filter(app=>accounts.linkedGrant(owner,app.client)).flatMap(app=>requested(app.client).map(item=>({...item,destination:app.client,destinationName:app.name,sourceName:registry.publicDetails(item.source)?.name??item.source,
       enabled:!!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(owner,item.source,app.client,item.collection)})));},
     authorize(owner,client,selected){
       const allowed=new Set(selected);
+      let changed=false;
       db.exec('BEGIN IMMEDIATE');
       try{
         for(const item of requested(client)){
           const id=item.source+'/'+item.collection;
-          if(allowed.has(id))db.prepare('INSERT OR IGNORE INTO app_data_grants VALUES(?,?,?,?)').run(owner,item.source,client,item.collection);
-          else db.prepare('DELETE FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').run(owner,item.source,client,item.collection);
+          const update=allowed.has(id)
+            ?db.prepare('INSERT OR IGNORE INTO app_data_grants VALUES(?,?,?,?)').run(owner,item.source,client,item.collection)
+            :db.prepare('DELETE FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').run(owner,item.source,client,item.collection);
+          changed=changed||update.changes>0;
         }
         db.exec('COMMIT');
       }catch(error){db.exec('ROLLBACK');throw error;}
+      return changed;
     },
     async handle(req,res,url){
       const answer=(code,data)=>res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
@@ -64,8 +74,10 @@ export function openApplicationData({path,key,registry,accounts,authenticate}){
           if(req.method!=='PUT'||!accounts.allowsMutation(req))fail(403,'Change permissions from your account.');
           const input=await body(req);const permission=requestedForOwner.find(p=>p.source===input.source&&p.destination===input.destination&&p.collection===input.collection);
           if(!permission||typeof input.enabled!=='boolean')fail(422,'Choose a requested app permission.');
-          if(input.enabled)db.prepare('INSERT OR IGNORE INTO app_data_grants VALUES(?,?,?,?)').run(session.owner,permission.source,permission.destination,permission.collection);
-          else db.prepare('DELETE FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').run(session.owner,permission.source,permission.destination,permission.collection);
+          const update=input.enabled
+            ?db.prepare('INSERT OR IGNORE INTO app_data_grants VALUES(?,?,?,?)').run(session.owner,permission.source,permission.destination,permission.collection)
+            :db.prepare('DELETE FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').run(session.owner,permission.source,permission.destination,permission.collection);
+          if(update.changes)notify(session.owner,permission.destination,'permissions');
           return answer(200,{ok:true});
         }
         const management=/^\/account\/app-storage\/([0-9a-f-]{36})$/.exec(url.pathname)?.[1];
@@ -172,7 +184,12 @@ export function openApplicationData({path,key,registry,accounts,authenticate}){
         try{
           const current=db.prepare('SELECT revision FROM app_records WHERE client=? AND owner=? AND collection=? AND id=?').get(...params,id);
           if((current?.revision??0)!==(previous?.revision??0))fail(409,'Record changed.');
-          if(usage(client).used-(previous?.bytes??0)+charged>(setting(client)?.capacity??10485760))fail(409,'App storage quota exceeded.');
+          const delta=charged-(previous?.bytes??0);
+          if(row.owner==='~app'){
+            if(delta>0&&usage(client).used+delta>(setting(client)?.capacity??10485760))fail(409,'App storage quota exceeded.');
+          }else if(delta>0&&accountUsage.get(row.owner).used+otherUsage(row.owner)+delta>(accounts.storageCapacity?.(row.owner)??10485760)){
+            fail(409,'Account storage quota exceeded.');
+          }
           db.prepare('INSERT INTO app_records VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(client,owner,collection,id) DO UPDATE SET readers=excluded.readers,public=excluded.public,revision=excluded.revision,bytes=excluded.bytes,envelope=excluded.envelope').run(...params,id,createHmac('sha256',key).update(JSON.stringify([client,row.owner])).digest('hex').slice(0,24)+'_'+id,row.readers,row.public,row.revision,charged,Buffer.concat([nonce,cipher.getAuthTag(),ciphertext]));
           db.prepare('DELETE FROM app_readers WHERE client=? AND owner=? AND collection=? AND id=?').run(...params,id);
           for(const reader of readerOwners)db.prepare('INSERT INTO app_readers VALUES(?,?,?,?,?)').run(...params,id,reader);

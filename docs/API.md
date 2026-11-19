@@ -52,3 +52,9 @@ The [integration guide](INTEGRATION.md) defines the issuer policy and operator a
 ## Hosted app database and public profiles
 
 [HOSTED_DATA.md](HOSTED_DATA.md) is the maintained contract for `/v1/apps/:client/data`, read-only `/public/apps/:client/data`, `/account/app-storage/:registrationId`, `/account/app-data-permissions` and public name/photo profiles. `/docs` publishes installation and integration guidance. These APIs do not expose the identity database or accept SQL.
+
+### Linked sign-in grants
+
+`GET /account/connected-apps/:client/permissions` returns `{permissions}` for the first-party account's linked app. Each permission has a `scope`, `enabled`, `required`, `canEnable`, and, for a shared email, `address`. `PUT` takes `{scope, enabled}` and requires an authenticated first-party session and mutation intent. The server only permits changes to previously encountered, optional scopes. Changing access cannot withdraw claims the app previously received. Restore or new access may require app reauthorization to issue a token containing that scope.
+
+`GET/POST /v1/developer/profile` supports an optional `githubProfile` HTTPS URL to a single GitHub username. Omitting it preserves the current value, and an empty string clears it. Changing it or the display name resets developer verification. The admin developer review uses this profile link, while the registered application's own repository remains separate.
