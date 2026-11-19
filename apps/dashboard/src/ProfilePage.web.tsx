@@ -35,7 +35,7 @@ export default function ProfilePage({ account, update, complete, section }: {
         return <a key={String(path)} className="xc-card xc-permission-link" href={'/profile/'+path}><span className="xc-symbol xc-lavender"><Symbol size={20}/></span><strong className="xc-permission-name">{String(label)}</strong><ChevronRight size={18}/></a>;
       })}
     </nav>
-    <section className="xc-card xc-pad xc-stack"><h2>Email addresses</h2>{account.mailbox&&<p>{account.mailbox} · X-Center ID</p>}{account.emails.map(email=><p key={email.address}>{email.address} · {email.verified?'Verified':'Unverified'}</p>)}<IncomingEmail updated={update}/><a className="xc-button xc-secondary xc-self-start" href="/mail#private-addresses">Manage Hide My Email</a></section>
+    <section className="xc-card xc-pad xc-stack"><h2>Email addresses</h2>{account.mailbox&&<p>{account.mailbox} · X-Center ID</p>}{account.emails.map(email=><p key={email.address}>{email.address} · {email.verified?'Verified':'Unverified'}</p>)}<IncomingEmail updated={update} addresses={account.emails}/><a className="xc-button xc-secondary xc-self-start" href="/mail#private-addresses">Manage Hide My Email</a></section>
     </>;
   return <>
     {profile&&<button className="xc-button xc-secondary xc-self-start" onClick={()=>setEditing(false)}>Cancel editing</button>}
@@ -93,7 +93,7 @@ export default function ProfilePage({ account, update, complete, section }: {
         <button className="xc-button xc-secondary" disabled={busy}><Mail size={16}/> Verify email</button>
       </form>
     </section>}
-    {!complete&&<IncomingEmail updated={update}/>}
+    {!complete&&<IncomingEmail updated={update} addresses={account.emails}/>}
     {!complete&&<UsernameChange/>}
     {!complete&&<DeveloperIdentityPanel/>}
     {notice && <div className="xc-notice" role="status">{notice}</div>}

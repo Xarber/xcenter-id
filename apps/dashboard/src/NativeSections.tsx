@@ -266,7 +266,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         </>}
         {account.emails.map(item=>row(item.address,item.address,item.verified?'Verified email':'Unverified · Cannot be used'))}
         {button('Manage email addresses',()=>setDetailsPanel(detailsPanel==='email'?'':'email'))}
-        {detailsPanel==='email'&&<IncomingEmail token={token} updated={reload} colors={colors}/>}
+        {detailsPanel==='email'&&<IncomingEmail token={token} updated={reload} addresses={account.emails} colors={colors}/>}
         <PublicProfile token={token} colors={colors}/></>;
       break;
     case 'devices':
@@ -516,7 +516,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         {account.canReceiveMail&&button('Create private email address',()=>setCreatingAlias(!creatingAlias))}
         {creatingAlias&&<>{premiumAliases&&account.admin&&field('Address name (optional)',aliasName,setAliasName,{autoCapitalize:'none',maxLength:24})}{button('Create address',()=>run(async()=>{await api('mail/aliases',{name:aliasName||undefined});setCreatingAlias(false);setAliasName('');await load();},'Private address created.'))}</>}
         {aliases.length>0&&<Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>{accountMessage('privateAddresses','Hide My Email addresses')}</Text>}
-        {aliases.map(item=>row(item.address,item.address,item.active?'On · '+(item.premium?'Premium address':'Private address'):'Off · Not receiving mail',
+        {aliases.map(item=>row(item.address,item.address,[item.active?'On · '+(item.premium?'Premium address':'Private address'):'Off · Not receiving mail',item.clientLabel??(item.client.startsWith('dashboard')?'Created by you':item.client)].join(' · '),
           item.active?button(accountMessage('disableAddress','Disable address'),()=>confirm('Disable this address?','Future messages to this address will be rejected.',
             ()=>run(async()=>{await api('mail/aliases/'+item.address,{},'DELETE');await load();},'Private address disabled.'),
           )):<View style={styles.actions}>

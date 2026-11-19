@@ -330,8 +330,8 @@ export default function WebApp(){
   if(storageRoute)content=<ApplicationStorage id={storageRoute} admin={account.admin}/>;
   else if(page==='profile')content=<>
     {emailToken&&<section className="xc-card xc-pad"><h2>Verify your email</h2>
-      <button type="button" className="xc-button xc-primary" onClick={()=>void api('email/confirm',{token:emailToken}).then(()=>{
-        window.history.replaceState(null,'','/profile');setNotice('Email verified.');return load();
+      <button type="button" className="xc-button xc-primary" onClick={()=>void api('email/confirm',{token:emailToken}).then(async()=>{
+        window.history.replaceState(null,'','/profile');await load();setNotice('Email verified.');
       }).catch(error=>setNotice(error.message))}>Confirm this email address</button></section>}
     <ProfilePage account={account} update={load} section={profileSection}/>
   </>;

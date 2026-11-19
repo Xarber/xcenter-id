@@ -1,17 +1,16 @@
-import {hasPendingDelivery,verificationStatus,type VerificationStatus} from './email-verification-status';
+import {hasPendingDelivery,verificationStatus,type VerificationAddress,type VerificationStatus} from './email-verification-status';
 import {useEffect,useState} from 'react';
 import {api} from './web-account';
 
-export default function IncomingEmail({updated}:{updated:()=>Promise<void>}){
+export default function IncomingEmail({updated,addresses}:{updated:()=>Promise<void>;addresses:VerificationAddress[]}){
   const [info,setInfo]=useState<VerificationStatus|null>(null);
   const [email,setEmail]=useState('');
-  const [addresses,setAddresses]=useState<{address:string;verified:number}[]>([]);
   const [draft,setDraft]=useState<{mailto:string;address:string;expires:number}|null>(null);
   const [status,setStatus]=useState('');
   const [busy,setBusy]=useState(false);
   async function check(report=false,address?:string){
     const next:VerificationStatus=await api('email/incoming');
-    setInfo(next);setAddresses(next.emails);
+    setInfo(next);
     const target=address??draft?.address??info?.pending?.address??info?.outgoing?.address;
     const message=verificationStatus(next,target);
     if(draft&&(!next.pending||next.pending.address!==draft.address))setDraft(null);
@@ -40,7 +39,7 @@ export default function IncomingEmail({updated}:{updated:()=>Promise<void>}){
     {draft&&<><p>Send from <strong>{draft.address}</strong>. Your email provider must authenticate the message.</p>
       <a className="xc-button xc-primary xc-self-start" href={draft.mailto}>Open verification email</a>
       <p>Expires {new Date(draft.expires).toLocaleTimeString()}. Delivery normally takes a few minutes.</p></>}
-    {hasPendingDelivery(info)&&<button type="button" className="xc-button xc-secondary xc-self-start" disabled={busy} onClick={()=>{setBusy(true);setStatus('Checking verification…');void check(true).catch(error=>setStatus(error.message)).finally(()=>setBusy(false));}}>Check delivery</button>}
+    {hasPendingDelivery(info,Date.now(),addresses)&&<button type="button" className="xc-button xc-secondary xc-self-start" disabled={busy} onClick={()=>{setBusy(true);setStatus('Checking verification…');void check(true).catch(error=>setStatus(error.message)).finally(()=>setBusy(false));}}>Check delivery</button>}
     {status&&<p role="status">{status}</p>}
   </section>;
 }

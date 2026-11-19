@@ -1,10 +1,12 @@
+export type VerificationAddress={address:string;verified:number};
+
 export type VerificationStatus = {
   enabled:boolean;
   canSendLink:boolean;
   pending:{address:string;expires:number}|null;
   outgoing:{address:string;expires:number}|null;
   result:{address:string;status:string}|null;
-  emails:{address:string;verified:number}[];
+  emails:VerificationAddress[];
 };
 
 export function verificationStatus(info:VerificationStatus,address?:string){
@@ -16,6 +18,7 @@ export function verificationStatus(info:VerificationStatus,address?:string){
   return target?'No active verification for this address. Request a new link or message.':'No active email verification.';
 }
 
-export function hasPendingDelivery(info:VerificationStatus|null,now=Date.now()){
-  return (info?.pending?.expires??0)>now||(info?.outgoing?.expires??0)>now;
+export function hasPendingDelivery(info:VerificationStatus|null,now=Date.now(),addresses=info?.emails??[]){
+  return [info?.pending,info?.outgoing].some(attempt=>attempt&&attempt.expires>now&&
+    !addresses.some(email=>email.address===attempt.address&&email.verified));
 }

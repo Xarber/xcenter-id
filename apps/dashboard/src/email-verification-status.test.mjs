@@ -11,4 +11,5 @@ test('Check delivery needs an unexpired incoming message or outgoing link', () =
   assert.equal(hasPendingDelivery({...initial,pending:{address,expires:100}},100),false);
   assert.equal(hasPendingDelivery({...initial,pending:{address,expires:101}},100),true);
   assert.equal(hasPendingDelivery({...initial,outgoing:{address,expires:101}},100),true);
+  assert.equal(hasPendingDelivery({...initial,outgoing:{address,expires:101}},100,[{address,verified:1}]),false);
 });

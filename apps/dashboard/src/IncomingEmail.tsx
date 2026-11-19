@@ -1,18 +1,17 @@
-import {hasPendingDelivery,verificationStatus,type VerificationStatus} from './email-verification-status';
+import {hasPendingDelivery,verificationStatus,type VerificationAddress,type VerificationStatus} from './email-verification-status';
 import {useEffect,useState} from 'react';
 import {Alert,Linking,Pressable,Text,TextInput,View} from 'react-native';
 import {nativeRequest,nativeReauthenticate} from './native-account';
 
-export default function IncomingEmail({token,updated,colors}:{token:string;updated:()=>Promise<void>;colors:{ink:string;accent:string;muted:string;soft:string}}){
+export default function IncomingEmail({token,updated,addresses,colors}:{token:string;updated:()=>Promise<void>;addresses:VerificationAddress[];colors:{ink:string;accent:string;muted:string;soft:string}}){
   const [info,setInfo]=useState<VerificationStatus|null>(null);
   const [email,setEmail]=useState('');
-  const [addresses,setAddresses]=useState<{address:string;verified:number}[]>([]);
   const [draft,setDraft]=useState<{mailto:string;address:string;expires:number}|null>(null);
   const [busy,setBusy]=useState(false);
   const [status,setStatus]=useState('');
   async function check(report=false,address?:string){
     const next:VerificationStatus=await nativeRequest('email/incoming',token);
-    setInfo(next);setAddresses(next.emails);
+    setInfo(next);
     const target=address??draft?.address??info?.pending?.address??info?.outgoing?.address;
     const message=verificationStatus(next,target);
     if(draft&&(!next.pending||next.pending.address!==draft.address))setDraft(null);
@@ -41,7 +40,7 @@ export default function IncomingEmail({token,updated,colors}:{token:string;updat
     {addresses.map(item=><View key={item.address} style={{gap:8}}><Text style={{color:colors.ink}}>{item.address} · {item.verified?'Verified':'Unverified'}</Text>{!item.verified&&info?.canSendLink&&action('Email me a link',async()=>{await nativeRequest('email',token,{email:item.address});await check(true,item.address);})}{!item.verified&&info?.enabled&&action('Send a verification email',async()=>{const result=await nativeRequest('email/incoming',token,{email:item.address});setDraft(result);await check(true,result.address);await Linking.openURL(result.mailto);})}{action('Remove email',async()=>Alert.alert('Remove email address?','It will no longer be used by your account.',[{text:'Cancel',style:'cancel'},{text:'Remove',style:'destructive',onPress:()=>{void (async()=>{await nativeReauthenticate(token);await nativeRequest('email/remove',token,{email:item.address});await check();await updated();})().catch(e=>setStatus(e.message));}}]))}</View>)}
     {draft&&<><Text style={{color:colors.ink}}>Send from {draft.address}. Expires {new Date(draft.expires).toLocaleTimeString()}.</Text>
       {action('Open verification email',async()=>{await Linking.openURL(draft.mailto);})}</>}
-    {hasPendingDelivery(info)&&action('Check delivery',()=>check(true))}
+    {hasPendingDelivery(info,Date.now(),addresses)&&action('Check delivery',()=>check(true))}
     {status&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}
   </View>;
 }
