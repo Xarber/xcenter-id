@@ -20,6 +20,7 @@ Each entry below includes the actual commits in its range. The current version i
 <details>
 <summary>Source changes</summary>
 
+- `1c3d28e` feat(dashboard): improve mail setup and add version history
 
 </details>
 
