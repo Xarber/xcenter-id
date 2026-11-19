@@ -107,3 +107,9 @@ Thirty-six API and six dashboard tests, TypeScript, Expo web export and package 
 ### Account storage and device sign-in
 
 On 19 November 2026, deployed revision `b4ca80c49ccd6a4b2c6c70d13b1fce58668b1067` to production on loopback 18812. The web export and staged routes passed, and public HTTPS served the exact revision, device entry page and OIDC device authorization discovery. Nginx validated and the candidate reported zero restarts. The previous release remains on 18811. Restore the two site files from `/srv/xcenter/infra/changes/pre-dashboard-b4ca80c`, validate Nginx and reload to roll back. Seven pre-cutover SQLite snapshots passed quick_check at `/srv/xcenter/data/.xcenter-id-rollbacks/pre-dashboard-b4ca80c.507gdu66`. Feature acceptance is with the user. Installed native behavior remains unverified.
+
+### Consent repair, developer access and mail reconnect
+
+On 19 November 2026, deployed web, API and TLS mail-client revision `f465477`. Nginx routes web traffic to 18813. Before cutover, seven online SQLite snapshots passed quick_check in `/srv/xcenter/data/.xcenter-id-rollbacks/pre-dashboard-f465477.8ygd8ljh`. Both public HTTPS and the device navigation links were checked. The public SMTP submission and IMAP ports passed certificate and protocol greeting checks. Both new containers reported zero restarts. Incoming public SMTP port 25 kept its existing service.
+
+Restore both site files from `/srv/xcenter/infra/changes/pre-dashboard-f465477`, validate Nginx and reload to roll the web/API traffic back to loopback 18812. Stop only `xcenter-id-clients-f465477` and start the retained `xcenter-id-clients-5c3187f` to roll back SMTP submission and IMAP. Database changes are additive. Unlink deletes hosted records by design and code rollback does not restore deleted records.
