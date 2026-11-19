@@ -1,3 +1,4 @@
+import CopyButton from './CopyButton.web';
 import TrustBadges from './TrustBadges.web';
 import { accountMessage } from './account-locale';
 import { useEffect, useRef, useState } from 'react';
@@ -53,7 +54,7 @@ export default function FriendsPage() {
     {requests.map(item=><div className="xc-list-row" key={item.id}><span className="xc-identity-label"><strong>@{item.username}</strong><TrustBadges compact verified={item.verified} admin={item.admin}/></span><div className="xc-actions">{[true,false].map(accept=><button type="button" key={String(accept)} className="xc-button xc-secondary" onClick={()=>void action(async()=>{await api('friends/respond',{id:item.id,accept});await load();})}>{accept?'Accept':'Decline'}</button>)}</div></div>)}
     {mode&&<dialog ref={dialog} className="xc-intro" onCancel={event=>{event.preventDefault();closeInvite();}} aria-labelledby="friend-invite-title">
     <h2 id="friend-invite-title">{mode==='create'?'Share an invitation':'Accept an invitation'}</h2>
-    {mode==='create'?(invite?<div className="xc-stack"><strong>{invite}</strong><button type="button" className="xc-button xc-secondary" onClick={()=>void action(async()=>{await navigator.clipboard.writeText(location.origin+'/friends#invite='+invite);setStatus('Invitation link copied.');})}>Copy invitation link</button></div>:<p>Creating invitation…</p>):
+    {mode==='create'?(invite?<div className="xc-stack"><strong>{invite}</strong><div className="xc-actions"><CopyButton value={invite} label="Copy invitation code"/><CopyButton value={location.origin+'/friends#invite='+invite} label="Copy invitation link" link/></div></div>:<p>Creating invitation…</p>):
     <form className="xc-stack" onSubmit={event=>{event.preventDefault();void action(async()=>{
       await api('friends/accept',{code:code.trim()});setCode('');await load();closeInvite();
     });}}>

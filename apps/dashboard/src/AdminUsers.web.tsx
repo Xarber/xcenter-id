@@ -18,7 +18,7 @@ export function AdminAvatar({username,hasPicture}:{username:string;hasPicture?:b
     <img width={44} height={44} alt="" src={'/account/admin/accounts/'+username+'/avatar'} onError={()=>setFailed(true)}/>:
     <UserRound size={24} aria-hidden="true"/>}</span>;
 }
-type Details=ManagedAccount&{externalMailLimits?:{daily:number|null;monthly:number|null;usedToday:number;usedMonth:number};admin:boolean;rootAdmin:boolean;verified:boolean;name:string;created:number;devices:number;passkeys:number;apps:{client:string;label:string;verified?:boolean}[]};
+type Details=ManagedAccount&{developerVerified?:boolean;externalMailLimits?:{daily:number|null;monthly:number|null;usedToday:number;usedMonth:number};admin:boolean;rootAdmin:boolean;verified:boolean;name:string;created:number;devices:number;passkeys:number;apps:{client:string;label:string;verified?:boolean}[]};
 type Registered={verified:boolean;id:string;name:string;status:string;restricted:boolean;callback:string};
 export function AdminAccounts(){
   const [users,setUsers]=useState<ManagedAccount[]>([]);
@@ -55,6 +55,8 @@ export function AdminAccounts(){
         <p>Created {new Date(user.created).toLocaleDateString()}</p>
         <div className="xc-actions">
           <IconAction label={user.verified?'Remove user verification':'Verify user'} disabled={busy} onClick={()=>run(()=>mutate('admin/users/'+user.username,{action:'verify-user',enabled:!user.verified}))}><ShieldCheck size={20}/></IconAction>
+          {user.developerVerified!==undefined&&<IconAction label={user.developerVerified?'Remove developer verification':'Verify developer'} disabled={busy}
+            onClick={()=>run(()=>mutate('admin/users/'+user.username,{action:'verify-developer',enabled:!user.developerVerified}))}><BadgeCheck size={20}/></IconAction>}
           {!user.rootAdmin&&<IconAction label={user.admin?'Remove admin access':'Grant admin access'} disabled={busy} onClick={()=>setAction('admin')}><ShieldCheck size={20}/></IconAction>}
           {!user.protected&&<><IconAction label={user.locked?'Unlock account':'Lock account'} disabled={busy} onClick={()=>run(()=>mutate('admin/account-status',
             {username:user.username,action:user.locked?'unlock':'lock'}))}>{user.locked?<Unlock size={20}/>:<LockKeyhole size={20}/>}</IconAction>

@@ -301,7 +301,13 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       } };
     }
 
-    if(req.method==='GET'&&pathname==='/account/mail/clients'){requireCondition(active,401,'Sign in first.');return {clients:mailCredentials.list(active.owner)};}
+    if(req.method==='GET'&&pathname==='/account/mail/clients'){
+      requireCondition(active,401,'Sign in first.');
+      const identity=profile(active.owner);
+      return {clients:mailCredentials.list(active.owner),profile:identity?{
+        name:[identity.givenName,identity.surname].join(' '),username:identity.username,hasPicture:!!identity.picture,
+      }:null};
+    }
     if(req.method==='GET'&&pathname==='/account/email/incoming'){
       requireCondition(active,401,'Sign in first.');
       return {enabled:inbound.enabled,canSendLink:!!sendVerification,pending:inbound.pending(active.owner),

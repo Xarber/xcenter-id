@@ -7,7 +7,7 @@ import {accountHost,nativeRequest} from './native-account';
 import type {ManagedAccount} from './support-model';
 
 type Colors={ink:string;muted:string;accent:string;soft:string};
-type User=ManagedAccount&{admin:boolean;rootAdmin:boolean;verified:boolean;externalMailLimits?:{daily:number|null;monthly:number|null};name:string;devices:number;passkeys:number;apps:{client:string;label:string;verified?:boolean}[]};
+type User=ManagedAccount&{developerVerified?:boolean;admin:boolean;rootAdmin:boolean;verified:boolean;externalMailLimits?:{daily:number|null;monthly:number|null};name:string;devices:number;passkeys:number;apps:{client:string;label:string;verified?:boolean}[]};
 type App={verified:boolean;id:string;name:string;status:string;restricted:boolean};
 function Avatar({user,token,colors}:{user:ManagedAccount;token:string;colors:Colors}){
   const [failed,setFailed]=useState(false);
@@ -54,6 +54,9 @@ export default function NativeAdminUsers({token,colors}:{token:string;colors:Col
         <Text style={{color:colors.muted}}>{user.locked?'Locked':'Active'} · {user.passkeys} passkeys · {user.devices} sessions</Text>
         <View style={{flexDirection:'row',gap:10,flexWrap:'wrap'}}>
           {icon(user.verified?'Remove user verification':'Verify user','checkmark-circle-outline',()=>run(async()=>{await api('admin/users/'+user.username,{action:'verify-user',enabled:!user.verified});}))}
+          {user.developerVerified!==undefined&&icon(user.developerVerified?'Remove developer verification':'Verify developer','ribbon-outline',()=>run(async()=>{
+            await api('admin/users/'+user.username,{action:'verify-developer',enabled:!user.developerVerified});
+          }))}
           {!user.rootAdmin&&icon(user.admin?'Remove admin access':'Grant admin access','shield-checkmark-outline',()=>Alert.alert('Change administrator access?','Administrators can manage accounts, apps and support.',[{text:'Cancel',style:'cancel'},{text:'Confirm',onPress:()=>run(async()=>{await api('admin/users/'+user.username,{action:'set-admin',enabled:!user.admin});})}]))}
           {icon('Change storage','server-outline',()=>{setCapacity(String(user.capacity/1024**2));setUnit(2);})}
           {icon('External email limits','mail-open-outline',()=>setMailLimits({daily:user.externalMailLimits?.daily==null?'':String(user.externalMailLimits.daily),monthly:user.externalMailLimits?.monthly==null?'':String(user.externalMailLimits.monthly)}))}

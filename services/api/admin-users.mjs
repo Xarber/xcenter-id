@@ -9,7 +9,9 @@ export function createAdminUsers({accounts,registry,mail}){
     const details=accounts.adminDetails(username);
     if(!details)return send(404,{error:'Account unavailable.'});
     const {owner,...publicDetails}=details;
-    if(req.method==='GET')return send(200,{account:publicDetails,registered:registry.managed(owner)});
+    if(req.method==='GET')return send(200,{account:{...publicDetails,...(registry.hasDeveloper(owner)?{
+      developerVerified:registry.developer(owner).status==='verified',
+    }:{})},registered:registry.managed(owner)});
     if(req.method!=='POST')return send(405,{error:'Method unavailable.'});
     if(!req.headers['content-type']?.startsWith('application/json'))return send(415,{error:'JSON required.'});
     let size=0;
@@ -26,6 +28,10 @@ export function createAdminUsers({accounts,registry,mail}){
       try{accounts.setMailLimits(owner,{daily:input.daily,monthly:input.monthly});}catch{return send(422,{error:'Set whole-number mail limits, or leave them unlimited.'});}
     }else if(['verify-user','set-admin'].includes(input.action)){
       try{accounts.setAccountFlag(req,owner,input.action==='verify-user'?'verified':'admin',input.enabled);}catch(error){return send(error.status??400,{error:error.status?error.message:'Could not update account status.'});}
+    }else if(input.action==='verify-developer'){
+      if(typeof input.enabled!=='boolean'||!accounts.available(owner)||!registry.verifyDeveloper(owner,input.enabled,username)){
+        return send(409,{error:'Developer account unavailable.'});
+      }
     }else if(input.action==='warn'){
       const text=typeof input.text==='string'&&input.text.trim();
       if(!text||text.length>3000)return send(422,{error:'Enter a warning of up to 3000 characters.'});
@@ -39,7 +45,7 @@ export function createAdminUsers({accounts,registry,mail}){
         return send(422,{error:'Confirm the selected app.'});
       if(!registry.moderate(owner,input.app,input.action))return send(409,{error:'App unavailable.'});
     }else return send(422,{error:'Choose a valid action.'});
-    accounts.auditAdmin(req,owner,input.action==='warn'?'warning':input.action+'-app');
+    accounts.auditAdmin(req,owner,input.action==='warn'?'warning':input.action==='verify-developer'?'developer-verification':input.action+'-app');
     return send(200,{ok:true});
   };
 }

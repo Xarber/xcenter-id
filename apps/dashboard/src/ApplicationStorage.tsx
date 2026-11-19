@@ -1,3 +1,4 @@
+import CopyButton from './CopyButton';
 import {useEffect,useState} from 'react';import {Alert,Pressable,Text,TextInput,View} from 'react-native';
 import {nativeRequest,nativeReauthenticate} from './native-account';import {formatBytes} from './storage-summary';
 type Colors={ink:string;muted:string;accent:string;soft:string};
@@ -17,6 +18,6 @@ export default function ApplicationStorage({id,token,colors,admin=false,back}:{i
  {admin&&<>{field('App capacity',capacity,setCapacity)}<View style={{flexDirection:'row',gap:6}}>{['B','KB','MB','GB','TB'].map((name,i)=>action((unit===i?'✓ ':'')+name,()=>setUnit(i)))}</View>{action('Save capacity',()=>void change({action:'capacity',capacity:Number(capacity)*1024**unit}))}</>}
  <Text style={{color:colors.muted}}>Backend credentials must stay on a server. Native apps use their user's OAuth token.</Text>
  {action(data.hasKey?'Replace backend key':'Create backend key',()=>Alert.alert('Create a backend key?','The previous key will stop working.',[{text:'Cancel',style:'cancel'},{text:'Create',onPress:()=>void change({action:'rotate-key'})}]))}
- {data.hasKey&&action('Revoke key',()=>void change({action:'revoke-key'}))}{secret&&<><Text selectable style={{color:colors.ink}}>{secret}</Text>{action('Hide key',()=>setSecret(''))}</>}</>}</>}
+ {data.hasKey&&action('Revoke key',()=>void change({action:'revoke-key'}))}{secret&&<><View style={{flexDirection:'row',alignItems:'center'}}><Text selectable style={{flex:1,color:colors.ink}}>{secret}</Text><CopyButton value={secret} label="Copy database key" color={colors.accent}/></View>{action('Hide key',()=>setSecret(''))}</>}</>}</>}
  {status&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}</View>;
 }

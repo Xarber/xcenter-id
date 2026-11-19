@@ -1,3 +1,4 @@
+import CopyButton from './CopyButton.web';
 import {useEffect,useState} from 'react';
 import {api} from './web-account';
 import {formatBytes} from './storage-summary';
@@ -26,6 +27,6 @@ export default function ApplicationStorage({id,admin=false}:{id:string;admin?:bo
  {state.verified&&<><h3>Private backend credential</h3><p>Keep this credential on your backend. Never bundle it in a mobile app or website. Native apps use each user's OAuth access token.</p>
  <button className="xc-button xc-secondary" disabled={busy} onClick={()=>{if(window.confirm('Create a new backend key? The previous key will stop working.'))act({action:'rotate-key'});}}>{state.hasKey?'Replace backend key':'Create backend key'}</button>
  {state.hasKey&&<button className="xc-button xc-secondary" disabled={busy} onClick={()=>act({action:'revoke-key'})}>Revoke backend key</button>}
- {secret&&<div role="status"><p>Copy this key now. It will not be shown again.</p><code style={{overflowWrap:'anywhere'}}>{secret}</code><button className="xc-button xc-secondary" onClick={()=>setSecret('')}>Hide key</button></div>}</>}</>}
+ {secret&&<div role="status"><p>Copy this key now. It will not be shown again.</p><div className="xc-code-row"><code>{secret}</code><CopyButton value={secret} label="Copy database key"/></div><button className="xc-button xc-secondary" onClick={()=>setSecret('')}>Hide key</button></div>}</>}</>}
  <a href="/docs#hosted-data">Hosted data API documentation</a></>}{status&&<p role="status">{status}</p>}</section>;
 }

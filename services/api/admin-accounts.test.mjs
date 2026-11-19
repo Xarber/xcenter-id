@@ -198,7 +198,7 @@ test('live admin delegation, user verification and public profile flags enforce 
  const accounts=createAccounts({database,origin});if(previous===undefined)delete process.env.AUTHNJS_ADMIN_ACCOUNT_IDS;else process.env.AUTHNJS_ADMIN_ACCOUNT_IDS=previous;
  const db=new DatabaseSync(database);db.exec("INSERT INTO accounts VALUES('root','Root',0),('member','Member',0);INSERT INTO identity_profiles VALUES('root','rootuser','Root','User','adult'),('member','fixture','Test','Member','adult')");
  for(const token of ['root','member'])db.prepare('INSERT INTO account_sessions VALUES(?,?,?,?)').run(createHash('sha256').update(token).digest('hex'),token,Date.now(),Date.now()+600000);
- const users=createAdminUsers({accounts,registry:{managed:()=>[]},mail:null});
+ const users=createAdminUsers({accounts,registry:{managed:()=>[],hasDeveloper:()=>false},mail:null});
  const server=createServer((req,res)=>{const username=/^\/account\/admin\/users\/([a-z]+)$/.exec(req.url)?.[1];void(username?users(req,res,username):accounts.handle(req,res,req.url));}).listen(0,'127.0.0.1');await once(server,'listening');
  const post=(path,body,token='root')=>fetch('http://127.0.0.1:'+server.address().port+'/account/'+path,{method:'POST',headers:{origin,'content-type':'application/json','x-authnjs-request':'account-consent',cookie:'__Host-authnjs='+token},body:JSON.stringify(body)});
  try{

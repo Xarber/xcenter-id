@@ -37,7 +37,7 @@ function page(content) {
     main{max-width:34rem;margin:clamp(0rem,4vh,3rem) auto;padding:clamp(1.25rem,5vw,2.25rem);background:var(--card);border:1px solid var(--border);border-radius:1.45rem}
     h1{font-size:clamp(1.55rem,6vw,2.15rem);line-height:1.12;letter-spacing:-.04em;overflow-wrap:anywhere}p{color:var(--muted)}
     .badge{display:inline-block;border:1px solid currentColor;border-radius:1rem;padding:.1rem .5rem;font-size:.8rem;font-weight:700}.brand{font-weight:800;letter-spacing:-.03em;color:var(--action)}.context{padding:.8rem 1rem;border-radius:.8rem;background:var(--soft);overflow-wrap:anywhere}
-    .badge-row{display:flex;flex-wrap:wrap;gap:.35rem;margin:.5rem 0}.permission-toggle.permission-fixed{cursor:default}.permission-check{margin-inline-start:auto;color:var(--action);font-weight:800}.permission-toggle small{display:block;color:var(--muted)}
+    .identity-contexts{display:grid;gap:.65rem}.context small{display:block;color:var(--muted);margin-bottom:.25rem}.badge-row{display:flex;flex-wrap:wrap;gap:.35rem;margin:.5rem 0}.permission-toggle.permission-fixed{cursor:default}.permission-check{margin-inline-start:auto;color:var(--action);font-weight:800}.permission-toggle small{display:block;color:var(--muted)}
     fieldset{border:1px solid var(--border);border-radius:.85rem;padding:.6rem 1rem;margin:1.2rem 0;min-width:0}legend{font-weight:700}
     .device-back{color:var(--text)}.device-code{font-size:1.6rem;font-weight:750;letter-spacing:.15em}.device-entry input{width:100%;min-height:44px;padding:.5rem .7rem;border-radius:.6rem;font:inherit;border:1px solid var(--border);background:var(--card);color:var(--text);text-transform:uppercase}
     label{display:flex;gap:.7em;align-items:baseline;padding:.5em 0;overflow-wrap:anywhere}input{accent-color:var(--action)}
@@ -412,9 +412,15 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       ${brand?.description?`<p>${escape(brand.description)}</p>`:''}
       ${brand?.local?'<p role="alert">Unsecure app. Its hosting domain has not been verified. Continue only if you trust this installation.</p>':''}
       ${brand?.verified?badgeRow('<span class="badge">✓ Verified app</span>'):''}
-      <div class="context"><strong>${escape(person.givenName)} ${escape(person.surname)}</strong>${badgeRow(personBadges)}
-      <div>Developed by ${escape(developerName)} at <strong>${escape(client.host)}</strong></div>
-      ${developerProfile?.status==='verified'?badgeRow('<span class="badge">✓ Verified developer</span>'):''}</div>
+      <div class="identity-contexts">
+        <section class="context" aria-label="App developer"><small>App developer</small>
+          <strong>${escape(developerName)}</strong><div>${escape(client.host)}</div>
+          ${developerProfile?.status==='verified'?badgeRow('<span class="badge">✓ Verified developer</span>'):''}
+        </section>
+        <section class="context" aria-label="Signing in as"><small>Signing in as</small>
+          <strong>${escape(person.givenName)} ${escape(person.surname)}</strong>${badgeRow(personBadges)}
+        </section>
+      </div>
       <form method="post"><h2>Permissions</h2>
       <ul class="permission-list">
         ${fixed('id','Account ID, name, username and profile photo',requiredNote)}

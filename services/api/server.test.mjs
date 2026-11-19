@@ -178,3 +178,17 @@ test('deleting an app is restricted to its owner or its account administrator',(
     assert.equal(registry.moderate('owner',next.id,'delete'),true);
   }finally{registry.close();}
 });
+
+test('administrator can verify a registered developer before a review request',()=>{
+  const registry=openRegistry(':memory:');
+  try{
+    const registration=registry.submit('fixture-owner','Fixture','https://fixture.example.test/callback');
+    assert.ok(registration);
+    assert.equal(registry.administration().developers[0].status,'unverified');
+    assert.equal(registry.verifyDeveloper('unknown',true,'Unknown'),false);
+    assert.equal(registry.verifyDeveloper('fixture-owner',true,'fixture'),true);
+    assert.equal(registry.developer('fixture-owner').status,'verified');
+    assert.equal(registry.verifyDeveloper('fixture-owner',false),true);
+    assert.equal(registry.developer('fixture-owner').status,'unverified');
+  }finally{registry.close();}
+});

@@ -1,3 +1,4 @@
+import CopyButton from './CopyButton';
 import { optionalClaims, type ClaimRequirements, type DeveloperIdentity } from './developer-web';
 import TrustBadges from './TrustBadges';
 import ApplicationStorage from './ApplicationStorage';
@@ -246,16 +247,17 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
           {action('Cancel', () => setRevoking(null), saving)}
         </> : action('Delete app', () => setRevoking(app.id), saving))}
         {app.status === 'pending' && <>
-          <Text selectable style={{ color: ink }}>Name: {'_xcenter-id.' + new URL(app.callback).hostname}</Text>
-          <Text selectable style={{ color: ink }}>TXT: {'xcenter-id=' + app.id}</Text>
+          <Text selectable style={{ color: ink }}>Name: {'_xcenter-id.' + new URL(app.callback).hostname}</Text><CopyButton value={'_xcenter-id.'+new URL(app.callback).hostname} label="Copy DNS record name" color={accent}/>
+          <Text selectable style={{ color: ink }}>TXT: {'xcenter-id=' + app.id}</Text><CopyButton value={'xcenter-id='+app.id} label="Copy DNS verification code" color={accent}/>
           {action('Verify domain and activate', () => { void activate(app.id); }, saving)}
         </>}
       </View>)}
     </>}
     {credentials && <View style={[styles.item, { borderColor: border }]}>
       <Text style={{ color: ink }}>{credentials.clientSecret?'Save the client secret now. It is displayed once.':'Use the public client ID with PKCE.'}</Text>
-      <Text selectable style={{ color: ink }}>{credentials.clientId}</Text>
+      <Text selectable style={{ color: ink }}>{credentials.clientId}</Text><CopyButton value={credentials.clientId} label="Copy client ID" color={accent}/>
       {credentials.clientSecret&&<Text selectable style={{ color: ink }}>{credentials.clientSecret}</Text>}
+      {!!credentials.clientSecret&&<CopyButton value={credentials.clientSecret} label="Copy client secret" color={accent}/>}
       {action('Hide credentials', () => setCredentials(null))}
     </View>}
     {!!notice && <Text accessibilityLiveRegion="polite" style={{ color: ink }}>{notice}</Text>}

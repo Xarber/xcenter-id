@@ -1,3 +1,5 @@
+import ReleaseNotes from './ReleaseNotes.web';
+import {currentRelease,seenReleaseKey} from './release-info';
 import TrustBadges from './TrustBadges.web';
 import {introduction} from './introduction';
 import MailClients from './MailClients.web';
@@ -68,8 +70,10 @@ function Intro({close}:{close:()=>void}){
   </dialog>;
 }
 
-function SignIn({signup,busy,notice,authenticate,beginUsername,submitCode,create,continuation}:{
-  signup:boolean;busy:boolean;notice:string;authenticate:(username?:string)=>void;
+type SignInAction='signup'|'passkey'|'username-passkey'|'username'|'code';
+
+function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,create,continuation}:{
+  signup:boolean;pending:SignInAction|null;notice:string;authenticate:(username?:string)=>void;
   beginUsername:(username:string)=>Promise<{method:string;ticket?:string}|undefined>;
   submitCode:(ticket:string,code:string)=>void;create:(username:string)=>void;continuation:string|null;
 }){
@@ -78,6 +82,7 @@ function SignIn({signup,busy,notice,authenticate,beginUsername,submitCode,create
   const [code,setCode]=useState('');
   const [offerPasskey,setOfferPasskey]=useState(false);
   const [motionPaused,setMotionPaused]=useState(false);
+  const busy=pending!==null;
   const suffix=continuation?'?continue='+encodeURIComponent(continuation):'';
   return <div className="xc-auth">
     <header><Logo href="/"/><a href="/docs" className="xc-text-link">Developer documentation <ArrowDownRight size={15}/></a></header>
@@ -110,11 +115,12 @@ function SignIn({signup,busy,notice,authenticate,beginUsername,submitCode,create
           </button>
         </form> : <>
           {ticket?<form onSubmit={event=>{event.preventDefault();submitCode(ticket,code);}}>
-            <label>Email sign-in code<input name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6}
-              value={code} onChange={event=>setCode(event.target.value)} required/></label>
+            <label htmlFor="signin-code">Email sign-in code</label>
+            <input id="signin-code" name="one-time-code" type="text" inputMode="numeric" autoComplete="one-time-code" spellCheck={false} pattern="[0-9]{6}"
+              autoFocus value={code} onChange={event=>setCode(event.target.value.replace(/\D/g,'').slice(0,6))} required/>
             <p>Check your verified email for a six-digit code.</p>
-            <button className="xc-button xc-primary xc-full" disabled={busy||code.length!==6}>Verify code <ArrowRight size={17}/></button>
-            <button type="button" className="xc-button xc-secondary" onClick={()=>{setTicket('');setCode('');}}>Use a different username</button>
+            <button className="xc-button xc-primary xc-full" disabled={busy||code.length!==6}>{pending==='code'?'Verifying…':'Verify code'} <ArrowRight size={17}/></button>
+            <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{setTicket('');setCode('');}}>Use a different username</button>
           </form>:<form onSubmit={event=>{
             event.preventDefault();
             if(offerPasskey){authenticate(username);return;}
@@ -126,11 +132,11 @@ function SignIn({signup,busy,notice,authenticate,beginUsername,submitCode,create
             <label>X-Center username<input autoComplete="username webauthn" name="username" spellCheck={false}
               value={username} onChange={event=>{setUsername(event.target.value);setOfferPasskey(false);}} placeholder="Your username" required/></label>
             {offerPasskey&&<p>Use a passkey to sign in to this account.</p>}
-            <button className="xc-button xc-primary xc-full" disabled={busy || !username.trim()}>{offerPasskey?'Use passkey':'Continue'} <ArrowRight size={17}/></button>
+            <button className="xc-button xc-primary xc-full" disabled={busy || !username.trim()}>{pending==='username'?'Checking username…':pending==='username-passkey'?'Waiting for your passkey…':offerPasskey?'Use passkey':'Continue'} <ArrowRight size={17}/></button>
           </form>}
           <div className="xc-divider"><span>or</span></div>
           <button type="button" className="xc-button xc-secondary xc-full" disabled={busy} onClick={()=>authenticate()}>
-            <Fingerprint size={19}/>{busy?'Waiting for your passkey…':'Sign in with a passkey'}
+            <Fingerprint size={19}/>{pending==='passkey'?'Waiting for your passkey…':'Sign in with a passkey'}
           </button>
         </>}
         {notice && <p className="xc-notice" role="alert">{notice}</p>}
@@ -211,7 +217,9 @@ export default function WebApp(){
   const [locked,setLocked]=useState(false);
   const [notice,setNotice]=useState('');
   const [busy,setBusy]=useState(false);
+  const [signInAction,setSignInAction]=useState<SignInAction|null>(null);
   const [intro,setIntro]=useState(false);
+  const [releaseNotes,setReleaseNotes]=useState<'latest'|'history'|null>(null);
   const [sampleMode,setSampleMode]=useState(false);
   const [dev,setDev]=useState(false);
   const taps=useRef(0);
@@ -238,7 +246,11 @@ export default function WebApp(){
     if(!account?.profile||path!=='dashboard'||didShow.current||continuation)return;
     didShow.current=true;
     try{
-      if(!localStorage.getItem(introKey)){localStorage.setItem(introKey,'complete');setIntro(true);}
+      const onboarded=localStorage.getItem(introKey);
+      const prior=localStorage.getItem(seenReleaseKey);
+      if(!onboarded){localStorage.setItem(introKey,'complete');setIntro(true);}
+      else if(prior!==currentRelease.version)setReleaseNotes('latest');
+      localStorage.setItem(seenReleaseKey,currentRelease.version);
     }catch{ /* Without storage, the introduction remains available in Settings. */ }
   },[account?.profile,path,continuation]);
 
@@ -254,23 +266,23 @@ export default function WebApp(){
     return result.passkey as NamedPasskey;
   }
   function login(mode:'signup'|'login',value?:string){
-    setNotice('');setBusy(true);
+    setNotice('');setSignInAction(mode==='signup'?'signup':value?'username-passkey':'passkey');
     void passkey(mode,value).then(()=>{
       const target=mode==='signup'?'/profile':(emailToken?'/profile':'/dashboard');
       window.location.assign(target+(continuation?'?continue='+encodeURIComponent(continuation):'')+window.location.hash);
     }).catch(error=>setNotice(error?.name==='NotAllowedError'?'The passkey request was canceled. Try again when ready.':error?.message??'Sign-in could not be completed.'))
-      .finally(()=>setBusy(false));
+      .finally(()=>setSignInAction(null));
   }
   async function beginUsername(username:string){
-    setBusy(true);setNotice('');
+    setSignInAction('username');setNotice('');
     try {return await api('login/username',{username});}
     catch(error){setNotice(error instanceof Error?error.message:'Could not find this account.');}
-    finally{setBusy(false);}
+    finally{setSignInAction(null);}
   }
   function submitCode(ticket:string,code:string){
-    setBusy(true);setNotice('');
+    setSignInAction('code');setNotice('');
     void api('login/code',{ticket,code}).then(()=>window.location.replace(authDestination))
-      .catch(error=>setNotice(error.message)).finally(()=>setBusy(false));
+      .catch(error=>setNotice(error.message)).finally(()=>setSignInAction(null));
   }
   if(path==='docs')return <DeveloperDocumentation/>;
   if(account===undefined)return <div className="xc-loading"><Logo href="/"/><p role="status">Opening your account…</p></div>;
@@ -285,7 +297,7 @@ export default function WebApp(){
     <button className="xc-button xc-secondary" onClick={()=>window.location.reload()}>Check again</button>
     <button className="xc-button xc-secondary" onClick={()=>void api('logout',{}).then(()=>window.location.assign('/signin')).catch(error=>setNotice(error.message))}>Sign out</button>
     {notice&&<p role="alert">{notice}</p>}</main>;
-  if(!account)return <SignIn signup={path==='signup'} continuation={continuation} busy={busy} notice={notice} authenticate={username=>login('login',username)} beginUsername={beginUsername} submitCode={submitCode} create={username=>login('signup',username)}/>;
+  if(!account)return <SignIn signup={path==='signup'} continuation={continuation} pending={signInAction} notice={notice} authenticate={username=>login('login',username)} beginUsername={beginUsername} submitCode={submitCode} create={username=>login('signup',username)}/>;
 
   if(path==='native-session'&&account.profile){
     const params=new URLSearchParams(window.location.search);
@@ -351,15 +363,16 @@ export default function WebApp(){
     <div className="xc-list-row"><div><strong>Developer portal</strong><p>Register or review your applications.</p></div><a className="xc-button xc-secondary" href="/developer"><Code2 size={16}/> Developer apps</a></div>
   </section></>;
   else if(page==='settings')content=<><PreferenceControls value={preferences} change={changePreferences}/><section className="xc-card xc-pad">
-    <div className="xc-list-row"><span>Mail app access</span><a className="xc-button xc-secondary" href="/mail-clients">Manage mail clients</a></div>
+    <div className="xc-list-row xc-first-setting"><span>Mail app access</span><a className="xc-button xc-secondary" href="/mail-clients">Manage mail clients</a></div>
     <div className="xc-list-row"><span>Feedback and support</span><a className="xc-button xc-secondary" href="/support">Contact support</a></div>
     <div className="xc-list-row"><div className="xc-row-head"><CircleHelp size={22}/><div><strong>Introduction</strong><p>See how your X-Center ID works.</p></div></div><button className="xc-button xc-secondary" onClick={()=>setIntro(true)}>View introduction</button></div>
+    <div className="xc-list-row"><strong>Version history</strong><button className="xc-button xc-secondary" onClick={()=>setReleaseNotes('history')}>View changelog</button></div>
     <div className="xc-list-row"><div><strong>App version</strong><p>X-Center ID for web</p></div><button className="xc-button xc-secondary" onClick={()=>{
       taps.current+=1;
       if(timer.current) clearTimeout(timer.current);
       if(taps.current>=3){taps.current=0;setDev(true);}
       timer.current=setTimeout(()=>{setDev(false);setSampleMode(false);taps.current=0;},30000);
-    }}>0.1.0</button></div>
+    }}>{currentRelease.version}</button></div>
     {dev&&<div className="xc-stack"><h2>Developer Options</h2><a href="/samples">Open sample integrations</a>
       <button className="xc-button xc-secondary" onClick={()=>setSampleMode(!sampleMode)}>{sampleMode?'Exit sample dashboard':'Open sample dashboard'}</button>
       {sampleMode&&<div className="xc-sample"><span className="xc-pill">Sample data</span><h2>Sample dashboard</h2>
@@ -406,5 +419,6 @@ export default function WebApp(){
       ['dashboard','Account',UserRound],['apps','Apps',Grid2X2],['settings','Settings',Settings],...(account.admin?[['admin','Admin',ShieldCheck]]:[]),
     ].map(([id,label,Icon])=>{const ItemIcon=Icon as typeof UserRound;const selected=id==='dashboard'?!['apps','permissions','developer','settings','support','mail-clients','admin'].includes(page):id==='apps'?['apps','permissions','developer'].includes(page):id==='settings'?['settings','support','mail-clients'].includes(page):page==='admin';return <a key={String(id)} href={'/'+id} aria-current={selected?'page':undefined}><ItemIcon size={22}/><span>{String(label)}</span></a>;})}</nav>
     {intro&&<Intro close={()=>setIntro(false)}/>}
+    {!intro&&releaseNotes&&<ReleaseNotes mode={releaseNotes} close={()=>setReleaseNotes(null)} openHistory={()=>setReleaseNotes('history')}/>}
   </div>;
 }

@@ -38,24 +38,58 @@ export function createImapServer({tls,credentials,store}){
   const rows=()=>store.imapList(identity.owner,folder);
   function expunge(){const current=rows();let removed=0;for(let index=0;index<current.length;index++)if(current[index].flags.includes('\\Deleted')){store.remove(identity.owner,current[index].id);send('* '+(index+1-removed++)+' EXPUNGE');}snapshot=rows();}
   async function command(line){
-   if(pendingAuth){const tag=pendingAuth;pendingAuth=null;folder=null;const fields=Buffer.from(line,'base64').toString().split('\0');identity=fields.length===3?credentials.authenticate(fields[1],fields[2],socket.remoteAddress):null;send(tag+(identity?' OK Authenticated':' NO Authentication failed'));return;}
+   const authenticate=(tag,username,password)=>{
+    folder=null;identity=credentials.authenticate(username,password,socket.remoteAddress);
+    send(tag+(identity?' OK Authenticated':' NO Authentication failed'));
+   };
+   if(pendingAuth){
+    const exchange=pendingAuth;
+    pendingAuth=null;
+    if(line==='*'){send(exchange.tag+' BAD Authentication cancelled');return;}
+    if(!/^[A-Za-z0-9+/]*={0,2}$/.test(line)){send(exchange.tag+' BAD Invalid authentication response');return;}
+    const decoded=Buffer.from(line,'base64').toString('utf8');
+    if(exchange.stage==='login-username'){
+     pendingAuth={tag:exchange.tag,stage:'login-password',username:decoded};
+     send('+ UGFzc3dvcmQ6');return;
+    }
+    if(exchange.stage==='login-password'){authenticate(exchange.tag,exchange.username,decoded);return;}
+    const fields=decoded.split('\0');
+    if(fields.length!==3){send(exchange.tag+' NO Authentication failed');return;}
+    authenticate(exchange.tag,fields[1],fields[2]);return;
+   }
 
    if(idle){if(line.toUpperCase()==='DONE'){clearInterval(idle.timer);send(idle.tag+' OK IDLE completed');idle=null;return;}socket.end('* BYE Expected DONE\r\n');return;}
    const match=/^([A-Za-z0-9._-]{1,50})\s+(\S+)(?:\s+(.*))?$/.exec(line);if(!match)return socket.end('* BYE Malformed command\r\n');
    const [,tag,rawCommand,rest='']=match;let cmd=rawCommand.toUpperCase(),args=rest,uid=false;
    if(cmd==='UID'){const n=/^(\S+)\s*(.*)$/.exec(args);if(!n)return send(tag+' BAD Invalid UID command');cmd=n[1].toUpperCase();args=n[2];uid=true;}
    const done=(result='OK',detail=cmd+' completed')=>send(tag+' '+result+' '+detail);
-   if(cmd==='CAPABILITY'){send('* CAPABILITY IMAP4rev1 AUTH=PLAIN SASL-IR IDLE MOVE NAMESPACE');return done();}
+   if(cmd==='CAPABILITY'){send('* CAPABILITY IMAP4rev1 AUTH=PLAIN AUTH=LOGIN SASL-IR IDLE ID MOVE NAMESPACE');return done();}
+   if(cmd==='ID'){send('* ID ("name" "X-Center ID Mail")');return done();}
    if(cmd==='LOGOUT'){send('* BYE Signed out');done();return socket.end();}
-   if(cmd==='LOGIN'||cmd==='AUTHENTICATE'){
-    const parts=tokens(args);let username,password;
-    if(cmd==='LOGIN')[username,password]=parts;else if(parts[0]?.toUpperCase()==='PLAIN'&&parts[1]){const fields=Buffer.from(parts[1],'base64').toString().split('\0');if(fields.length===3)[,username,password]=fields;}
-    else if(cmd==='AUTHENTICATE'&&parts[0]?.toUpperCase()==='PLAIN'&&!parts[1]){pendingAuth=tag;send('+ ');return;}else return done('NO','Use LOGIN or AUTHENTICATE PLAIN');
-    folder=null;identity=credentials.authenticate(username,password,socket.remoteAddress);return done(identity?'OK':'NO',identity?'Authenticated':'Authentication failed');
+   if(cmd==='LOGIN'){
+    const [username,password]=tokens(args);
+    authenticate(tag,username,password);return;
+   }
+   if(cmd==='AUTHENTICATE'){
+    const [method,initial]=tokens(args);
+    if(method?.toUpperCase()==='LOGIN'){
+     if(initial){
+      if(!/^[A-Za-z0-9+/]+={0,2}$/.test(initial))return done('BAD','Invalid authentication response');
+      pendingAuth={tag,stage:'login-password',username:Buffer.from(initial,'base64').toString('utf8')};
+      send('+ UGFzc3dvcmQ6');
+     }else{
+      pendingAuth={tag,stage:'login-username'};send('+ VXNlcm5hbWU6');
+     }
+     return;
+    }
+    if(method?.toUpperCase()!=='PLAIN')return done('NO','Use LOGIN or AUTHENTICATE PLAIN');
+    if(!initial){pendingAuth={tag,stage:'plain'};send('+ ');return;}
+    const fields=Buffer.from(initial,'base64').toString('utf8').split('\0');
+    if(fields.length!==3)return done('NO','Authentication failed');
+    authenticate(tag,fields[1],fields[2]);return;
    }
    if(!valid()){identity=null;return done('NO','Authenticate with a mail-client credential');}
    if(cmd==='NOOP'||cmd==='CHECK')return done();
-   if(cmd==='ID'){send('* ID NIL');return done();}
    if(cmd==='NAMESPACE'){send('* NAMESPACE (("" "/")) NIL NIL');return done();}
    if(cmd==='LIST'||cmd==='LSUB'){for(const name of folders)send('* '+cmd+' (\\HasNoChildren'+(name==='Sent'?' \\Sent':name==='Trash'?' \\Trash':'')+') "/" '+quote(name));return done();}
    if(cmd==='CREATE'||cmd==='SUBSCRIBE'||cmd==='UNSUBSCRIBE'){return folders.includes(tokens(args)[0])?done():done('NO','Only the standard folders are available');}

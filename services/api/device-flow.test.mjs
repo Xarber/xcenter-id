@@ -101,7 +101,9 @@ test('registered device flow confirms linking and issues a single nonce-bound to
     const confirmToken=confirm.match(/name="xsrf" value="([^"]+)"/)?.[1];
     let stage=await http('/device',{browser:true,form:{xsrf:confirmToken,user_code:device.user_code,confirm:'yes'}});
     for(let step=0;step<5&&stage.status===303;step++)stage=await http(stage.headers.get('location'),{browser:true});
-    assert.match(await stage.text(),/Link Example TV to X-Center ID/);
+    const consent=await stage.text();
+    assert.match(consent,/Link Example TV to X-Center ID/);
+    assert.match(consent,/aria-label="App developer"[\s\S]*?<\/section>\s*<section class="context" aria-label="Signing in as"/);
     const interaction=stage.url.split('/interaction/')[1];
     stage=await http('/interaction/'+interaction,{browser:true,form:{action:'approve',permission:'friends'}});
     assert.equal(stage.status,303,await stage.clone().text());

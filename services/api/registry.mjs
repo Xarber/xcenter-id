@@ -49,6 +49,8 @@ export function openRegistry(path) {
   const readOpenSource=db.prepare(`SELECT p.repository FROM app_profiles p JOIN clients c ON c.id=p.id
     WHERE c.developer=? AND c.status='active' AND p.repository<>'' LIMIT 1`);
   const githubProfile=db.prepare('SELECT url FROM developer_github_profiles WHERE owner=?');
+  const registeredDeveloper=db.prepare("SELECT 1 FROM clients WHERE developer=? AND status<>'revoked' LIMIT 1");
+  const hasDeveloper=owner=>!!(readDeveloper.get(owner)||registeredDeveloper.get(owner));
   const developerView=owner=>({...readDeveloper.get(owner)??{name:'',status:'unverified'},githubProfile:githubProfile.get(owner)?.url??''});
   const setAppName=db.prepare('UPDATE clients SET name=?,callback=? WHERE id=? AND developer=?');
   const accessByClient=db.prepare("SELECT c.id,c.developer,p.private,p.requests FROM clients c LEFT JOIN app_access_policy p ON p.id=c.id WHERE c.client=? AND c.status='active'");
@@ -107,7 +109,7 @@ export function openRegistry(path) {
       FROM clients c LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN app_profiles p ON p.id=c.id
       LEFT JOIN developer_profiles d ON d.owner=c.developer LEFT JOIN app_requirements r ON r.id=c.id WHERE c.client=? AND c.status='active' AND c.id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)`).get(client),
     publicDetails: client=>appView(detailByClient.get(client)),
-    developer: developerView,
+    developer: developerView, hasDeveloper,
     saveRequirements(owner,id,input){
       const app=lookup.get(id,owner);
       if(!app||app.status==='revoked')return null;
@@ -148,7 +150,15 @@ export function openRegistry(path) {
       apps:db.prepare(`SELECT c.id,c.name,c.callback,c.status,p.description,p.repository,p.verified,d.name AS developerName
         FROM clients c LEFT JOIN app_profiles p ON p.id=c.id LEFT JOIN developer_profiles d ON d.owner=c.developer
         ORDER BY c.status,c.name LIMIT 300`).all().map(app=>({...app,verified:!!app.verified})),
-      developers:db.prepare("SELECT owner,name,status FROM developer_profiles WHERE status IN ('requested','verified') ORDER BY name LIMIT 300").all()
+      developers:db.prepare(`WITH developer_owners(owner) AS (
+          SELECT owner FROM developer_profiles UNION SELECT developer FROM clients WHERE status<>'revoked'
+        )
+        SELECT o.owner,coalesce(nullif(d.name,''),(
+          SELECT nullif(b.developer_name,'') FROM clients c JOIN client_brand b ON b.id=c.id
+          WHERE c.developer=o.owner AND c.status<>'revoked' AND trim(b.developer_name)<>'' ORDER BY c.rowid DESC LIMIT 1
+        ),'') AS name,coalesce(d.status,'unverified') AS status
+        FROM developer_owners o LEFT JOIN developer_profiles d ON d.owner=o.owner
+        ORDER BY (d.status='requested') DESC, name, o.owner LIMIT 300`).all()
         .map(developer=>({...developer,repository:readOpenSource.get(developer.owner)?.repository??null,githubProfile:githubProfile.get(developer.owner)?.url??null})),
     }),
     verifyApp(id,verified){
@@ -159,10 +169,12 @@ export function openRegistry(path) {
         .run(id,'','',JSON.stringify([item.callback]),Number(verified));
       return true;
     },
-    verifyDeveloper(owner,verified){
-      if(verified&&!readOpenSource.get(owner))return false;
-      return db.prepare("UPDATE developer_profiles SET status=? WHERE owner=? AND status IN ('requested','verified')")
-        .run(verified?'verified':'unverified',owner).changes===1;
+    verifyDeveloper(owner,verified,fallback=''){
+      const previous=developerView(owner);
+      if(!verified)return db.prepare("UPDATE developer_profiles SET status='unverified' WHERE owner=? AND status='verified'").run(owner).changes===1;
+      if(!hasDeveloper(owner))return false;
+      return db.prepare(`INSERT INTO developer_profiles VALUES(?,?,'verified') ON CONFLICT(owner) DO UPDATE SET status='verified'`)
+        .run(owner,previous.name||fallback).changes===1;
     },
     updateBrand(owner,id,brand) {
       const item=lookup.get(id,owner);

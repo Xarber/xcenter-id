@@ -391,3 +391,11 @@ Follow-up deployment receipt for AUTHN-088 through AUTHN-094. Production web, AP
 | AUTHN-100 | Investigate Spark's failed second sign-in and server-supplied name and avatar | Queued | Compare reconnect authentication and protocol behavior with an isolated mail credential. Check what user identity and avatar metadata Spark can consume before exposing any profile information. |
 
 UADS §0 checkpoint at 18:24 CET on 19 November 2026. Weekly usage remaining is 33%, below the 35% minimum for the 25 November 15:25 CET reset, with no reset credit available. The five-hour window has 65% remaining. The prior rollout override ended with that rollout. The new requests are recorded above and implementation resumes at AUTHN-095 when the usage gate permits. Production remains on `f465477`.
+
+| ID | Request | Status | Next action |
+| --- | --- | --- | --- |
+| AUTHN-101 | Show signed-in user and app developer in separate consent sections | Implemented | Isolated issuer check verifies distinct sections. |
+| AUTHN-102 | Add direct administrator verification for developers | Implemented | Test verifies registered developers are listed and can be verified before requesting review. Developer and user badges remain independent. |
+| AUTHN-103 | Replace the private-app friend picker with a searchable list and switches | Implemented | Verify on a mobile-width account page with accepted friends and exact username search. |
+
+Batch override authorized on 19 November. AUTHN-095 through AUTHN-100 source work and 0.12.0 history implemented. Isolated TLS IMAP test reconnects with the same credential and reads the same mailbox using another authentication mechanism. Spark acceptance and installed native OTP AutoFill remain to verify.

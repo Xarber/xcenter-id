@@ -36,6 +36,7 @@ const configuration = process.env.AUTHNJS_OIDC_CONFIG ? JSON.parse(readFileSync(
 const mailLimits=openMailLimits(join(process.env.AUTHNJS_DATA_DIR,'accounts.sqlite'),mailConfig?.externalLimits);
 const accounts = createAccounts({
   outboundMail:createOutboundMail(mailConfig,{limits:mailLimits,
+    senderName:owner=>{const person=accounts.identity(owner);return person&&[person.givenName,person.surname].join(' ');},
     allowSender:(owner,from)=>accounts.mailboxSender(owner,from),
     deliverLocal:(recipient,raw,from)=>mail?.receive([recipient],raw,accounts.badgeForAddress(from)),
   }),
@@ -172,6 +173,7 @@ const types = new Map(Object.entries({
 }));
 
 const deviceVerificationAttempts=new Map();
+const developerLookupAttempts=new Map();
 const appFriendRoutes=provider&&friends&&createAppFriendRoutes({
   accounts,friends,authorize:provider.friendAccess,subject:provider.friendSubject,
 });
@@ -332,7 +334,17 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     };
     if(req.method==='GET'){
       const settings=view();
-      return settings?answer(200,settings):answer(404,{error:'App unavailable.'});
+      if(!settings)return answer(404,{error:'App unavailable.'});
+      const name=target.searchParams.get('username');
+      if(name===null)return answer(200,settings);
+      if(!settings.private||!/^[a-z][a-z0-9]{2,23}$/.test(name))return answer(422,{error:'Enter an exact username.'});
+      const minute=Math.floor(Date.now()/60_000);
+      for(const [id,entry] of developerLookupAttempts)if(entry.minute!==minute)developerLookupAttempts.delete(id);
+      const attempts=developerLookupAttempts.get(owner)?.attempts??0;
+      if(attempts>=30||developerLookupAttempts.size>=4096)return answer(429,{error:'Wait a moment before searching again.'});
+      developerLookupAttempts.set(owner,{minute,attempts:attempts+1});
+      const candidate=accounts.ownerForUsername(name);
+      return answer(200,{username:candidate&&candidate!==owner&&accounts.available(candidate)?name:null});
     }
     const allowed=()=>accounts.current(req)?.owner===owner&&accounts.allowsMutation(req)&&req.headers['x-authnjs-request']==='developer-portal';
     if(req.method!=='PUT'||!allowed())return answer(403,{error:'Open the developer portal to manage access.'});

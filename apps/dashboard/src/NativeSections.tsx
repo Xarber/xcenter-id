@@ -1,3 +1,4 @@
+import CopyButton from './CopyButton';
 import DeviceSignIn from './DeviceSignIn';
 import LinkedAppPermissions from './LinkedAppPermissions';
 import TrustBadges from './TrustBadges';
@@ -388,7 +389,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           {inviteMode==='create'?<>
             {paragraph('Share this invitation')}
             {!!invite&&<Text selectable style={{color:colors.ink}}>{invite}</Text>}
-            {!!invite&&button('Share invitation link',()=>void Share.share({message:accountHost+'/friends#invite='+invite}))}
+            {!!invite&&<View style={styles.actions}><CopyButton value={invite} label="Copy invitation code" color={colors.accent}/>
+              {button('Share invitation link',()=>void Share.share({message:accountHost+'/friends#invite='+invite}))}</View>}
           </>:<>
             {field('Invitation from a friend',friendCode,setFriendCode,{maxLength:32,autoCapitalize:'none'})}
             {button('Accept invitation',()=>run(async()=>{await api('friends/accept',{code:friendCode.trim()});setFriendCode('');await load();setInviteMode(null);},'Invitation accepted.'),busy||![10,32].includes(friendCode.trim().length))}
@@ -527,7 +529,10 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           setMessages(previous=>[...previous,...page.messages]);setInboxCursor(page.nextCursor);
         }))}
         {account.externalMailLimits&&paragraph('External mail: '+account.externalMailLimits.usedToday+' / '+(account.externalMailLimits.daily??'unlimited')+' today · '+account.externalMailLimits.usedMonth+' / '+(account.externalMailLimits.monthly??'unlimited')+' this month')}
+        <View style={styles.actions}>
         {account.canReceiveMail&&button('Create private email address',()=>setCreatingAlias(!creatingAlias))}
+        {button('Mail clients',()=>navigate('mail-clients'))}
+        </View>
         {creatingAlias&&<>{premiumAliases&&account.admin&&field('Address name (optional)',aliasName,setAliasName,{autoCapitalize:'none',maxLength:24})}{button('Create address',()=>run(async()=>{await api('mail/aliases',{name:aliasName||undefined});setCreatingAlias(false);setAliasName('');await load();},'Private address created.'))}</>}
         {aliases.length>0&&<Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>{accountMessage('privateAddresses','Hide My Email addresses')}</Text>}
         {aliases.map(item=>row(item.address,item.address,[item.active?'On · '+(item.premium?'Premium address':'Private address'):'Off · Not receiving mail',item.clientLabel??(item.client.startsWith('dashboard')?'Created by you':item.client)].join(' · '),

@@ -21,3 +21,7 @@ Run 44138528022 for `207627d` published private workflow artifacts for the unsig
 
 
 18 November preview preparation: run 44245479618 succeeded for iOS device, iOS Simulator and Android AAB. The APK certificate matched the expected identity, but the parser rejected its `V3.0 Signer` output. The source parser now matches the certificate-digest field independent of signer-prefix variants and retains the independent expected fingerprint. A later build result is required before claiming APK success. New navigation and hosted-data work needs a fresh preview; existing artifacts do not contain it. `config/release-metadata.json` records the unchanged private preview scope. No beta/main promotion or public release is authorized by this batch.
+
+## Version history
+
+[CHANGELOG.md](../CHANGELOG.md) records the original AuthNJS 1.0.0 source and the independent X-Center ID 0.x series. The milestone ranges in `apps/dashboard/src/release-history.json` drive the product's Settings history and post-update What's New summary. First launches continue to show onboarding. Existing installations see the current highlights once. Update the dashboard package version, Expo version and platform build numbers for each release. Run `node scripts/generate-changelog.mjs` with a complete local Git history to refresh the commit appendix. Only actual published releases should enter the distribution manifests.

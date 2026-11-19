@@ -39,7 +39,12 @@ test('TLS IMAP serves only authenticated owner mail and supports flags, folders,
  const raw=Buffer.from('From: sender@example.net\r\nTo: alice@mail.xcenter.it\r\nSubject: Visible fixture\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHello IMAP\r\n');mail.receive(['alice@mail.xcenter.it'],raw);mail.receive(['bobby@mail.xcenter.it'],Buffer.from('Subject: Never leak Bob\r\n\r\nPrivate Bob body'));
  if(!process.env.XCENTER_TEST_TLS_DIR)execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(dir,'key.pem'),'-out',join(dir,'cert.pem'),'-subj','/CN=localhost','-days','1'],{stdio:'ignore'});
  const server=createImapServer({tls:{key:readFileSync(join(process.env.XCENTER_TEST_TLS_DIR??dir,'key.pem')),cert:readFileSync(join(process.env.XCENTER_TEST_TLS_DIR??dir,'cert.pem'))},credentials,store:mail}).listen(0,'127.0.0.1');await once(server,'listening');
- const socket=connect({host:'127.0.0.1',port:server.address().port,rejectUnauthorized:false});let buffer='';socket.on('data',data=>buffer+=data.toString('latin1'));await once(socket,'secureConnect');
+ let socket,buffer='';
+ async function reconnect(){
+  socket=connect({host:'127.0.0.1',port:server.address().port,rejectUnauthorized:false});
+  socket.on('data',data=>buffer+=data.toString('latin1'));await once(socket,'secureConnect');
+ }
+ await reconnect();
  let counter=0;
  async function command(text,sendLiteral){const tag='T'+(++counter);buffer='';socket.write(tag+' '+text+'\r\n');if(sendLiteral){for(let i=0;i<100&&!buffer.includes('+ Send message');i++)await new Promise(r=>setTimeout(r,10));assert.ok(buffer.includes('+ Send message'));socket.write(sendLiteral);socket.write('\r\n');}for(let i=0;i<150&&!new RegExp('(?:^|\\r\\n)'+tag+' (OK|NO|BAD)').test(buffer);i++)await new Promise(r=>setTimeout(r,10));return buffer;}
  try{
@@ -52,6 +57,23 @@ test('TLS IMAP serves only authenticated owner mail and supports flags, folders,
   assert.match(await command('UID MOVE 1:* Archive'),/OK MOVE/);assert.match(await command('SELECT Archive'),/\* 1 EXISTS/);
   assert.match(await command('APPEND Sent {'+raw.length+'}',raw),/OK APPEND/);assert.match(await command('SELECT Sent'),/\* 1 EXISTS/);
   assert.match(await command('UID STORE 1:* +FLAGS (\\Deleted)'),/OK STORE/);assert.match(await command('EXPUNGE'),/EXPUNGE/);assert.equal(mail.imapList('alice','Sent').length,0);
+  const disconnected=once(socket,'close');
+  await command('LOGOUT');await disconnected;
+  await reconnect();
+  assert.match(await command('ID NIL'),/X-Center ID Mail/);
+  assert.match(await command('CAPABILITY'),/AUTH=LOGIN/);
+  buffer='';
+  socket.write('R1 AUTHENTICATE LOGIN\r\n');
+  async function waitFor(pattern){
+   for(let i=0;i<150&&!pattern.test(buffer);i++)await new Promise(resolve=>setTimeout(resolve,10));
+   assert.match(buffer,pattern);
+  }
+  await waitFor(/\+ VXNlcm5hbWU6/);
+  socket.write(Buffer.from('alice@mail.xcenter.it').toString('base64')+'\r\n');
+  await waitFor(/\+ UGFzc3dvcmQ6/);
+  socket.write(Buffer.from(credential.password).toString('base64')+'\r\n');
+  await waitFor(/R1 OK Authenticated/);
+  assert.match(await command('SELECT Archive'),/\* 1 EXISTS/);
   credentials.revoke('alice',credential.id);assert.match(await command('UID FETCH 1:* (BODY[])'),/NO Authenticate/);
  }finally{socket.destroy();await new Promise(resolve=>server.close(resolve));mail.close();credentials.close();db.close();rmSync(dir,{recursive:true,force:true});}
 });

@@ -8,11 +8,20 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const accounts=createAccounts({database,origin:process.env.AUTHNJS_ACCOUNT_ORIGIN,profileKey:Buffer.from(identity.profileKey,'hex')});
  const mail=openMailStore({accountsPath:database,mailPath:join(directory,'mail.sqlite'),configuration:config,accountService:accounts});
  const outbound=createOutboundMail({...config,localDelivery:{host:process.env.AUTHNJS_LOCAL_SMTP_HOST??'172.17.0.1'}},{limits,
+  senderName:owner=>{const person=accounts.identity(owner);return person&&[person.givenName,person.surname].join(' ');},
   allowSender:(owner,from)=>accounts.mailboxSender(owner,from),deliverLocal:(recipient,raw,from)=>mail.receive([recipient],raw,accounts.badgeForAddress(from))});
  const tls={key:readFileSync(config.tlsKeyFile),cert:readFileSync(config.tlsCertificateFile)};
  const submission=createMailSubmission({tls,credentials,accounts,outbound}),imap=createImapServer({tls,credentials,store:mail});
  for(const [server,port,service]of [[submission,2465,'submission'],[imap,2993,'imap']]){
-  server.on('error',()=>{console.error(JSON.stringify({service:'xcenter-mail-'+service,error:'listener_failed'}));process.exitCode=1;});
+  const listener=submission===server?server.server:server;
+  listener.on('error',error=>{
+   console.error(JSON.stringify({service:'xcenter-mail-'+service,event:'listener_failed',code:error.code??'unknown'}));
+   process.exitCode=1;
+  });
+  if(listener!==server)server.on('error',error=>{
+   const code=/^[A-Z0-9_]{1,45}$/.test(error.code??'')?error.code:'unknown';
+   console.warn(JSON.stringify({service:'xcenter-mail-'+service,event:'connection_failed',code}));
+  });
   server.listen(port,process.env.AUTHNJS_SMTP_BIND??'127.0.0.1');
  }
 }

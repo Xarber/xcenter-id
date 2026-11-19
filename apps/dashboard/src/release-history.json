@@ -1,0 +1,67 @@
+[
+  {
+    "version":"0.12.0","date":"2026-11-19","revision":"HEAD","title":"Mail setup and app approvals",
+    "features":[["mail","Copy generated mail passwords and find mail-client setup in the inbox."],["people","Manage private-app access from a searchable list. Administrators can verify developers directly."],["history","Browse version history from Settings."]],
+    "fixes":["Sign-in separates the developer from the account you’re using, suggests email code AutoFill where supported, and shows progress on the action you started.","Mail clients gain additional reconnect authentication support."]
+  },
+  {
+    "version":"0.11.0","date":"2026-11-19","revision":"8db8fa0","title":"Private and self-hosted apps",
+    "features":[["shield","Private apps support approved users and access requests. Local apps can register without DNS, with reader trust controls for shared data."],["key","Rotate or revoke client secrets."],["people","Use the Expo account overview for sign-in, profile, sync settings, and account management."]],
+    "fixes":["Fixed browser consent and stacked sidebar navigation, made linked emails read-only, and removed user-owned data on unlink.","Improved mail connection setup and reconnect limits."]
+  },
+  {
+    "version":"0.10.0","date":"2026-11-19","revision":"fe1f11f","title":"Device sign-in and linked permissions",
+    "features":[["key","Sign in on another device with a QR code or short code."],["shield","Review and adjust app sign-in grants and confirm returning sign-ins."],["storage","User-owned records count toward account storage. Service databases have independent quotas."],["mail","Account activity emails use an HTML template. Developer profiles can link to GitHub."]],
+    "fixes":["Storage navigation returns to the appropriate developer or administrator page."]
+  },
+  {
+    "version":"0.9.0","date":"2026-11-19","revision":"0e8a29b","title":"App trust and longer sign-ins",
+    "features":[["shield","See verified and administrator badges across account and app views."],["people","Apps can import accepted friends with app-specific identifiers and require optional claims during setup."],["key","App sessions can renew for another 14 days during use."]],
+    "fixes":["App branding refreshes on the permissions page, verification actions appear only as needed, and offline dashboard navigation works."]
+  },
+  {
+    "version":"0.8.0","date":"2026-11-18","revision":"abafcd5","title":"App management and dashboard polish",
+    "features":[["storage","Administrators can inspect volume health and app quotas. App owners and administrators can delete registrations."],["key","Linked apps can retrieve the authorized profile and photo. The integration skill explains public, private, shared, and unsigned-client integration."]],
+    "fixes":["Improved small-screen layout, mail composer motion, controls, app links, and verification delivery."]
+  },
+  {
+    "version":"0.7.0","date":"2026-11-18","revision":"a28fd8c","title":"Mail clients and private addresses",
+    "features":[["mail","Connect mail apps over authenticated IMAP and SMTP. Create premium mailbox aliases and check the state of private addresses."]],
+    "fixes":["Validated the production email relay and improved address state feedback."]
+  },
+  {
+    "version":"0.6.0","date":"2026-11-18","revision":"7bf1f0f","title":"Hosted data and client integrations",
+    "features":[["storage","Verified apps can manage encrypted hosted data, published data and user-approved cross-app sharing."],["key","Published X-Center ID integration skill guidance and added authenticated inbound email verification."],["people","Reorganized account management with an administrator workspace."]],
+    "fixes":["Improved admin access renewal, mail receiver error reporting and native build validation."]
+  },
+  {
+    "version":"0.5.0","date":"2026-11-17","revision":"c63f267","title":"Account moderation and support",
+    "features":[["shield","Administrators can lock accounts separately from signing out devices and approve username changes."],["mail","Send support requests and replies through the mailbox or delete selected messages together."]],
+    "fixes":["Updated native signing and verification workflow checks."]
+  },
+  {
+    "version":"0.4.0","date":"2026-11-17","revision":"1f10dc8","title":"Friends and mail sharing",
+    "features":[["people","Share selected files and publisher-approved saved places with friends."],["mail","Manage private addresses, browse older messages, and read or compose mail on dedicated screens. Core mailbox actions support multiple languages."]],
+    "fixes":["Removed unlinked apps from the permission directory and improved Android package verification."]
+  },
+  {
+    "version":"0.3.0","date":"2026-11-17","revision":"62b523a","title":"Native account management",
+    "features":[["people","Manage accounts in Expo and use a reusable registered sign-in entry."],["shield","Manage app linking and consent in the dashboard."],["mail","Read and clean up private mailbox messages."]],
+    "fixes":["Revoked unlinked grants, supported encrypted account renames, and improved signup, developer profiles and navigation."]
+  },
+  {
+    "version":"0.2.0","date":"2026-11-16","revision":"5eb0d8f","title":"X-Center ID sign-in and mail",
+    "features":[["key","OpenID Connect for registered apps, plus sample integrations."],["mail","Reserved mail identities and added authenticated mailbox submission."],["people","Introduced a redesigned responsive account and sign-in experience."]],
+    "fixes":["Recorded web deployments and prepared parallel native previews."]
+  },
+  {
+    "version":"0.1.0","date":"2026-11-16","revision":"a8ea58f","title":"Passwordless dashboard foundation",
+    "features":[["key","Added passkey accounts, registered confidential clients, a developer portal and a reusable native authorization helper."],["storage","Introduced encrypted account-scoped records and permission grants."],["people","Built an Expo dashboard, native account tabs and offline web shell."]],
+    "fixes":["Disabled the legacy server by default and fixed exported font delivery."]
+  },
+  {
+    "version":"1.0.0","date":"2025-04-19","revision":"6ef1066","title":"Original AuthNJS","legacy":true,
+    "features":[["key","Original Node.js authentication API, account and app management, and administrative and developer pages."]],
+    "fixes":[]
+  }
+]

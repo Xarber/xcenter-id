@@ -1,3 +1,5 @@
+import ReleaseNotes from './ReleaseNotes';
+import {currentRelease,seenReleaseKey} from './release-info';
 import Animated, {Easing, FadeIn, ReduceMotion} from 'react-native-reanimated';
 import {introduction} from './introduction';
 import {languages,parsePreferences,preferencesKey} from './preferences';
@@ -52,7 +54,9 @@ function NativeAccount() {
   const [locked,setLocked]=useState(false);
   const [loading,setLoading]=useState(true);
   const [pending,setPending]=useState(false);
+  const [pendingAction,setPendingAction]=useState<'passkey'|'signup'>('passkey');
   const [intro,setIntro]=useState(false);
+  const [releaseNotes,setReleaseNotes]=useState<'latest'|'history'|null>(null);
   const [introStep,setIntroStep]=useState(0);
   const [developer,setDeveloper]=useState(false);
   const [sampleMode,setSampleMode]=useState(false);
@@ -62,8 +66,11 @@ function NativeAccount() {
 
   useEffect(()=>{
     let live=true;
-    void AsyncStorage.getItem(pref).then(seen=>{
-      if(live&&!seen){setIntro(true);return AsyncStorage.setItem(pref,'complete');}
+    void Promise.all([AsyncStorage.getItem(pref),AsyncStorage.getItem(seenReleaseKey)]).then(async ([seen,prior])=>{
+      if(!live)return;
+      if(!seen){setIntro(true);await AsyncStorage.setItem(pref,'complete');}
+      else if(prior!==currentRelease.version)setReleaseNotes('latest');
+      await AsyncStorage.setItem(seenReleaseKey,currentRelease.version);
     }).catch(()=>{});
     return ()=>{live=false;if(timer.current)clearTimeout(timer.current);};
   },[]);
@@ -142,6 +149,7 @@ function NativeAccount() {
         </View><Pressable style={{flex:1}} accessibilityLabel="Close sidebar" onPress={()=>setSidebar(false)}/>
       </SafeAreaView>
     </Modal>}
+    <ReleaseNotes mode={intro?null:releaseNotes} colors={colors} close={()=>setReleaseNotes(null)} openHistory={()=>setReleaseNotes('history')}/>
     <ScrollView contentContainerStyle={styles.content}>
       {intro?<View style={[styles.card,{backgroundColor:colors.panel}]}>
         <Animated.View key={introStep} entering={FadeIn.duration(200).easing(Easing.bezier(.23,1,.32,1)).reduceMotion(ReduceMotion.System)}>
@@ -160,7 +168,7 @@ function NativeAccount() {
             {action('Check again','refresh-outline',()=>void load(token).catch(()=>setError('Could not check your account.')))}
             {action('Sign out','log-out-outline',()=>void signOut())}
           </View>:!token||!account?
-          <AccountEntry onSignIn={()=>void signIn()} onCreateAccount={()=>void signIn(true)} pending={pending} error={error}
+          <AccountEntry onSignIn={()=>{setPendingAction('passkey');void signIn();}} onCreateAccount={()=>{setPendingAction('signup');void signIn(true);}} pending={pending} pendingAction={pendingAction} error={error}
             onUsernameSubmit={username=>nativeRequest('login/username',undefined,{username})}
             onCodeSubmit={async(ticket,code)=>{const session=await nativeRequest('login/code',undefined,{ticket,code});await useSession(session.token);}}/>:
           <><Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>{accountMessage(tab[0],tab[1])}</Text>
@@ -174,7 +182,8 @@ function NativeAccount() {
           {action('Support','help-circle-outline',()=>setTab(pages.find(page=>page[0]==='support')!))}
           {action('Developer documentation','book-outline',()=>void openBrowserAsync(accountHost+'/docs'))}
           {action('View introduction' ,'information-circle-outline',()=>{setIntroStep(0);setIntro(true);})}
-          {action('Version 0.1.0','code-slash-outline',()=>{
+          {action('View changelog','book-outline',()=>setReleaseNotes('history'))}
+          {action('Version '+currentRelease.version,'code-slash-outline',()=>{
             if(++taps.current===3){setDeveloper(true);taps.current=0;}
             if(timer.current)clearTimeout(timer.current);
             timer.current=setTimeout(()=>{setDeveloper(false);setSampleMode(false);taps.current=0;},30_000);

@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer';
 
 const recipientPattern = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i;
 
-export function createOutboundMail(config,{limits,deliverLocal,allowSender}={}) {
+export function createOutboundMail(config,{limits,deliverLocal,allowSender,senderName}={}) {
   if (!config?.userSubmission && !config?.localDelivery) return null;
   const domain = config.mailboxDomain ?? 'mail.xcenter.it';
   if(!['mail.xcenter.it','xcenter.it'].includes(domain)||!config.inboundDomains?.includes(domain)){
@@ -40,6 +40,8 @@ export function createOutboundMail(config,{limits,deliverLocal,allowSender}={}) 
       if(!client)return {status:503,error:'Sending to external email addresses is unavailable.'};
       const external=!config.inboundDomains.includes(destination);
       const from=typeof input.from==='string'?input.from.toLowerCase():username+'@'+domain;
+      const displayName=from===username+'@'+domain?senderName?.(owner)?.replace(/[\r\n\u0000]/g,' ').trim():undefined;
+      const fromHeader=displayName?{name:displayName,address:from}:from;
       if(from!==username+'@'+domain&&!allowSender?.(owner,from))return {status:403,error:'Sender is unavailable.'};
       if(external&&limits&&!limits.reserve(owner))return {status:429,error:'Your external mail allowance or the service free-plan allowance has been reached.'};
       const now = Date.now();
@@ -57,9 +59,9 @@ export function createOutboundMail(config,{limits,deliverLocal,allowSender}={}) 
       try {
         if(!external&&deliverLocal){
           const composer=nodemailer.createTransport({streamTransport:true,buffer:true,disableFileAccess:true,disableUrlAccess:true});
-          const raw=await composer.sendMail({from,to:recipient,subject,...content});
+          const raw=await composer.sendMail({from:fromHeader,to:recipient,subject,...content});
           if(!deliverLocal(recipient,raw.message,from))throw new Error('Local mailbox unavailable');
-        }else await client.sendMail({from,to:recipient,subject,...content,envelope:{from,to:[recipient]}});
+        }else await client.sendMail({from:fromHeader,to:recipient,subject,...content,envelope:{from,to:[recipient]}});
         return {ok:true};
       } catch { return {status:503,error:'The mail provider did not accept the message.'}; }
     },

@@ -7,6 +7,7 @@ X-Center ID is a passkey-first identity and consent service with an Expo account
 - [Security findings](SECURITY.md) covers file boundaries and encryption.
 - [Redevelopment plan](AUTHNJS_REDEVELOPMENT_PLAN.md) describes the planned passwordless identity service, Expo SDK and data-sharing contract.
 - [Dashboard development and testing](DASHBOARD.md) explains the Expo entry point, data isolation and checks.
+- [Version history](../CHANGELOG.md) records the original AuthNJS and subsequent X-Center ID milestones.
 - [Testing](TESTING.md) documents source checks, isolated browser verification and device coverage.
 - [Navigation and preferences](NAVIGATION.md) describes the sidebar, main tabs and grouped editing.
 - [Hosted application data](HOSTED_DATA.md) documents private databases, recipient sharing, public flags and quotas.

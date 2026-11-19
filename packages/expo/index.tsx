@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 
 export type AccountEntryProps = {
   onSignIn?: () => void;
@@ -7,12 +7,13 @@ export type AccountEntryProps = {
   onUsernameSubmit?: (username:string)=>Promise<{method:'email';ticket:string}|{method:'passkey'}|undefined>;
   onCodeSubmit?: (ticket:string,code:string)=>Promise<void>;
   pending?: boolean;
+  pendingAction?: 'passkey'|'signup';
   transparent?:boolean;
   error?: string;
   children?: ReactNode;
 };
 
-export function AccountEntry({ onSignIn, onCreateAccount,onUsernameSubmit,onCodeSubmit,pending = false,error,children,transparent=true }: AccountEntryProps) {
+export function AccountEntry({ onSignIn, onCreateAccount,onUsernameSubmit,onCodeSubmit,pending = false,pendingAction,error,children,transparent=true }: AccountEntryProps) {
   const dark = useColorScheme() === 'dark';
   const ink = dark ? '#f4f7ff' : '#142438';
   const color = dark ? '#a8c7ff' : '#174eaa';
@@ -24,12 +25,12 @@ export function AccountEntry({ onSignIn, onCreateAccount,onUsernameSubmit,onCode
   const [ticket,setTicket]=useState('');
   const [code,setCode]=useState('');
   const [needsPasskey,setNeedsPasskey]=useState(false);
-  const [active,setActive]=useState(false);
+  const [active,setActive]=useState<'username'|'code'|null>(null);
   const [failure,setFailure]=useState('');
-  const busy=pending||active;
+  const busy=pending||active!==null;
   async function submit(){
     setFailure('');
-    setActive(true);
+    setActive(ticket?'code':'username');
     try {
       if(ticket)await onCodeSubmit?.(ticket,code);
       else {
@@ -38,7 +39,7 @@ export function AccountEntry({ onSignIn, onCreateAccount,onUsernameSubmit,onCode
         if(result?.method==='passkey')setNeedsPasskey(true);
       }
     }catch(error){setFailure(error instanceof Error?error.message:'Could not sign in.');}
-    finally{setActive(false);}
+    finally{setActive(null);}
   }
   function button(label:string,press:()=>void,primary=false,disabled=busy){
     return <Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled} onPress={press}
@@ -56,19 +57,19 @@ export function AccountEntry({ onSignIn, onCreateAccount,onUsernameSubmit,onCode
       <Text accessibilityRole="header" style={[styles.title,{color:ink}]}>Sign in with X-Center ID</Text>
       {onUsernameSubmit&&onCodeSubmit&&<>
         <Text style={{color:muted}}>{ticket?'Enter the code sent to your verified email.':'Enter your X-Center username.'}</Text>
-        {ticket?<TextInput accessibilityLabel="Email sign-in code" value={code} onChangeText={setCode}
-          autoComplete="one-time-code" keyboardType="number-pad" maxLength={6} editable={!busy} style={[styles.input,{color:ink,borderColor:muted}]}/>
+        {ticket?<TextInput accessibilityLabel="Email sign-in code" value={code} onChangeText={value=>setCode(value.replace(/\D/g,'').slice(0,6))}
+          {...(Platform.OS==='ios'?{textContentType:'oneTimeCode' as const}:{autoComplete:'one-time-code' as const})}
+          keyboardType="number-pad" autoFocus editable={!busy} style={[styles.input,{color:ink,borderColor:muted}]}/>
           :<TextInput accessibilityLabel="X-Center username" value={username} onChangeText={value=>{setUsername(value);setNeedsPasskey(false);}}
             autoComplete="username" autoCapitalize="none" autoCorrect={false} maxLength={24} editable={!busy} style={[styles.input,{color:ink,borderColor:muted}]}/>}
-        {needsPasskey?<Text style={{color:muted}}>This account uses a passkey.</Text>:button(ticket?'Verify code':'Continue',
+        {needsPasskey?<Text style={{color:muted}}>This account uses a passkey.</Text>:button(active==='code'?'Verifying…':active==='username'?'Checking username…':ticket?'Verify code':'Continue',
           ()=>void submit(),true,busy||(ticket?!/^\d{6}$/.test(code):!username.trim()))}
         {ticket&&button('Use another username',()=>{setTicket('');setCode('');})}
       </>}
       {error||failure?<Text accessibilityRole="alert" style={{color:ink}}>{failure||error}</Text>:null}
-      {busy&&<ActivityIndicator accessibilityLabel="Signing in" color={color}/>}
       <View style={styles.actions}>
-        {onSignIn&&button('Use a passkey',onSignIn,needsPasskey||!onUsernameSubmit)}
-        {onCreateAccount&&button('Create an account',onCreateAccount)}
+        {onSignIn&&button(pending&&pendingAction!=='signup'?'Waiting for your passkey…':'Use a passkey',onSignIn,needsPasskey||!onUsernameSubmit)}
+        {onCreateAccount&&button(pending&&pendingAction==='signup'?'Opening account setup…':'Create an account',onCreateAccount)}
       </View>
       {children}
     </View>
