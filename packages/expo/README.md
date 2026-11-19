@@ -60,4 +60,6 @@ import { AccountOverview } from '@authnjs/expo/account-overview';
 />
 ```
 
-Pass the photo as a React Native image source after obtaining it with the authorized user token. `settings` can render host-owned controls inline. `onManageAccount` can open a supported native destination with a browser fallback. The default opens the account profile on id.xcenter.it. The overview does not own credentials, issuer grants or sync preferences.
+Pass the photo as a React Native image source after obtaining it with the authorized user token. `settings` can render host-owned controls within the details sheet. `onManageAccount` can open a supported native destination with a browser fallback. The default opens the component’s account details sheet. The overview does not own credentials, issuer grants or sync preferences.
+
+Mount `AccountOverview` directly in Settings and pass `profile={null}` while signed out. Supply `signIn` with the registered public app parameters and `onAuthorized` code exchange callback for the system browser, or supply `onSignIn` for the app's existing sign-in implementation. Update the controlled profile after the host validates and stores the session. The component then displays the profile and opens a details sheet from **Manage account & data**. Its **Open dashboard**, **Manage app** and **Sign out** controls are built in. Provide `clientId` for the Manage app destination if it is not already in `signIn`, and `onSignOut` to clear the host session. Pass optional `syncOptions` and `settings` for host-managed data controls.

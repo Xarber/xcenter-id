@@ -130,6 +130,31 @@ test('registered device flow confirms linking and issues a single nonce-bound to
     }});
     assert.equal((await pollDenied.json()).error,'access_denied');
     assert.equal((await (await poll(client)).json()).error,'invalid_grant');
+    const app=registry.published().find(app=>app.client===client.clientId);
+    const registration=registry.managed('developer').find(app=>app.name==='Example TV');
+    assert.ok(app&&registration);
+    assert.equal(registry.saveAccess('unrelated',registration.id,{action:'settings',private:true,requests:true}),false);
+    assert.equal(registry.saveAccess('developer',registration.id,{action:'settings',private:true,requests:true}),true);
+    const constrained=await (await begin(client)).json();
+    const codePage=await (await http(constrained.verification_uri_complete,{browser:true})).text();
+    const codeXsrf=codePage.match(/name="xsrf" value="([^"]+)"/)?.[1];
+    const codeConfirm=await (await http('/device',{browser:true,form:{xsrf:codeXsrf,user_code:constrained.user_code}})).text();
+    const formXsrf=codeConfirm.match(/name="xsrf" value="([^"]+)"/)?.[1];
+    let blocked=await http('/device',{browser:true,form:{xsrf:formXsrf,user_code:constrained.user_code,confirm:'yes'}});
+    for(let step=0;step<5&&blocked.status===303;step++)blocked=await http(blocked.headers.get('location'),{browser:true});
+    assert.equal(blocked.headers.get('referrer-policy'),'same-origin');
+    assert.match(await blocked.text(),/don’t have permission/);
+    const requested=await http('/interaction/'+blocked.url.split('/interaction/')[1],{browser:true,form:{action:'request'}});
+    assert.match(await requested.text(),/Access requested/);
+    assert.equal(registry.access(current.owner,client.clientId).pending,true);
+    assert.equal(registry.saveAccess('developer',registration.id,{action:'approve',account:current.owner}),true);
+    assert.equal(registry.access(current.owner,client.clientId).allowed,true);
+    const rotated=await provider.changeClientSecret(client.clientId,'rotate');
+    assert.notEqual((await begin(client)).status,200);
+    assert.equal((await begin(rotated)).status,200);
+    await provider.changeClientSecret(client.clientId,'revoke');
+    assert.notEqual((await begin(rotated)).status,200);
+
   } finally {
     await new Promise(resolve=>server.close(resolve));
     registry.close();

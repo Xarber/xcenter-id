@@ -53,6 +53,10 @@ test('verified app databases isolate users and services, encrypt records and gat
   assert.equal(database.records,1);
   assert.ok(database.used<data.accountUsage('user1'));
   assert.equal((await manage(0,{action:'capacity',capacity:1024**3})).status,403);
+  data.revokeApp('user1','a');
+  assert.equal(data.accountUsage('user1'),0);
+  assert.equal((await request('/v1/apps/a/data/posts/service',{token:key.secret})).status,200);
+  assert.equal((await request('/v1/apps/a/data/posts/one',{token:'a'.repeat(25)})).status,404);
   await manage(0,{action:'revoke-key'});assert.equal((await request('/v1/apps/a/data/posts/service',{token:key.secret})).status,401);
   registry.moderate('developer',registrations[0].id,'restrict');assert.equal((await request('/public/apps/a/data/posts')).status,404);
  }finally{await new Promise(resolve=>server.close(resolve));data.close();registry.close();}

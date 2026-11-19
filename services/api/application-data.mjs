@@ -42,8 +42,16 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
     requested,
     accountUsage:owner=>accountUsage.get(owner).used,
     containers:owner=>containers.all(owner).map(row=>({...row,name:registry.publicDetails(row.client)?.name??'App storage'})),
-    revokeApp(owner,client){db.prepare('DELETE FROM app_data_grants WHERE owner=? AND (source=? OR destination=?)').run(owner,client,client);},
-    permissions(owner){return registry.published().filter(app=>accounts.linkedGrant(owner,app.client)).flatMap(app=>requested(app.client).map(item=>({...item,destination:app.client,destinationName:app.name,sourceName:registry.publicDetails(item.source)?.name??item.source,
+    revokeApp(owner,client){
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        db.prepare('DELETE FROM app_data_grants WHERE owner=? AND (source=? OR destination=?)').run(owner,client,client);
+        db.prepare('DELETE FROM app_readers WHERE client=? AND (owner=? OR reader=?)').run(client,owner,owner);
+        db.prepare('DELETE FROM app_records WHERE client=? AND owner=?').run(client,owner);
+        db.exec('COMMIT');
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    },
+    permissions(owner){return registry.published().filter(app=>accounts.linkedGrant(owner,app.client)&&registry.access(owner,app.client).allowed).flatMap(app=>requested(app.client).map(item=>({...item,destination:app.client,destinationName:app.name,sourceName:registry.publicDetails(item.source)?.name??item.source,
       enabled:!!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(owner,item.source,app.client,item.collection)})));},
     authorize(owner,client,selected){
       const allowed=new Set(selected);
@@ -68,7 +76,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         if(req.method==='OPTIONS')return answer(204,{});
         if(url.pathname==='/account/app-data-permissions'){
           const session=accounts.current(req);if(!session)fail(401,'Sign in first.');
-          const requestedForOwner=registry.published().filter(app=>accounts.linkedGrant(session.owner,app.client)).flatMap(app=>requested(app.client).map(item=>({...item,destination:app.client,destinationName:app.name,sourceName:registry.publicDetails(item.source)?.name??item.source,
+          const requestedForOwner=registry.published().filter(app=>accounts.linkedGrant(session.owner,app.client)&&registry.access(session.owner,app.client).allowed).flatMap(app=>requested(app.client).map(item=>({...item,destination:app.client,destinationName:app.name,sourceName:registry.publicDetails(item.source)?.name??item.source,
             enabled:!!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(session.owner,item.source,app.client,item.collection)})));
           if(req.method==='GET')return answer(200,{permissions:requestedForOwner});
           if(req.method!=='PUT'||!accounts.allowsMutation(req))fail(403,'Change permissions from your account.');
@@ -136,7 +144,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         if(!principal?.owner||!active(principal.client))fail(401,'A valid registered application credential is required.');
         const own=principal.client===client;
         if(!own){
-          if(req.method!=='GET'||accounts.isDisconnected(principal.owner,client)||!JSON.parse(setting(client)?.shared??'[]').includes(collection)||!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(principal.owner,client,principal.client,collection))fail(403,'This data permission has not been granted.');
+          if(req.method!=='GET'||registry.access(principal.owner,client).allowed===false||accounts.isDisconnected(principal.owner,client)||!JSON.parse(setting(client)?.shared??'[]').includes(collection)||!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(principal.owner,client,principal.client,collection))fail(403,'This data permission has not been granted.');
         }
         const params=[client,principal.owner,collection];
         if(req.method==='GET'){

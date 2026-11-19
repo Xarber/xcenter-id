@@ -100,7 +100,14 @@ export function openStore(path, key) {
     grant: (...parameters) => grant.run(...parameters),
     revoke: (...parameters) => revoke.run(...parameters),
     listGrants: (owner) => listGrants.all(owner, Date.now()),
-    revokeApp: (owner,client) => db.prepare('DELETE FROM grants WHERE owner=? AND (source=? OR destination=?)').run(owner,client,client),
+    revokeApp(owner,client){
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        db.prepare('DELETE FROM grants WHERE owner=? AND (source=? OR destination=?)').run(owner,client,client);
+        db.prepare('DELETE FROM records WHERE owner=? AND source=?').run(owner,client);
+        db.exec('COMMIT');
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    },
     usage: (owner) => db.prepare('SELECT total(length(envelope)+length(id)+length(source)+length(dataset)+8) AS bytes FROM records WHERE owner=?').get(owner).bytes,
     close: () => db.close(),
   };

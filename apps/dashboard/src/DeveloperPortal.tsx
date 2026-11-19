@@ -239,6 +239,7 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
           {action('Cancel',()=>setPermissionApp(''),saving)}
         </View>:action('Edit permissions',()=>{setRequirements(app.requirements??optionalClaims);setPermissionApp(app.id);},saving)}
         {app.status==='active'&&action('Manage application database',()=>setStorage(app.id))}
+        {action('Manage app access and credentials on the web',()=>void Linking.openURL(accountHost+'/developer?app='+app.id).catch(()=>setNotice('Could not open the developer portal.')))}
         {app.status !== 'revoked' && (revoking === app.id ? <>
           <Text style={{color:ink}}>This disables sign-in and API access. Stored records are retained.</Text>
           {action('Confirm app deletion', () => { void revoke(app.id); }, saving)}

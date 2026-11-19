@@ -79,7 +79,7 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
       <ul className="xc-storage-legend">{storageCategories.map(([id,label,color])=><li key={id}><span style={{backgroundColor:color}}/>{label}<strong>{formatBytes(state.categories[id]??0)}</strong></li>)}</ul>
       {!!state.appContainers?.length&&<div className="xc-stack"><h3>App containers in your account</h3>
         {state.appContainers.map(app=><div className="xc-list-row" key={app.client}><span>{app.name}</span><strong>{formatBytes(app.bytes)}</strong></div>)}</div>}
-      <a href="/files">Open file browser →</a></>}
+      </>}
 
     {!summary && <>
       <nav className="xc-actions xc-file-path" aria-label="Current folder">
@@ -369,7 +369,7 @@ export function ConnectedApps() {
     {apps?.length===0 && <div className="xc-empty">No apps have been authorized yet.</div>}
     {apps?.map(item=><div className="xc-list-row" key={item.client}><div className="xc-row-head"><AppIcon key={item.icon} icon={item.icon}/><div><strong className="xc-identity-label">{item.label}<TrustBadges compact kind="app" verified={item.verified}/></strong><p>Last authorized {date(item.updated)}</p></div></div>
       <div className="xc-actions"><a href={'/permissions/'+encodeURIComponent(item.client)}>Manage data access</a>
-        {confirm===item.client?<><span>This ends the app’s access.</span><button className="xc-button xc-secondary" disabled={busy} onClick={()=>{
+        {confirm===item.client?<><span>This ends the app’s access and permanently deletes the copies it saved in your X-Center ID account.</span><button className="xc-button xc-secondary" disabled={busy} onClick={()=>{
           setBusy(true);
           void api('connected-apps/unlink',{client:item.client}).then(()=>{
             setApps(previous=>previous?.filter(app=>app.client!==item.client)??null);

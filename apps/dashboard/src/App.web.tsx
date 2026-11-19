@@ -339,7 +339,7 @@ export default function WebApp(){
   else if(page==='devices')content=<DevicesPage/>;
   else if(page==='friends')content=<FriendsPage/>;
   else if(page==='files'||page==='storage')content=<FilesPage key={page} summary={page==='storage'}/>;
-  else if(page==='mail-clients')content=<MailClients/>;
+  else if(page==='mail-clients')content=<MailClients username={account.profile?.username}/>;
   else if(page==='mail')content=<MailPage account={account}/>;
   else if(page==='security')content=<Security account={account} update={load} addPasskey={()=>passkey('add')}/>;
   else if(page==='support')content=<SupportPage/>;

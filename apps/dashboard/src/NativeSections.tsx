@@ -221,7 +221,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
 
   let content:ReactNode;
   switch(section) {
-    case 'mail-clients':content=<MailClients token={token} colors={colors}/>;break;
+    case 'mail-clients':content=<MailClients token={token} colors={colors} username={account.profile?.username}/>;break;
     case 'dashboard':
       content=<>
         <View style={[styles.overviewHero,{backgroundColor:colors.soft}]}>
@@ -294,7 +294,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           <AppIcon key={app.icon} icon={app.icon} color={colors.accent}/>
           <View style={{flexShrink:1,gap:4}}><Text style={{color:colors.ink,fontWeight:'700'}}>{app.label}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View></View>
           {button('Manage permissions',()=>{setPermissionClient(app.client);navigate('permissions');})}
-          {button('Unlink app',()=>confirm('Unlink '+app.label+'?','This ends its active access and removes its sharing permissions.',()=>run(()=>mutate('connected-apps/unlink',{client:app.client}),'App unlinked.')))}</View>)}
+          {button('Unlink app',()=>confirm('Unlink '+app.label+'?','This ends the app’s access and permanently deletes the copies it saved in your X-Center ID account.',()=>run(()=>mutate('connected-apps/unlink',{client:app.client}),'App unlinked.')))}</View>)}
         {button('Manage developer apps',()=>navigate('developer'))}</>;
       break;
     case 'developer':

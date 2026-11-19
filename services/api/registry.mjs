@@ -15,6 +15,12 @@ export function openRegistry(path) {
     CREATE TABLE IF NOT EXISTS client_native(id TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS app_profiles(id TEXT PRIMARY KEY, description TEXT NOT NULL, repository TEXT NOT NULL, callbacks TEXT NOT NULL, verified INTEGER NOT NULL DEFAULT 0) STRICT;
     CREATE TABLE IF NOT EXISTS app_requirements(id TEXT PRIMARY KEY, email INTEGER NOT NULL, age_range INTEGER NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS app_access_policy (
+      id TEXT PRIMARY KEY, private INTEGER NOT NULL, requests INTEGER NOT NULL DEFAULT 0
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS app_access_members (
+      id TEXT NOT NULL, account TEXT NOT NULL, approved INTEGER NOT NULL, PRIMARY KEY(id,account)
+    ) STRICT;
     CREATE TABLE IF NOT EXISTS developer_github_profiles(owner TEXT PRIMARY KEY, url TEXT NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS developer_profiles(owner TEXT PRIMARY KEY,name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unverified') STRICT;
   `);
@@ -42,7 +48,41 @@ export function openRegistry(path) {
   const githubProfile=db.prepare('SELECT url FROM developer_github_profiles WHERE owner=?');
   const developerView=owner=>({...readDeveloper.get(owner)??{name:'',status:'unverified'},githubProfile:githubProfile.get(owner)?.url??''});
   const setAppName=db.prepare('UPDATE clients SET name=?,callback=? WHERE id=? AND developer=?');
+  const accessByClient=db.prepare("SELECT c.id,c.developer,p.private,p.requests FROM clients c LEFT JOIN app_access_policy p ON p.id=c.id WHERE c.client=? AND c.status='active'");
+  const membership=db.prepare('SELECT approved FROM app_access_members WHERE id=? AND account=?');
+  const access=(owner,client)=>{
+    const policy=accessByClient.get(client);
+    const allowed=!policy?.private||policy.developer===owner||membership.get(policy.id,owner)?.approved===1;
+    return {allowed,canRequest:!allowed&&!!policy.requests,pending:!allowed&&membership.get(policy.id,owner)?.approved===0};
+  };
   return {
+    access,
+    accessSettings(owner,id){
+      const app=lookup.get(id,owner);
+      if(!app||app.status==='revoked')return null;
+      const policy=db.prepare('SELECT private,requests FROM app_access_policy WHERE id=?').get(id);
+      return {private:!!policy?.private,requests:!!policy?.requests,
+        members:db.prepare('SELECT account,approved FROM app_access_members WHERE id=? ORDER BY approved DESC,account').all(id)};
+    },
+    saveAccess(owner,id,change){
+      const app=lookup.get(id,owner);
+      if(!app||app.status==='revoked')return false;
+      if(change.action==='settings'){
+        db.prepare('INSERT INTO app_access_policy VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET private=excluded.private,requests=excluded.requests')
+          .run(id,Number(change.private),Number(change.private&&change.requests));
+      }else if(change.action==='approve'){
+        const prior=membership.get(id,change.account);
+        if(!prior&&db.prepare('SELECT count(*) AS total FROM app_access_members WHERE id=?').get(id).total>=500)return false;
+        db.prepare('INSERT INTO app_access_members VALUES(?,?,1) ON CONFLICT(id,account) DO UPDATE SET approved=1').run(id,change.account);
+      }else return db.prepare('DELETE FROM app_access_members WHERE id=? AND account=?').run(id,change.account).changes===1;
+      return true;
+    },
+    requestAccess(owner,client){
+      if(!access(owner,client).canRequest)return false;
+      const {id}=accessByClient.get(client);
+      return !!db.prepare('INSERT OR IGNORE INTO app_access_members SELECT ?,?,0 WHERE (SELECT count(*) FROM app_access_members WHERE id=?) < 500')
+        .run(id,owner,id).changes||membership.get(id,owner)?.approved===0;
+    },
     registration:id=>db.prepare('SELECT c.id,c.client,c.developer,c.status,p.verified FROM clients c LEFT JOIN app_profiles p ON p.id=c.id WHERE c.id=?').get(id),
     clientForId:id=>db.prepare('SELECT client FROM clients WHERE id=?').get(id)?.client,
     brand: (client) => db.prepare(`SELECT c.developer AS owner,c.name,coalesce(nullif(d.name,''),b.developer_name) AS developerName,

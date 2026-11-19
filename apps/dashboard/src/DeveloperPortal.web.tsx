@@ -1,3 +1,6 @@
+import DeveloperAppAccess from './DeveloperAppAccess.web';
+import {confirmIdentity} from './Reauthenticate.web';
+import {api} from './web-account';
 import TrustBadges from './TrustBadges.web';
 import { ArrowLeft, ChevronRight, Database, Grid2X2, ImagePlus, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -122,8 +125,21 @@ export default function DeveloperPortal({back}:{back:()=>void}){
     </div>}
     {secret&&<div className="xc-info" role="status"><strong>Save the credentials securely</strong><code>{secret.clientId}</code>
       {secret.clientSecret&&<code>{secret.clientSecret}</code>}<button className="xc-button xc-secondary" onClick={()=>setSecret(null)}>Hide credentials</button></div>}
+    {existing&&existing.status!=='revoked'&&<DeveloperAppAccess key={existing.id} id={existing.id}/>}
     {existing&&existing.status!=='revoked'&&<div className="xc-stack">
       {existing.client&&<small>Client ID <code>{existing.client}</code></small>}
+      {existing.status==='active'&&existing.client&&!existing.native&&<div className="xc-actions">
+        {(['rotate','revoke'] as const).map(action=><button type="button" key={action} className="xc-button xc-secondary" disabled={busy}
+          onClick={()=>{if(!window.confirm('The current OAuth client secret will stop working immediately. Continue?'))return;
+            work(async()=>{
+              if(!(await api('session/access')).confirmed)await confirmIdentity();
+              const credential=await developerApi('apps/'+existing.id+'/client-secret',{action});
+              setSecret(action==='rotate'?credential:null);
+              setNotice(action==='rotate'?'New secret created. Copy it before leaving.':'Client secret revoked.');
+            });
+          }}>{action==='rotate'?'Generate new client secret':'Revoke client secret'}</button>)}
+      </div>}
+
       {deleteConfirm?<><p>Delete {existing.name}? This ends X-Center ID sign-in and API access for this registration. Stored records are retained.</p>
         <div className="xc-actions"><button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>work(async()=>{
           await developerApi('apps/'+existing.id+'/revoke',{});

@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react';
-import { Image, Linking, Pressable, StyleSheet, Switch, Text, View, useColorScheme, type ImageSourcePropType } from 'react-native';
+import { Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View, useColorScheme, type ImageSourcePropType } from 'react-native';
+import {authorizeNative} from './authorize-native';
+import type {RegisteredAppSignInProps} from './registered-signin';
 
 export type OverviewProfile = {
   name: string;
@@ -20,7 +22,11 @@ export type OverviewSyncOption = {
 };
 
 export type AccountOverviewProps = {
-  profile: OverviewProfile;
+  profile: OverviewProfile | null;
+  clientId?: string;
+  signIn?: RegisteredAppSignInProps;
+  onSignIn?: () => void | Promise<void>;
+  onSignOut?: () => void | Promise<void>;
   syncOptions?: readonly OverviewSyncOption[];
   settings?: ReactNode;
   onOpenSettings?: () => void;
@@ -32,35 +38,64 @@ const palettes = {
   dark:{hero:'#243657', panel:'#192433', ink:'#f4f7ff', muted:'#bbc9df', accent:'#b9d0ff', line:'#435676'},
 };
 
-/** Presentation only. The host app owns identity validation, settings and persistence. */
-export function AccountOverview({profile,syncOptions=[],settings,onOpenSettings,onManageAccount}:AccountOverviewProps) {
+/** Account entry and details. The host validates and stores its own session. */
+export function AccountOverview({profile,clientId,signIn,onSignIn,onSignOut,syncOptions=[],settings,onOpenSettings,onManageAccount}:AccountOverviewProps) {
   const palette=useColorScheme()==='dark'?palettes.dark:palettes.light;
   const [pictureFailed,setPictureFailed]=useState<ImageSourcePropType>();
   const [error,setError]=useState('');
+  const [details,setDetails]=useState(false);
+  const [pending,setPending]=useState(false);
+
+  async function start(){
+    setPending(true);setError('');
+    try{
+      if(onSignIn)await onSignIn();
+      else if(signIn){
+        const result=await authorizeNative({...signIn,issuer:'https://id.xcenter.it'});
+        if(result)await signIn.onAuthorized(result);
+      }
+    }catch(failure){setError(failure instanceof Error?failure.message:'Could not sign in.');}
+    finally{setPending(false);}
+  }
+  async function signOut(){
+    setPending(true);setError('');
+    try{await onSignOut?.();setDetails(false);}
+    catch{setError('Could not sign out. Try again.');}
+    finally{setPending(false);}
+  }
+  async function open(url:string){
+    try{await Linking.openURL(url);}
+    catch{setError('Could not open X-Center ID. Try again.');}
+  }
 
   async function manageAccount(){
     setError('');
     try{
       if(onManageAccount)await onManageAccount();
-      else await Linking.openURL('https://id.xcenter.it/profile');
+      else setDetails(true);
     }catch{setError('Could not open X-Center ID. Try again.');}
   }
 
-  function action(label:string,onPress:()=>void){
-    return <Pressable accessibilityRole="button" onPress={onPress}
+  function action(label:string,onPress:()=>void,destructive=false){
+    return <Pressable accessibilityRole="button" disabled={pending} onPress={onPress}
       style={({pressed})=>[styles.action,{backgroundColor:palette.panel,borderColor:palette.line,opacity:pressed?.65:1}]}>
-      <Text style={[styles.actionLabel,{color:palette.accent}]}>{label}</Text>
+      <Text style={[styles.actionLabel,{color:destructive?(palette===palettes.dark?'#ffadad':'#a42635'):palette.accent}]}>{label}</Text>
     </Pressable>;
   }
 
   const badge=(label:string)=><Text style={[styles.badge,{color:palette.accent,backgroundColor:palette.panel}]}>{label}</Text>;
+  const brand=<View style={styles.brand}>
+    <Image source={require('./assets/xcenter-id-mark.png')} accessible={false} style={styles.mark}/>
+    <Text style={[styles.actionLabel,{color:palette.accent}]}>X-Center ID</Text>
+  </View>;
+  if(!profile)return <View style={[styles.hero,{backgroundColor:palette.hero}]}>
+    {brand}
+    <Text accessibilityRole="header" style={[styles.name,{color:palette.ink}]}>Sign in or create an account</Text>
+    {(onSignIn||signIn)&&action(pending?'Opening sign-in…':'Continue with X-Center ID',()=>void start())}
+    {!!error&&<Text accessibilityRole="alert" style={{color:palette.ink}}>{error}</Text>}
+  </View>;
   const showPhoto=profile.photo&&profile.photo!==pictureFailed;
-  return <View style={styles.overview}>
-    <View style={[styles.hero,{backgroundColor:palette.hero}]}>
-      <View style={styles.brand}>
-        <Image source={require('./assets/xcenter-id-mark.png')} accessible={false} style={styles.mark}/>
-        <Text style={[styles.actionLabel,{color:palette.accent}]}>X-Center ID</Text>
-      </View>
+  const identity=<>
       <View style={styles.identity}>
         {showPhoto?<Image source={profile.photo} accessibilityLabel="Profile photo" style={styles.avatar} onError={()=>setPictureFailed(profile.photo)}/>:
           <View accessible={false} style={[styles.avatar,styles.avatarFallback,{backgroundColor:palette.panel}]}>
@@ -76,9 +111,26 @@ export function AccountOverview({profile,syncOptions=[],settings,onOpenSettings,
         {profile.verified&&badge('Verified profile')}
         {profile.administrator&&badge('Administrator')}
       </View>}
-      {action('Manage X-Center ID',()=>void manageAccount())}
-      {!!error&&<Text accessibilityRole="alert" style={{color:palette.ink}}>{error}</Text>}
+  </>;
+  const app=clientId??signIn?.clientId;
+  return <View style={styles.overview}>
+    <View style={[styles.hero,{backgroundColor:palette.hero}]}>
+      {brand}{identity}
+      {action('Manage account & data →',()=>void manageAccount())}
+      {!details&&!!error&&<Text accessibilityRole="alert" style={{color:palette.ink}}>{error}</Text>}
     </View>
+    <Modal visible={details} animationType="slide" presentationStyle="pageSheet" onRequestClose={()=>setDetails(false)}>
+      <ScrollView style={{backgroundColor:palette.panel}} contentContainerStyle={styles.sheet}>
+        {action('Back to settings',()=>setDetails(false))}
+        <View style={[styles.hero,{backgroundColor:palette.hero}]}>
+          {brand}{identity}
+          <View style={styles.badges}>
+            {action('Open dashboard',()=>void open('https://id.xcenter.it/dashboard'))}
+            {app&&action('Manage app',()=>void open('https://id.xcenter.it/permissions/'+encodeURIComponent(app)))}
+            {onSignOut&&action('Sign out',()=>void signOut(),true)}
+          </View>
+          {!!error&&<Text accessibilityRole="alert" style={{color:palette.ink}}>{error}</Text>}
+        </View>
     {(syncOptions.length>0||settings||onOpenSettings)&&<View style={styles.settings}>
       <Text accessibilityRole="header" style={[styles.heading,{color:palette.ink}]}>App settings</Text>
       {syncOptions.map(option=><View key={option.id} style={[styles.option,{backgroundColor:palette.panel,borderColor:palette.line}]}>
@@ -92,11 +144,14 @@ export function AccountOverview({profile,syncOptions=[],settings,onOpenSettings,
       {settings}
       {onOpenSettings&&action('Open app settings',onOpenSettings)}
     </View>}
+      </ScrollView>
+    </Modal>
   </View>;
 }
 
 const styles=StyleSheet.create({
   overview:{gap:20},
+  sheet:{padding:20,gap:16},
   hero:{borderRadius:22,padding:18,gap:13},
   brand:{flexDirection:'row',alignItems:'center',gap:8},
   mark:{width:28,height:24,resizeMode:'contain'},

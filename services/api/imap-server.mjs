@@ -31,7 +31,7 @@ export function createImapServer({tls,credentials,store}){
   if(++connections>30){connections--;socket.end('* BYE Server busy\r\n');return;}
   let identity=null,folder=null,readOnly=false,buffer=Buffer.alloc(0),chain=Promise.resolve(),idle=null,append=null,pendingAuth=null;
   const send=text=>socket.write(text+'\r\n');let snapshot=[];
-  socket.setTimeout(15*60000,()=>socket.end('* BYE Inactive\r\n'));socket.on('error',()=>{});
+  socket.setTimeout(30*60000,()=>socket.end('* BYE Inactive\r\n'));socket.on('error',()=>{});
   socket.once('close',()=>{connections--;if(idle)clearInterval(idle.timer);});
   send('* OK X-Center ID mail ready');
   const valid=()=>identity&&credentials.valid(identity.owner,identity.id);

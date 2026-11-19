@@ -1,12 +1,16 @@
+import {mailClientSettings} from './mail-client-settings';
 import {useEffect,useState} from 'react';import {Alert,Pressable,Text,TextInput,View} from 'react-native';import {nativeReauthenticate,nativeRequest} from './native-account';
-export default function MailClients({token,colors}:{token:string;colors:{ink:string;muted:string;accent:string;soft:string}}){
+export default function MailClients({token,colors,username}:{username?:string;token:string;colors:{ink:string;muted:string;accent:string;soft:string}}){
  const [clients,setClients]=useState<{id:string;label:string}[]>([]),[label,setLabel]=useState(''),[secret,setSecret]=useState(''),[editing,setEditing]=useState(false),[status,setStatus]=useState('');
  const load=()=>nativeRequest('mail/clients',token).then(r=>setClients(r.clients));useEffect(()=>{void load().catch(e=>setStatus(e.message));},[token]);
  async function act(body:object){try{if(!(await nativeRequest('session/access',token)).confirmed)await nativeReauthenticate(token);const result=await nativeRequest('mail/clients',token,body);if(result.password)setSecret(result.password);setEditing(false);setLabel('');await load();}catch(e){setStatus(e instanceof Error?e.message:'Could not update mail clients.');}}
  const button=(text:string,press:()=>void)=><Pressable accessibilityRole="button" onPress={press} style={{minHeight:44,padding:12,borderRadius:10,backgroundColor:colors.soft}}><Text style={{color:colors.accent}}>{text}</Text></Pressable>;
  return <View style={{gap:12}}><Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Mail clients</Text><Text style={{color:colors.muted}}>Create a separate credential for each mail app.</Text>{button('Add mail client',()=>{setEditing(!editing);setSecret('');})}
  {editing&&<><TextInput accessibilityLabel="Client name" value={label} maxLength={64} onChangeText={setLabel} style={{color:colors.ink,minHeight:48}}/>{button('Create client credential',()=>void act({action:'create',label}))}</>}
- {secret&&<><Text selectable style={{color:colors.ink}}>{secret}</Text><Text style={{color:colors.muted}}>Save this in your mail app now; it is shown once.</Text>{button('Hide credential',()=>setSecret(''))}</>}
+ {secret&&<><Text style={{color:colors.muted}}>Save this in your mail app now; it is shown once.</Text>{button('Hide credential',()=>setSecret(''))}</>}
  {clients.map(client=><View key={client.id} style={{gap:6}}><Text style={{color:colors.ink}}>{client.label}</Text>{button('Revoke client',()=>Alert.alert('Revoke '+client.label+'?','This mail app will lose access.',[{text:'Cancel',style:'cancel'},{text:'Revoke',style:'destructive',onPress:()=>void act({action:'revoke',id:client.id})}]))}</View>)}
- <Text style={{color:colors.muted}}>Server mail.xcenter.it · IMAP 993 SSL/TLS · SMTP 465 SSL/TLS with authentication. Use your primary mailbox address and the generated client password. One recipient and one attachment up to 256 KB per message.</Text>{status&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}</View>;
+ <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Mail app connection settings</Text>
+ {mailClientSettings(username,secret).map(([label,value])=><View key={label} style={{padding:10,borderRadius:8,backgroundColor:colors.soft}}>
+   <Text style={{color:colors.muted}}>{label}</Text><Text selectable style={{color:colors.ink}}>{value}</Text>
+ </View>)}{status&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}</View>;
 }

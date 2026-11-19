@@ -156,7 +156,7 @@ async function activateApplication(req,res,id) {
 
 const consentApi = provider && store ? createApiHandler({
   registry, store, apps:registry, consoleClient:'account-consent-session', allowPersistentGrants:true,
-  canGrant:(owner,source,destination)=>!accounts.isDisconnected(owner,source)&&!accounts.isDisconnected(owner,destination),
+  canGrant:(owner,source,destination)=>registry.access(owner,source).allowed&&registry.access(owner,destination).allowed&&!accounts.isDisconnected(owner,source)&&!accounts.isDisconnected(owner,destination),
   authenticate(req) {
     const session = accounts.current(req);
     return session ? {owner:session.owner,client:'account-consent-session'} : null;
@@ -314,6 +314,58 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     if (!session) { res.writeHead(401, {'Cache-Control':'no-store'}).end(); return; }
     res.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store'});
     res.end(JSON.stringify({apps:registry.published().filter(({client})=>!accounts.isDisconnected(session.owner,client))}));
+    return;
+  }
+  const accessId=/^\/account\/developer\/apps\/([0-9a-f-]{36})\/access$/.exec(path)?.[1];
+  if(accessId){
+    const answer=(status,body)=>res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(body));
+    const owner=accounts.current(req)?.owner;
+    if(!owner||!accounts.identity(owner))return answer(403,{error:'Sign in to manage app access.'});
+    const view=()=>{
+      const settings=registry.accessSettings(owner,accessId);
+      return settings?{...settings,members:settings.members.flatMap(({account,approved})=>{
+        const username=accounts.username(account);
+        return username?[{username,approved:!!approved}]:[];
+      })}:null;
+    };
+    if(req.method==='GET'){
+      const settings=view();
+      return settings?answer(200,settings):answer(404,{error:'App unavailable.'});
+    }
+    const allowed=()=>accounts.current(req)?.owner===owner&&accounts.allowsMutation(req)&&req.headers['x-authnjs-request']==='developer-portal';
+    if(req.method!=='PUT'||!allowed())return answer(403,{error:'Open the developer portal to manage access.'});
+    void (async()=>{
+      const input=await readJson(req,2048);
+      if(!allowed())return answer(403,{error:'Sign in to manage app access.'});
+      if(!registry.accessSettings(owner,accessId))return answer(404,{error:'App unavailable.'});
+      if(input.action==='settings'){
+        if(typeof input.private!=='boolean'||typeof input.requests!=='boolean')return answer(422,{error:'Choose valid access settings.'});
+      }else if(['approve','remove'].includes(input.action)&&typeof input.username==='string'&&/^[a-z][a-z0-9]{2,23}$/.test(input.username)){
+        input.account=accounts.ownerForUsername(input.username);
+        if(!input.account||input.account===owner)return answer(422,{error:'Choose another existing username.'});
+      }else return answer(422,{error:'Choose a valid access action.'});
+      if(!registry.saveAccess(owner,accessId,input))return answer(409,{error:'Could not update access.'});
+      return answer(200,view());
+    })().catch(error=>answer(error.status??503,{error:'Could not manage app access.'}));
+    return;
+  }
+  const credentialsId=/^\/account\/developer\/apps\/([0-9a-f-]{36})\/client-secret$/.exec(path)?.[1];
+  if(credentialsId&&provider){
+    const answer=(status,body)=>res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(body));
+    const active=accounts.current(req);
+    if(req.method!=='POST')return answer(405,{error:'Method unavailable.'});
+    const allowed=()=>active&&accounts.current(req)?.owner===active.owner&&accounts.allowsMutation(req)&&
+      req.headers['x-authnjs-request']==='developer-portal'&&accounts.recentlyConfirmed(req);
+    if(!allowed())return answer(403,{error:'Confirm your identity to manage client credentials.'});
+    void (async()=>{
+      const {action}=await readJson(req,1024);
+      if(!allowed())return answer(403,{error:'Confirm your identity to manage client credentials.'});
+      const app=registry.lookup(active.owner,credentialsId);
+      if(app?.status!=='active'||!app.client||app.native)return answer(404,{error:'Confidential app registration unavailable.'});
+      if(action!=='rotate'&&action!=='revoke')return answer(422,{error:'Choose a credential action.'});
+      const result=await provider.changeClientSecret(app.client,action);
+      return result?answer(200,result):answer(404,{error:'Confidential app registration unavailable.'});
+    })().catch(error=>answer(error.status??503,{error:'Could not manage the app secret.'}));
     return;
   }
   const revocationId = /^\/account\/developer\/apps\/([0-9a-f-]{36})\/revoke$/.exec(path)?.[1];
