@@ -405,3 +405,12 @@ AUTHN-095 through AUTHN-103 web/API and mail-client changes are live in 0.12.0 r
 ### AUTHN-104 · Preferred account overview and secure sign-in completion
 
 Implemented under the user's final one-batch usage override. The integration skill recommends one AccountOverview in Settings, mandates ASWebAuthenticationSession on iOS, and documents verified callback and backend pickup completion. Expo SDK 0.3.0 adds managed iOS backend pickup with automatic sheet dismissal and a managed same-origin HTTPS website redirect. Eleven dashboard tests, the freshly packed SDK typecheck and skill validation passed. Installed iOS and Android behavior and an actual relying-party browser redirect remain unverified.
+
+### Native dashboard parity and standalone public SDK
+
+| ID | Request | State | Next action and verification |
+| --- | --- | --- | --- |
+| AUTHN-105 | Match the mobile web dashboard on native, especially Administration, and preserve native features | Queued | Compare existing web and native screen hierarchies with isolated sample data. Identify shared design tokens and native equivalents for row dividers, card grouping, semantic colors and admin actions. Verify both at phone widths in light and dark mode, then verify the resulting native build on a supported target. |
+| AUTHN-106 | Publish reusable X-Center ID modules in a separate public GitHub repository and update the integration skill | Queued | Inventory the current Expo API and document the cross-platform contract for managed browser sign-in, account overview and backend session handling. Port to SwiftUI, Kotlin/Compose, Flutter and standards-based HTML, with React/Next.js and a Vercel-compatible server example. Include other web frameworks through portable browser APIs where appropriate. Preserve registered callback validation and server-side credentials, use a fresh repository with reviewed source files, verify each platform at its available level, and update the maintained skill and integration docs with the actual public URL. |
+
+20 November checkpoint under UADS §0. Weekly usage had 21% remaining, with no reset credit and a 35% minimum until the reset moves to under five days away. The weekly reset is 25 November at 15:25 CET. The five-hour window had 84% remaining, with a reset at 15:15 CET on 20 November. The prior one-batch override has expired. Resume by rechecking both limits, then compare mobile web and native Administration for AUTHN-105. No implementation, build, or SDK publication began in this checkpoint.
