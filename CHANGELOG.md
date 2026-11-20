@@ -4,6 +4,20 @@ This history covers the original AuthNJS source and the X-Center ID rewrite. X-C
 Versions were assigned retrospectively to source milestones. Deployment and native publication are tracked separately.
 Each entry below includes the actual commits in its range. The current version includes the work under this release entry.
 
+## 0.13.0 · 2026-11-20
+
+- Native Overview uses the mobile website's profile card, shortcut tiles and account-status layout.
+- Native Administration has separate Accounts, Username requests, Support inbox, Server storage, Developer verification and Registered apps cards. Account and app-storage details open in their own views.
+- The standalone public SDK provides Expo, SwiftUI, Compose, Flutter and web account components, plus a Next.js example and the integration skill.
+
+<details>
+<summary>Source changes</summary>
+
+- `48d0420` fix(dashboard): match mobile web account and administration surfaces
+- [Standalone SDK source](https://github.com/Xarber/xcenter-id-sdk/commit/eab0298)
+
+</details>
+
 ## 0.12.0 · 2026-11-19
 
 ### Mail setup and app approvals

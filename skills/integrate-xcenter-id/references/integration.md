@@ -24,7 +24,7 @@ Follow [session renewal and account UI](sessions-and-ui.md) for the preferred se
 
 ## Optional Expo package
 
-The [Expo package in the X-Center ID repository](https://github.com/Xarber/xcenter-id/tree/testing/packages/expo) is `@authnjs/expo`. It currently targets React 19, React Native >=0.83 <0.89 and Expo 58 authentication modules. Read its package.json and installed target versions. Install from a checkout of the GitHub repository or a verified package archive. Do not embed a private repository access token into the target app or a package URL.
+The [Expo package in the public SDK repository](https://github.com/Xarber/xcenter-id-sdk/tree/main/packages/expo) is `@authnjs/expo`. It currently targets React 19, React Native >=0.83 <0.89 and Expo 58 authentication modules. Read its package.json and installed target versions. Install from a checkout of the GitHub repository or a verified package archive. Do not embed a private repository access token into the target app or a package URL.
 
 AccountEntry from @authnjs/expo renders the reusable account entry UI. RegisteredAppSignIn from @authnjs/expo/registered-signin starts the native flow. authorizeNative from @authnjs/expo/authorize-native uses Expo AuthSession with S256, a cryptographically generated nonce and an HTTPS native return. It requests openid and returns code, verifier, nonce and redirectUri. Cancellation returns null. It does not establish the product session.
 
@@ -42,7 +42,7 @@ The identity provider uses opaque access tokens. Third-party native clients cann
 
 Trace normal login, deep-link return and app-session restore. Preserve user data when switching login providers. Verify against isolated identities before public deployment. Include negative checks showing that app B cannot redeem app A's code, that a different callback or verifier fails, and that an unregistered/revoked client fails. For public clients, verify the OS sends the claimed HTTPS callback only to the intended app. Backend identity, user consent and OS callback ownership are distinct checks.
 
-Inspect docs/IDENTITY.md, services/api/oidc.mjs, services/api/registry.mjs and packages/expo in the current identity repo if behavior differs. Apply a discovered security fix at its relevant boundary before reporting integration complete.
+If behavior differs from the guide, verify live issuer discovery and the target app's callback, registration and consent configuration. Apply any discovered security fix at its relevant boundary before reporting integration complete.
 
 ## Unsigned apps and clients without an app callback
 

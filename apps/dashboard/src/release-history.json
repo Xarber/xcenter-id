@@ -1,5 +1,10 @@
 [
   {
+    "version":"0.13.0","date":"2026-11-20","revision":"48d0420","title":"Native dashboard and administration",
+    "features":[["people","Review accounts, developers and registered apps in separate Administration cards."],["storage","Check server storage and open verified-app storage from the native app."]],
+    "fixes":["The account overview brings back the colored profile card, shortcut tiles and section dividers from the mobile website."]
+  },
+  {
     "version":"0.12.0","date":"2026-11-19","revision":"1c3d28e","title":"Mail setup and app approvals",
     "features":[["mail","Copy generated mail passwords and find mail-client setup in the inbox."],["people","Manage private-app access from a searchable list. Administrators can verify developers directly."],["history","Browse version history from Settings."]],
     "fixes":["Sign-in separates the developer from the account you’re using, suggests email code AutoFill where supported, and shows progress on the action you started.","Mail clients gain additional reconnect authentication support."]

@@ -14,7 +14,7 @@ On signed iOS and Android apps, prefer the platform’s authentication browser. 
 
 ## Build the account screen
 
-Use `AccountOverview` from `@authnjs/expo/account-overview` for a single-page React Native account view. It is available in this repository’s [Expo package](https://github.com/Xarber/xcenter-id/tree/testing/packages/expo). Each app supplies validated profile data and controls that make sense for that product.
+Use `AccountOverview` from `@authnjs/expo/account-overview` for a single-page React Native account view. It is available in this repository’s [Expo package](https://github.com/Xarber/xcenter-id-sdk/tree/main/packages/expo). Each app supplies validated profile data and controls that make sense for that product.
 
 - Lead with one rounded, softly tinted account card. Use the X-Center ID mark, circular profile photo, name and username with a strong size hierarchy. Place personal verification and administrator badges in a distinct line. Render compact icons with accessible names wherever only an inline indicator fits.
 - Group app-owned controls away from the identity card. Use labeled switches with a short description only when it helps the user decide. Show sync, sharing and permissions for the actual features the app supports. Save the controls per account and enforce them in the app’s sync worker or backend. The optional slots accept either embedded settings or an action to open the host app’s settings page.
@@ -23,7 +23,7 @@ Use `AccountOverview` from `@authnjs/expo/account-overview` for a single-page Re
 
 ## Expo component specifications
 
-Use the current [Expo package](https://github.com/Xarber/xcenter-id/tree/testing/packages/expo) and check its peer dependencies against the target app.
+Use the current [Expo package](https://github.com/Xarber/xcenter-id-sdk/tree/main/packages/expo) and check its peer dependencies against the target app.
 
 ### RegisteredAppSignIn
 
