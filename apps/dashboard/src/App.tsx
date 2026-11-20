@@ -1,3 +1,4 @@
+import { dashboardThemes } from './native-surfaces';
 import ReleaseNotes from './ReleaseNotes';
 import {currentRelease,seenReleaseKey} from './release-info';
 import Animated, {Easing, FadeIn, ReduceMotion} from 'react-native-reanimated';
@@ -46,8 +47,7 @@ function NativeAccount() {
   useEffect(()=>{void AsyncStorage.getItem(preferencesKey).then(raw=>{const value=parsePreferences(raw);setAccountLanguage(value.language);setPreferences(value);});},[]);
   function preference(value:typeof preferences){setAccountLanguage(value.language);setPreferences(value);void AsyncStorage.setItem(preferencesKey,JSON.stringify(value));}
   const dark=preferences.theme==='dark'||preferences.theme==='system'&&systemTheme==='dark';
-  const colors=dark?{background:'#101522',panel:'#192132',ink:'#f3f6ff',muted:'#b1c1dc',accent:'#9ebcff',soft:'#23355d'}
-    :{background:'#f6f8fc',panel:'#fff',ink:'#141b2e',muted:'#526078',accent:'#214fbe',soft:'#e9f0ff'};
+  const colors=dashboardThemes[dark?'dark':'light'];
   const [tab,setTab]=useState<(typeof pages)[number]>(pages[0]);
   const [token,setToken]=useState<string|null>(null);
   const [account,setAccount]=useState<Account|null>(null);
@@ -151,7 +151,7 @@ function NativeAccount() {
     </Modal>}
     <ReleaseNotes mode={intro?null:releaseNotes} colors={colors} close={()=>setReleaseNotes(null)} openHistory={()=>setReleaseNotes('history')}/>
     <ScrollView contentContainerStyle={styles.content}>
-      {intro?<View style={[styles.card,{backgroundColor:colors.panel}]}>
+      {intro?<View style={[styles.card,{backgroundColor:colors.panel,borderColor:colors.line,borderWidth:1}]}>
         <Animated.View key={introStep} entering={FadeIn.duration(200).easing(Easing.bezier(.23,1,.32,1)).reduceMotion(ReduceMotion.System)}>
           <Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>{introduction[introStep].title}</Text>
           <Text style={{color:colors.muted}}>{introduction[introStep].description}</Text>
@@ -162,7 +162,7 @@ function NativeAccount() {
         {action('Skip introduction','close-outline',()=>setIntro(false))}
       </View>:<>
         {loading?<ActivityIndicator accessibilityLabel="Opening account"/>:locked&&token?
-          <View style={[styles.card,{backgroundColor:colors.panel}]}>
+          <View style={[styles.card,{backgroundColor:colors.panel,borderColor:colors.line,borderWidth:1}]}>
             <Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>Account locked</Text>
             <NativeSupport token={token} colors={colors}/>
             {action('Check again','refresh-outline',()=>void load(token).catch(()=>setError('Could not check your account.')))}
@@ -173,7 +173,7 @@ function NativeAccount() {
             onCodeSubmit={async(ticket,code)=>{const session=await nativeRequest('login/code',undefined,{ticket,code});await useSession(session.token);}}/>:
           <><Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>{accountMessage(tab[0],tab[1])}</Text>
           <Text style={{color:colors.muted}}>{tab[0]==='dashboard'?accountMessage('overviewSummary',copy.dashboard):copy[tab[0]]}</Text>
-          {tab[0]==='settings'?<View style={[styles.card,{backgroundColor:colors.panel}]}>
+          {tab[0]==='settings'?<View style={[styles.card,{backgroundColor:colors.panel,borderColor:colors.line,borderWidth:1}]}>
           <Text style={{color:colors.ink,fontWeight:'700'}}>Theme</Text>
           <View style={styles.preferenceChoices}>{(['system','light','dark'] as const).map(value=><Pressable key={value} accessibilityRole="radio" accessibilityState={{checked:preferences.theme===value}} onPress={()=>preference({...preferences,theme:value})} style={[styles.button,{backgroundColor:preferences.theme===value?colors.soft:colors.panel}]}><Text style={{color:colors.ink}}>{value}</Text></Pressable>)}</View>
           <Text style={{color:colors.ink,fontWeight:'700'}}>Language</Text>
@@ -198,7 +198,7 @@ function NativeAccount() {
         {error&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{error}</Text>}</>}
       </>}
     </ScrollView>
-    {token&&account&&<View accessibilityRole="tablist" style={{flexDirection:'row',borderTopWidth:1,borderColor:colors.soft,backgroundColor:colors.panel,paddingVertical:8}}>
+    {token&&account&&<View accessibilityRole="tablist" style={{flexDirection:'row',borderTopWidth:1,borderColor:colors.line,backgroundColor:colors.panel,paddingVertical:8}}>
       {(['dashboard','apps','settings',...(account.admin?['admin']:[])]).map(id=>{const page=pages.find(page=>page[0]===id)!;
         const selected=id==='dashboard'?!['apps','permissions','developer','settings','support','mail-clients','admin'].includes(tab[0]):id==='apps'?['apps','permissions','developer'].includes(tab[0]):id==='settings'?['settings','support','mail-clients'].includes(tab[0]):tab[0]==='admin';
         return <Pressable key={id} accessibilityRole="tab" accessibilityState={{selected}} onPress={()=>{setTab(page);setDeveloper(false);setSampleMode(false);taps.current=0;}}

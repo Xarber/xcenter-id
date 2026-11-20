@@ -1,3 +1,5 @@
+import NativeAdminInventory from './NativeAdminInventory';
+import { Surface, SurfaceTitle, SymbolTile, type DashboardTheme } from './native-surfaces';
 import CopyButton from './CopyButton';
 import DeviceSignIn from './DeviceSignIn';
 import LinkedAppPermissions from './LinkedAppPermissions';
@@ -34,7 +36,7 @@ type Mail = {id:string;received:number;size:number;subject?:string;from?:string;
 type Grant = {source:string;destination:string;expires:number};
 type SampleGrant = {source:string;destination:string;sourceName:string;app:string;shared:boolean;expires:number|null};
 type App = {client:string;name:string};
-type Theme = {background:string;panel:string;ink:string;muted:string;accent:string;soft:string};
+type Theme = DashboardTheme;
 export type NativeSection = 'mail-clients'|'dashboard'|'profile'|'devices'|'security'|'apps'|'developer'|'permissions'|'storage'|'files'|'friends'|'mail'|'support'|'admin';
 
 type Props = {
@@ -71,6 +73,8 @@ function MailScreen({colors,close,children}:{colors:Theme;close:()=>void;childre
 export default function NativeSections({ section,token,account,colors,reload,expired,passkeys,navigate }:Props) {
   const [supportSubject,setSupportSubject]=useState('');
   const [supportText,setSupportText]=useState('');
+  const [heroPhotoFailed,setHeroPhotoFailed]=useState(false);
+  const [adminDetail,setAdminDetail]=useState<'account'|'storage'|null>(null);
   const [adminAuthorized,setAdminAuthorized]=useState(false);
   const [newUsername,setNewUsername]=useState('');
   const [usernameRequest,setUsernameRequest]=useState<UsernameRequest|null>(null);
@@ -191,8 +195,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       'All requests':'arrow-back','Send mailbox reply':'send-outline','Remove request':'trash-outline','Refresh requests':'refresh',
     };
     if(section==='admin'&&adminIcons[label])return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={work}
-      style={[styles.fileAction,{backgroundColor:colors.soft,opacity:disabled?0.6:1}]}>
-      <Ionicons name={adminIcons[label]} size={22} color={colors.accent}/><Text style={{fontSize:12,color:colors.accent}}>{label}</Text>
+      style={({pressed})=>[styles.adminAction,{backgroundColor:pressed?colors.soft:colors.panel,borderColor:colors.line,opacity:disabled?0.6:1}]}>
+      <Ionicons name={adminIcons[label]} size={18} color={colors.accent} accessible={false}/><Text style={{fontSize:13,fontWeight:'600',color:colors.ink,flexShrink:1}}>{label}</Text>
     </Pressable>;
     return <Pressable accessibilityRole="button" disabled={disabled} onPress={work}
       style={({pressed})=>[styles.button,{backgroundColor:colors.soft,opacity:pressed||disabled?.6:1}]}>
@@ -216,28 +220,55 @@ export default function NativeSections({ section,token,account,colors,reload,exp
     Alert.alert(title,body,[{text:'Cancel',style:'cancel'},{text:'Confirm',style:'destructive',onPress:operation}]);
   }
   function row(key:string,label:string,description:string,actions?:ReactNode) {
-    return <View style={[styles.row,{borderColor:colors.soft}]} key={key}><Text style={[styles.label,{color:colors.ink}]}>{label}</Text>
+    return <View style={[styles.row,{borderColor:colors.line}]} key={key}><Text style={[styles.label,{color:colors.ink}]}>{label}</Text>
       {description?paragraph(description):null}{actions}</View>;
   }
 
   let content:ReactNode;
   switch(section) {
     case 'mail-clients':content=<MailClients token={token} colors={colors} username={account.profile?.username}/>;break;
-    case 'dashboard':
+    case 'dashboard': {
+      const shortcutIcons = {
+        profile: ['person-outline', 'blue'],
+        security: ['shield-checkmark-outline', 'mint'],
+        permissions: ['key-outline', 'lavender'],
+        devices: ['phone-portrait-outline', 'blue'],
+      } as const;
       content=<>
-        <View style={[styles.overviewHero,{backgroundColor:colors.soft}]}>
-          <Text accessibilityRole="header" style={[styles.overviewTitle,{color:colors.ink}]}>{accountGreeting(account.profile?.givenName||account.name)}</Text>
-          {account.profile&&paragraph('@'+account.profile.username)}
-          <TrustBadges verified={account.verified} admin={account.admin} color={colors.ink}/>
-          {button(accountMessage('viewProfile','View profile'),()=>navigate('profile'))}
+        <View style={styles.overviewHero}>
+          <View style={styles.heroContent}>
+            <Text style={styles.heroSecondary}>{accountMessage('personalAccount','Personal account')}</Text>
+            <Text accessibilityRole="header" style={styles.overviewTitle}>{accountGreeting(account.profile?.givenName||account.name)}</Text>
+            {account.profile&&<Text style={styles.heroSecondary}>@{account.profile.username}</Text>}
+            <TrustBadges verified={account.verified} admin={account.admin} color="#f9fbff"/>
+            <Pressable accessibilityRole="button" onPress={()=>navigate('profile')}
+              style={({pressed})=>[styles.heroButton,{opacity:pressed?0.8:1}]}>
+              <Text style={styles.heroButtonText}>{accountMessage('viewProfile','View profile')}</Text>
+              <Ionicons name="arrow-forward" size={16} color="#233887" accessible={false}/>
+            </Pressable>
+          </View>
+          {account.profile?.hasPicture&&!heroPhotoFailed?<Image style={styles.heroAvatar} accessibilityLabel="Profile photo" onError={()=>setHeroPhotoFailed(true)} source={{
+            uri:accountHost+'/account/avatar',headers:{Authorization:'Bearer '+token,'X-AuthNJS-Native':'account-manager'},
+          }}/>:<View style={styles.heroAvatar}><Ionicons accessible={false} name="person-outline" size={30} color="#3144a5"/></View>}
         </View>
-        {accountShortcuts().map(({id,label,description})=><Pressable key={id} accessibilityRole="button" onPress={()=>navigate(id)}
-          style={({pressed})=>[styles.overviewShortcut,{borderColor:colors.soft,opacity:pressed?0.7:1}]}>
-          <Text style={[styles.label,{color:colors.ink}]}>{label}</Text>{paragraph(description)}
-        </Pressable>)}
-        {row('account-status',accountMessage('accountStatus','Account status'),accountStatus(account.passkeys.length,account.emails.filter(email=>email.verified).length))}
+        <View style={styles.shortcutGrid}>
+          {accountShortcuts().map(({id,label,description})=>{
+            const [icon,tint]=shortcutIcons[id];
+            return <Pressable key={id} accessibilityRole="button" onPress={()=>navigate(id)}
+              style={({pressed})=>[styles.overviewShortcut,{borderColor:colors.line,backgroundColor:pressed?colors.soft:colors.panel}]}>
+              <SymbolTile colors={colors} icon={icon} tint={tint}/>
+              <Text style={[styles.label,{color:colors.ink}]}>{label}</Text>
+              {paragraph(description)}
+            </Pressable>;
+          })}
+        </View>
+        <Surface colors={colors}>
+          <SurfaceTitle colors={colors} title={accountMessage('accountStatus','Account status')} icon="shield-checkmark-outline" tint="mint"/>
+          {paragraph(accountStatus(account.passkeys.length,account.emails.filter(email=>email.verified).length))}
+        </Surface>
       </>;
       break;
+    }
     case 'profile':
       content=<>{paragraph(account.profile?'@'+account.profile.username:'Complete your profile to finish creating your account.')}
         <TrustBadges verified={account.verified} admin={account.admin} color={colors.ink}/>
@@ -444,9 +475,10 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         break;
       }
       content=<>
-        {button('Authenticate',()=>run(async()=>{if(await nativeReauthenticate(token))await load();}))}
-        <NativeAdminUsers token={token} colors={colors}/>
-        <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Username requests</Text>
+        {adminDetail!=='storage'&&<NativeAdminUsers token={token} colors={colors} onDetail={open=>setAdminDetail(open?'account':null)}/>}
+        {!adminDetail&&<>
+        <Surface colors={colors}>
+        <SurfaceTitle colors={colors} title="Username requests" icon="id-card-outline" tint="lavender"/>
         {usernameRequests.length===0&&paragraph('No confirmed requests.')}
         {usernameRequests.map(item=>row(item.id,'@'+item.previous+' → @'+item.proposed,'Confirmed by the account holder',
           <View style={styles.actions}>{(['approve','reject'] as const).map(action=><View key={action}>
@@ -454,7 +486,9 @@ export default function NativeSections({ section,token,account,colors,reload,exp
               await api('admin/username-changes',{id:item.id,action});await load();
             },action==='approve'?'Username changed.':'Request declined.'))}
           </View>)}</View>))}
-        <Text accessibilityRole="header" style={[styles.label,{color:colors.ink}]}>Support inbox</Text>
+        </Surface>
+        <Surface colors={colors}>
+        <SurfaceTitle colors={colors} title="Support inbox" icon="mail-open-outline" tint="mint"/>
         {request?<>{button('All requests',()=>{setRequest(null);setSupportText('');})}
           {row(request.id,request.message.subject||'(No subject)',request.message.sender)}
           {paragraph(request.message.text)}
@@ -475,6 +509,9 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           {requests.map(item=><View key={item.id}>{button((item.external?'Incoming email':item.replied?'Answered request':'Account request')+' · '+new Date(item.received).toLocaleString(),
             ()=>run(async()=>{setRequest({id:item.id,message:await api('admin/support/'+item.id)});setSupportText('');}))}</View>)}
         </>}
+        </Surface>
+        </>}
+        {adminDetail!=='account'&&<NativeAdminInventory token={token} colors={colors} onDetail={open=>setAdminDetail(open?'storage':null)}/>}
       </>;
       break;
     case 'mail':
@@ -571,8 +608,9 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         </MailScreen>}
       </>;
   }
-  return <View style={[styles.card,{backgroundColor:colors.panel}]}>{content}
-    {status&&!compose&&!openMail&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}</View>;
+  const statusMessage=status&&!compose&&!openMail?<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>:null;
+  if(section==='dashboard'||section==='admin')return <View style={styles.sectionStack}>{content}{statusMessage}</View>;
+  return <Surface colors={colors}>{content}{statusMessage}</Surface>;
 }
 
 const styles=StyleSheet.create({
@@ -580,11 +618,19 @@ const styles=StyleSheet.create({
   mailScreen:{flex:1},
   mailContent:{width:'100%',maxWidth:680,alignSelf:'center'},
   composeHeader:{flexDirection:'row',alignItems:'center',gap:12},
+  adminAction:{minHeight:44,flexDirection:'row',alignItems:'center',alignSelf:'flex-start',gap:7,borderWidth:1,borderRadius:10,paddingHorizontal:11,paddingVertical:7},
   fileAction:{width:44,height:44,borderRadius:11,alignItems:'center',justifyContent:'center'},
-  overviewHero:{gap:9,borderRadius:18,padding:16},
-  overviewTitle:{fontSize:25,fontWeight:'700'},
-  overviewShortcut:{gap:4,borderWidth:1,borderRadius:12,padding:12,minHeight:52},
-  card:{gap:14,padding:17,borderRadius:20},
+  card:{gap:14,padding:16,borderRadius:20},
+  sectionStack:{gap:14},
+  overviewHero:{flexDirection:'row',alignItems:'center',gap:14,borderRadius:19,padding:20,backgroundColor:'#263b93'},
+  heroContent:{flex:1,gap:6},
+  heroSecondary:{color:'#e1e8ff'},
+  overviewTitle:{fontSize:26,fontWeight:'800',letterSpacing:-0.6,color:'#f9fbff'},
+  heroAvatar:{width:66,height:66,borderRadius:33,borderWidth:4,borderColor:'#aab9ea',backgroundColor:'#e0e7ff',alignItems:'center',justifyContent:'center'},
+  heroButton:{flexDirection:'row',alignItems:'center',alignSelf:'flex-start',gap:8,minHeight:44,paddingHorizontal:12,borderRadius:10,backgroundColor:'#ffffff',marginTop:6},
+  heroButtonText:{color:'#233887',fontWeight:'700',flexShrink:1},
+  shortcutGrid:{flexDirection:'row',flexWrap:'wrap',gap:8},
+  overviewShortcut:{flexBasis:'47%',flexGrow:1,gap:6,borderWidth:1,borderRadius:14,padding:11},
   row:{gap:7,borderBottomWidth:StyleSheet.hairlineWidth,paddingBottom:12},
   avatar:{width:72,height:72,borderRadius:36},
   label:{fontSize:16,fontWeight:'700'},

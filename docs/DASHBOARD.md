@@ -6,6 +6,8 @@ The Expo app in `apps/dashboard` supports iOS, Android and web. Both the web and
 
 The web sidebar and native navigation include account status, profile, devices, sign-in and security, connected apps, permissions, data usage, files, mail and settings. Web accounts show Administration when the API confirms the account is in the deployment's admin allowlist. Settings can replay the introduction. Three taps on the version unlock Developer Options, including the isolated sample dashboard. The first automatic introduction is recorded in local browser storage and survives reloads.
 
+The native Overview uses the mobile web dashboard's profile hero, tinted shortcut tiles, and separate account-status card. Native Administration groups Accounts, Username requests, Support inbox, Server storage, Developer verification and Registered apps into bordered cards with row dividers. Selecting an account or opening app storage shows its own detail view. Native sidebar and bottom tabs, platform dialogs, account operations and secure browser reauthentication stay available.
+
 Signup registers a passkey before asking for a username and profile. Sign-in can start with a username or go directly to the passkey chooser. The birthday determines the age range, and OAuth clients receive the range only when the corresponding profile access is granted. Profile photos are private to the signed-in account. Additional email addresses require verification.
 
 The sign-in illustration uses six Lucide icons for Mail, Files, Saved Places, Apps, Devices and Security around the X-Center ID mark. CSS animates their initial appearance and leaves them static under Reduced Motion. The illustration is decorative and hidden from assistive technology.
