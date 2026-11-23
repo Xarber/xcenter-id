@@ -1,5 +1,5 @@
-import ReleaseNotes from './ReleaseNotes.web';
-import {currentRelease,seenReleaseKey} from './release-info';
+import ReleaseNotes, {DeveloperRelease, FullRelease, ReleaseArchive} from './ReleaseNotes.web';
+import {currentRelease,enteredKey,onboardingKey,releaseAnnouncement,releaseByVersion,seenReleaseKey} from './release-info';
 import TrustBadges from './TrustBadges.web';
 import {introduction} from './introduction';
 import MailClients from './MailClients.web';
@@ -49,7 +49,7 @@ const titles:Record<string,[string,string]> = {
   developer:['Developer apps','Register and verify apps that use X-Center ID.'],
   admin:['Administration','Manage X-Center ID account entitlements.'],
 };
-const introKey='authnjs.dashboard.onboarding.v1';
+
 
 function Logo({href='/dashboard'}:{href?:string}){
   return <a href={href} className="xc-brand"><img src="/authnjs-icon.svg" alt=""/><span>X-Center <b>ID</b></span></a>;
@@ -61,12 +61,13 @@ function Intro({close}:{close:()=>void}){
   useEffect(()=>{dialog.current?.showModal();},[]);
   const page=introduction[step];
   const Icon=[UserRound,Grid2X2,ShieldCheck,Code2][step];
-  return <dialog className="xc-intro" ref={dialog} aria-labelledby="intro-title" onCancel={event=>{event.preventDefault();close();}}>
-    <button type="button" className="xc-close" aria-label="Close introduction" onClick={close}><X size={20}/></button>
-    <div className="xc-stack" aria-live="polite"><span className="xc-symbol xc-sky"><Icon size={24}/></span>
-      <small>{step+1} of {introduction.length}</small><h2 id="intro-title">{page.title}</h2><p>{page.description}</p></div>
-    <div className="xc-actions">{step>0&&<button className="xc-button xc-secondary" onClick={()=>setStep(step-1)}>Back</button>}
-      <button className="xc-button xc-primary" onClick={()=>step===introduction.length-1?close():setStep(step+1)}>{step===introduction.length-1?'Open dashboard':'Next'} <ArrowRight size={16}/></button></div>
+  return <dialog className="xc-intro xc-tour" ref={dialog} aria-labelledby="intro-title" onCancel={event=>{event.preventDefault();close();}}>
+    <img className="xc-intro-logo" src="/authnjs-icon.svg" alt="X-Center ID"/>
+    <div className="xc-stack xc-tour-step" key={step}><span className="xc-symbol xc-sky"><Icon size={24}/></span>
+      <small aria-live="polite">Step {step+1} of {introduction.length}</small><h2 id="intro-title">{page.title}</h2><p>{page.description}</p></div>
+    <div className="xc-tour-progress" aria-hidden="true">{introduction.map((entry,index)=><span key={entry.title} data-active={index<=step}/>)}</div>
+    <div className="xc-actions"><button className="xc-button xc-secondary" onClick={close}>Skip</button>{step>0&&<button className="xc-button xc-secondary" onClick={()=>setStep(step-1)}>Back</button>}
+      <button className="xc-button xc-primary" onClick={()=>step===introduction.length-1?close():setStep(step+1)}>{step===introduction.length-1?'Open app':'Continue'} <ArrowRight size={16}/></button></div>
   </dialog>;
 }
 
@@ -219,13 +220,38 @@ export default function WebApp(){
   const [busy,setBusy]=useState(false);
   const [signInAction,setSignInAction]=useState<SignInAction|null>(null);
   const [intro,setIntro]=useState(false);
-  const [releaseNotes,setReleaseNotes]=useState<'latest'|'history'|null>(null);
+  const [releaseRows,setReleaseRows]=useState<string[][]>([]);
+  const [developerRelease,setDeveloperRelease]=useState('');
   const [sampleMode,setSampleMode]=useState(false);
   const [dev,setDev]=useState(false);
   const taps=useRef(0);
   const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const didShow=useRef(false);
-  const path=window.location.pathname.replace(/^\//,'')||'dashboard';
+  const path=window.location.pathname.replace(/^\//,'');
+  const landing=path==='' && (window.location.search==='?about' || !hasEntered());
+  function hasEntered(){
+    try{return !!(localStorage.getItem(enteredKey)||localStorage.getItem(onboardingKey));}
+    catch{return false;}
+  }
+  function enter(){
+    try{localStorage.setItem(enteredKey,'true');}catch{}
+    window.location.assign('/dashboard');
+  }
+  function acknowledge(){
+    setReleaseRows([]);
+    try{localStorage.setItem(seenReleaseKey,currentRelease.version);}catch{}
+  }
+  function dismissIntro(){
+    setIntro(false);
+    try{localStorage.setItem(onboardingKey,'complete');}catch{}
+    acknowledge();
+  }
+  useEffect(()=>{
+    const read=()=>setDeveloperRelease(new URLSearchParams(window.location.hash.slice(1)).get('release-notes')??'');
+    read();
+    window.addEventListener('hashchange',read);
+    return ()=>window.removeEventListener('hashchange',read);
+  },[]);
   const permissionRoute=/^permissions\/([A-Za-z0-9_-]{1,100})$/.exec(path);
   const profileSection=/^profile\/(visibility|username|developer)$/.exec(path)?.[1];
   const invite=new URLSearchParams(window.location.hash.slice(1)).get('invite');
@@ -243,19 +269,17 @@ export default function WebApp(){
     return ()=>{if(timer.current)clearTimeout(timer.current);};
   },[]);
   useEffect(()=>{
-    if(!account?.profile||path!=='dashboard'||didShow.current||continuation)return;
+    if(account===undefined||locked||(account&&!account.profile)||landing||
+      !['','dashboard'].includes(path)||didShow.current||continuation||emailToken||signInAction)return;
     didShow.current=true;
     try{
-      const onboarded=localStorage.getItem(introKey);
-      const prior=localStorage.getItem(seenReleaseKey);
-      if(!onboarded){localStorage.setItem(introKey,'complete');setIntro(true);}
-      else if(prior!==currentRelease.version)setReleaseNotes('latest');
-      localStorage.setItem(seenReleaseKey,currentRelease.version);
-    }catch{ /* Without storage, the introduction remains available in Settings. */ }
-  },[account?.profile,path,continuation]);
+      if(!localStorage.getItem(onboardingKey))setIntro(true);
+      else setReleaseRows(releaseAnnouncement(localStorage.getItem(seenReleaseKey)));
+    }catch{setIntro(true);}
+  },[account,locked,landing,path,continuation,emailToken,signInAction]);
 
   useEffect(()=>{
-    if(account?.profile&&continuation&&['signin','signup','dashboard'].includes(path)) window.location.replace(authDestination);
+    if(account?.profile&&continuation&&['','signin','signup','dashboard'].includes(path)) window.location.replace(authDestination);
   },[account?.profile,continuation,path,authDestination]);
 
   async function passkey(mode:'signup'|'login'|'add',value?:string){
@@ -284,6 +308,25 @@ export default function WebApp(){
     void api('login/code',{ticket,code}).then(()=>window.location.replace(authDestination))
       .catch(error=>setNotice(error.message)).finally(()=>setSignInAction(null));
   }
+  const startupPanels=<>{intro&&<Intro close={dismissIntro}/>}
+    {!intro&&!signInAction&&releaseRows.length>0&&<ReleaseNotes rows={releaseRows} close={acknowledge} openFull={()=>{
+      acknowledge();window.location.assign('/changelog/'+currentRelease.version);
+    }}/>}</>;
+  if(landing)return <main className="xc-setup xc-landing"><Logo href="/?about"/>
+    <section className="xc-card xc-pad xc-stack"><h1>One account for your apps</h1>
+      <p>Sign in with passkeys, review what connected apps can access, and manage your files and mailbox.</p>
+      <button className="xc-button xc-primary" onClick={enter}>Open web app <ArrowRight size={17}/></button>
+      <div className="xc-actions"><a href="/docs">Developer documentation</a><a href="/changelog">Version history</a>
+        <a href="https://github.com/Xarber/xcenter-id">GitHub</a></div>
+    </section>
+  </main>;
+  if(path==='changelog'||path.startsWith('changelog/')){
+    const release=releaseByVersion(path.slice('changelog/'.length));
+    return <main className="xc-setup"><Logo href="/?about"/>
+      {path==='changelog'?<ReleaseArchive/>:release?<FullRelease release={release}/>:<><h1>Version unavailable</h1><a href="/changelog">Version history</a></>}
+      <a href="/dashboard">Open dashboard</a>
+    </main>;
+  }
   if(path==='docs')return <DeveloperDocumentation/>;
   if(account===undefined)return <div className="xc-loading"><Logo href="/"/><p role="status">Opening your account…</p></div>;
   if(locked)return <main className="xc-setup"><Logo href="/"/><h1>Account locked</h1><SupportPage/>
@@ -297,7 +340,7 @@ export default function WebApp(){
     <button className="xc-button xc-secondary" onClick={()=>window.location.reload()}>Check again</button>
     <button className="xc-button xc-secondary" onClick={()=>void api('logout',{}).then(()=>window.location.assign('/signin')).catch(error=>setNotice(error.message))}>Sign out</button>
     {notice&&<p role="alert">{notice}</p>}</main>;
-  if(!account)return <SignIn signup={path==='signup'} continuation={continuation} pending={signInAction} notice={notice} authenticate={username=>login('login',username)} beginUsername={beginUsername} submitCode={submitCode} create={username=>login('signup',username)}/>;
+  if(!account)return <><SignIn signup={path==='signup'} continuation={continuation} pending={signInAction} notice={notice} authenticate={username=>login('login',username)} beginUsername={beginUsername} submitCode={submitCode} create={username=>login('signup',username)}/>{startupPanels}</>;
 
   if(path==='native-session'&&account.profile){
     const params=new URLSearchParams(window.location.search);
@@ -331,7 +374,7 @@ export default function WebApp(){
   const picture=profile.hasPicture?'/account/avatar':null;
   const permissionClient=permissionRoute?.[1];
   const storageRoute=/^developer\/storage\/([0-9a-f-]{36})$/.exec(path)?.[1];
-  const page=profileSection?'profile':storageRoute?'developer':path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':mailRoute?'mail':path.startsWith('admin/users/')?'admin':path;
+  const page=profileSection?'profile':storageRoute?'developer':!path||path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':mailRoute?'mail':path.startsWith('admin/users/')?'admin':path;
   const [title,summary]=titles[page]??[accountMessage('overviewTitle','Account overview'),accountMessage('overviewSummary','Manage the details, devices, and apps connected to your X-Center ID.')];
   const shortcutIcons = {
     profile:[UserRound,'xc-sky'],security:[Fingerprint,'xc-mint'],
@@ -366,14 +409,16 @@ export default function WebApp(){
     <div className="xc-list-row xc-first-setting"><span>Mail app access</span><a className="xc-button xc-secondary" href="/mail-clients">Manage mail clients</a></div>
     <div className="xc-list-row"><span>Feedback and support</span><a className="xc-button xc-secondary" href="/support">Contact support</a></div>
     <div className="xc-list-row"><div className="xc-row-head"><CircleHelp size={22}/><div><strong>Introduction</strong><p>See how your X-Center ID works.</p></div></div><button className="xc-button xc-secondary" onClick={()=>setIntro(true)}>View introduction</button></div>
-    <div className="xc-list-row"><strong>Version history</strong><button className="xc-button xc-secondary" onClick={()=>setReleaseNotes('history')}>View changelog</button></div>
+    <div className="xc-list-row"><strong>Version history</strong><a className="xc-button xc-secondary" href="/changelog">View changelog</a></div>
     <div className="xc-list-row"><div><strong>App version</strong><p>X-Center ID for web</p></div><button className="xc-button xc-secondary" onClick={()=>{
       taps.current+=1;
       if(timer.current) clearTimeout(timer.current);
       if(taps.current>=3){taps.current=0;setDev(true);}
       timer.current=setTimeout(()=>{setDev(false);setSampleMode(false);taps.current=0;},30000);
     }}>{currentRelease.version}</button></div>
-    {dev&&<div className="xc-stack"><h2>Developer Options</h2><a href="/samples">Open sample integrations</a>
+    {dev&&<div className="xc-stack"><h2>Developer Options</h2>
+      <details><summary>Developer changelog</summary><ReleaseArchive developer/></details>
+      {releaseByVersion(developerRelease)&&<DeveloperRelease version={developerRelease}/>}<a href="/samples">Open sample integrations</a>
       <button className="xc-button xc-secondary" onClick={()=>setSampleMode(!sampleMode)}>{sampleMode?'Exit sample dashboard':'Open sample dashboard'}</button>
       {sampleMode&&<div className="xc-sample"><span className="xc-pill">Sample data</span><h2>Sample dashboard</h2>
         {Object.entries(sample).map(([section,items])=><div key={section}><h3>{section}</h3>{items.map(item=><p key={item.id}>{item.title} · {item.detail}</p>)}</div>)}</div>}
@@ -399,7 +444,7 @@ export default function WebApp(){
   </>;
 
   return <div className="xc-shell">
-    <header className="xc-topbar"><button className="xc-icon-link xc-menu-toggle" aria-label={sidebar?'Close page sidebar':'Open page sidebar'} aria-expanded={sidebar} onClick={()=>setSidebar(!sidebar)}><Menu size={23}/></button><Logo/><div className="xc-top-actions">
+    <header className="xc-topbar"><button className="xc-icon-link xc-menu-toggle" aria-label={sidebar?'Close page sidebar':'Open page sidebar'} aria-expanded={sidebar} onClick={()=>setSidebar(!sidebar)}><Menu size={23}/></button><Logo href="/?about"/><div className="xc-top-actions">
       <a href="/settings" className="xc-icon-link" aria-label="Open settings"><Settings size={20}/></a>
       <a href="/profile" className="xc-avatar" aria-label="Open profile">{picture?<img src={picture} alt=""/>:<UserRound size={19}/>}</a>
     </div></header>
@@ -418,7 +463,6 @@ export default function WebApp(){
     <nav className="xc-bottom" aria-label="Main screens">{[
       ['dashboard','Account',UserRound],['apps','Apps',Grid2X2],['settings','Settings',Settings],...(account.admin?[['admin','Admin',ShieldCheck]]:[]),
     ].map(([id,label,Icon])=>{const ItemIcon=Icon as typeof UserRound;const selected=id==='dashboard'?!['apps','permissions','developer','settings','support','mail-clients','admin'].includes(page):id==='apps'?['apps','permissions','developer'].includes(page):id==='settings'?['settings','support','mail-clients'].includes(page):page==='admin';return <a key={String(id)} href={'/'+id} aria-current={selected?'page':undefined}><ItemIcon size={22}/><span>{String(label)}</span></a>;})}</nav>
-    {intro&&<Intro close={()=>setIntro(false)}/>}
-    {!intro&&releaseNotes&&<ReleaseNotes mode={releaseNotes} close={()=>setReleaseNotes(null)} openHistory={()=>setReleaseNotes('history')}/>}
+    {startupPanels}
   </div>;
 }

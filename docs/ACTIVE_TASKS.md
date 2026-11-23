@@ -453,3 +453,9 @@ Follow-up for AUTHN-108 and AUTHN-113–116. The live test registration is alrea
 | AUTHN-119 | Deploy the updated app and start the native build | Queued | Finish independent implementation and verification, stage and validate the production revision with rollback available, then start and verify submission of the four-format native workflow. |
 
 23 November usage checkpoint under UADS §0. The five-hour window has 7% remaining and resets at 21:45 CET on 23 November. The weekly window has 70% remaining and resets at 11:09 CET on 30 November. No portal mutation, new implementation, production deployment or build started for this follow-up. Resume with AUTHN-117 and AUTHN-118 before the release gate.
+
+### Onboarding and release history
+
+| ID | Request | State | Evidence and next action |
+| --- | --- | --- | --- |
+| AUTHN-120 | Apply updated UADS §§16, 37, 40 and 44 to onboarding and past changelogs | In Progress | Implement dismissal-based acknowledgments, platform tours, concise archive cards, version deep links and gated Git notes. Verify source ranges and screenshot provenance before release. This work precedes AUTHN-119 because it changes the deployment and native build. |

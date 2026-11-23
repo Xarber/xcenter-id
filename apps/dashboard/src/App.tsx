@@ -1,6 +1,8 @@
 import { dashboardThemes } from './native-surfaces';
 import ReleaseNotes from './ReleaseNotes';
-import {currentRelease,seenReleaseKey} from './release-info';
+import {currentRelease,onboardingKey,releaseAnnouncement,releaseByVersion,seenReleaseKey} from './release-info';
+import SignInSky from './SignInSky';
+import {StatusBar} from 'react-native';
 import Animated, {Easing, FadeIn, ReduceMotion} from 'react-native-reanimated';
 import {introduction} from './introduction';
 import {languages,parsePreferences,preferencesKey} from './preferences';
@@ -11,7 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { openBrowserAsync } from 'expo-web-browser';
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
-import { AccessibilityInfo, ActivityIndicator, AppState, Modal, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, AppState, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AccountEntry } from '@authnjs/expo';
 import { sample } from './sample';
@@ -36,7 +38,7 @@ const copy:Record<string,string> = {
   friends:'Manage invitations and shared files.',
   mail:'Read and send mail from your mailbox.', settings:'Manage your X-Center ID experience.',developer:'Register and manage your integrations.',support:'Send feedback or get help.',admin:'Manage accounts and support requests.',
 };
-const pref = 'authnjs.dashboard.onboarding.v1';
+
 
 function NativeAccount() {
   const [reducedMotion,setReducedMotion]=useState(true);
@@ -57,7 +59,12 @@ function NativeAccount() {
   const [pending,setPending]=useState(false);
   const [pendingAction,setPendingAction]=useState<'passkey'|'signup'>('passkey');
   const [intro,setIntro]=useState(false);
-  const [releaseNotes,setReleaseNotes]=useState<'latest'|'history'|null>(null);
+  const [releaseNotes,setReleaseNotes]=useState<string|null>(null);
+  const [releaseRows,setReleaseRows]=useState<string[][]>([]);
+  const [startup,setStartup]=useState<{onboarded:string|null;seen:string|null}|null>(null);
+  const [foreground,setForeground]=useState(AppState.currentState==='active');
+  const [incomingVersion,setIncomingVersion]=useState<string|null>(null);
+  const [entryBusy,setEntryBusy]=useState(false);
   const [introStep,setIntroStep]=useState(0);
   const [developer,setDeveloper]=useState(false);
   const [sampleMode,setSampleMode]=useState(false);
@@ -67,14 +74,49 @@ function NativeAccount() {
 
   useEffect(()=>{
     let live=true;
-    void Promise.all([AsyncStorage.getItem(pref),AsyncStorage.getItem(seenReleaseKey)]).then(async ([seen,prior])=>{
-      if(!live)return;
-      if(!seen){setIntro(true);await AsyncStorage.setItem(pref,'complete');}
-      else if(prior!==currentRelease.version)setReleaseNotes('latest');
-      await AsyncStorage.setItem(seenReleaseKey,currentRelease.version);
-    }).catch(()=>{});
+    void Promise.all([AsyncStorage.getItem(onboardingKey),AsyncStorage.getItem(seenReleaseKey)]).then(([onboarded,seen])=>{
+      if(live)setStartup({onboarded,seen});
+    }).catch(()=>{if(live)setStartup({onboarded:null,seen:null});});
     return ()=>{live=false;if(timer.current)clearTimeout(timer.current);};
   },[]);
+  useEffect(()=>{
+    const update=(url:string)=>{
+      const version=/^authnjs-dashboard:\/\/(?:\/)?changelog\/(\d+\.\d+\.\d+)$/.exec(url)?.[1];
+      if(version&&releaseByVersion(version))setIncomingVersion(version);
+    };
+    void Linking.getInitialURL().then(value=>{if(value)update(value);}).catch(()=>{});
+    const subscription=Linking.addEventListener('url',event=>update(event.url));
+    const visibility=AppState.addEventListener('change',state=>setForeground(state==='active'));
+    return ()=>{subscription.remove();visibility.remove();};
+  },[]);
+  useEffect(()=>{
+    if(loading||pending||entryBusy||locked||!foreground||!startup)return;
+    if(incomingVersion){
+      setReleaseNotes(incomingVersion);setIncomingVersion(null);setStartup(null);return;
+    }
+    if(!startup.onboarded)setIntro(true);
+    else{
+      const rows=releaseAnnouncement(startup.seen);
+      if(rows.length){setReleaseRows(rows);setReleaseNotes('latest');}
+    }
+    setStartup(null);
+  },[loading,pending,entryBusy,locked,foreground,startup,incomingVersion]);
+  useEffect(()=>{
+    if(!loading&&!pending&&foreground&&incomingVersion&&!startup){
+      setReleaseNotes(incomingVersion);setIncomingVersion(null);
+    }
+  },[loading,pending,foreground,incomingVersion,startup]);
+  function acknowledge(){
+    void AsyncStorage.setItem(seenReleaseKey,currentRelease.version).catch(()=>{});
+  }
+  function dismissIntro(){
+    setIntro(false);
+    void AsyncStorage.multiSet([[onboardingKey,'complete'],[seenReleaseKey,currentRelease.version]]).catch(()=>{});
+  }
+  function openRelease(mode:string|null){
+    if(releaseNotes==='latest')acknowledge();
+    setReleaseNotes(mode);
+  }
   function expired(){
     setAccount(null);setToken(null);setLocked(false);setTab(pages[0]);
     void clearSession().catch(()=>{});
@@ -132,11 +174,32 @@ function NativeAccount() {
     ]}><Ionicons name={icon} size={18} color={colors.accent}/>
       <Text style={{color:colors.accent,fontWeight:'700'}}>{label}</Text></Pressable>;
   }
-  return <SafeAreaView style={[styles.screen,{backgroundColor:colors.background}]}>
+  const signedOut=!loading&&!locked&&(!token||!account);
+  if(intro)return <SafeAreaView style={[styles.screen,{backgroundColor:colors.background}]}>
+    <ScrollView contentContainerStyle={[styles.content,styles.tour]}>
+      <Image source={require('../public/authnjs-192.png')} accessibilityLabel="X-Center ID" style={styles.tourLogo}/>
+      <Animated.View style={{gap:12}} key={introStep} entering={FadeIn.duration(180).easing(Easing.bezier(.23,1,.32,1)).reduceMotion(ReduceMotion.System)}>
+        <Ionicons name={(['person-circle-outline','apps-outline','shield-checkmark-outline','code-slash-outline'] as const)[introStep]} size={35} color={colors.accent}/>
+        <Text accessibilityLiveRegion="polite" style={{color:colors.muted}}>Step {introStep+1} of {introduction.length}</Text>
+        <Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>{introduction[introStep].title}</Text>
+        <Text style={{color:colors.muted,fontSize:17,lineHeight:25}}>{introduction[introStep].description}</Text>
+      </Animated.View>
+      <View aria-hidden style={{flexDirection:'row',gap:6}}>{introduction.map((step,index)=><View key={step.title}
+        style={{flex:1,height:4,borderRadius:6,backgroundColor:index<=introStep?colors.accent:colors.line}}/>)}</View>
+      <View style={styles.preferenceChoices}>
+        {action('Skip','close-outline',dismissIntro)}
+        {introStep>0&&action('Back','arrow-back-outline',()=>setIntroStep(introStep-1))}
+        {action(introStep===introduction.length-1?'Open app':'Continue','arrow-forward-outline',()=>introStep===introduction.length-1?dismissIntro():setIntroStep(introStep+1))}
+      </View>
+    </ScrollView>
+  </SafeAreaView>;
+  return <SafeAreaView style={[styles.screen,{backgroundColor:signedOut?'#101c36':colors.background}]}>
+    <StatusBar barStyle={signedOut||dark?'light-content':'dark-content'}/>
+    {signedOut&&<SignInSky animate={!reducedMotion&&foreground}/>}
     <View style={styles.header}>
       {token&&account&&<Pressable accessibilityLabel="Open page sidebar" accessibilityRole="button" onPress={()=>setSidebar(true)} style={{padding:10}}><Ionicons name="menu-outline" size={26} color={colors.accent}/></Pressable>}
-      <Ionicons name="id-card-outline" color={colors.accent} size={28}/>
-      <Text style={[styles.brand,{color:colors.ink}]}>X-Center ID</Text>
+      <Ionicons name="id-card-outline" color={signedOut?'#a9c6ff':colors.accent} size={28}/>
+      <Text style={[styles.brand,{color:signedOut?'#f5f8ff':colors.ink}]}>X-Center ID</Text>
     </View>
     {token&&account&&<Modal visible={sidebar} transparent animationType={reducedMotion?'none':'fade'} onRequestClose={()=>setSidebar(false)}>
       <SafeAreaView style={{flex:1,flexDirection:'row',backgroundColor:'#0006'}}>
@@ -150,18 +213,8 @@ function NativeAccount() {
         </View><Pressable style={{flex:1}} accessibilityLabel="Close sidebar" onPress={()=>setSidebar(false)}/>
       </SafeAreaView>
     </Modal>}
-    <ReleaseNotes mode={intro?null:releaseNotes} colors={colors} close={()=>setReleaseNotes(null)} openHistory={()=>setReleaseNotes('history')}/>
-    <ScrollView contentContainerStyle={styles.content}>
-      {intro?<View style={[styles.card,{backgroundColor:colors.panel,borderColor:colors.line,borderWidth:1}]}>
-        <Animated.View key={introStep} entering={FadeIn.duration(200).easing(Easing.bezier(.23,1,.32,1)).reduceMotion(ReduceMotion.System)}>
-          <Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>{introduction[introStep].title}</Text>
-          <Text style={{color:colors.muted}}>{introduction[introStep].description}</Text>
-        </Animated.View>
-        <Text style={{color:colors.muted}}>{introStep+1} of {introduction.length}</Text>
-        {introStep>0&&action('Back','arrow-back-outline',()=>setIntroStep(introStep-1))}
-        {action(introStep===introduction.length-1?'Open dashboard':'Next','arrow-forward-outline',()=>introStep===introduction.length-1?setIntro(false):setIntroStep(introStep+1))}
-        {action('Skip introduction','close-outline',()=>setIntro(false))}
-      </View>:<>
+    <ReleaseNotes mode={releaseNotes} rows={releaseRows} colors={colors} developer={developer} close={()=>openRelease(null)} open={openRelease}/>
+    <ScrollView contentContainerStyle={[styles.content,signedOut&&styles.signInContent]} keyboardShouldPersistTaps="handled">
         {loading?<ActivityIndicator accessibilityLabel="Opening account"/>:locked&&token?
           <View style={[styles.card,{backgroundColor:colors.panel,borderColor:colors.line,borderWidth:1}]}>
             <Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>Account locked</Text>
@@ -169,9 +222,12 @@ function NativeAccount() {
             {action('Check again','refresh-outline',()=>void load(token).catch(()=>setError('Could not check your account.')))}
             {action('Sign out','log-out-outline',()=>void signOut())}
           </View>:!token||!account?
-          <AccountEntry onSignIn={()=>{setPendingAction('passkey');void signIn();}} onCreateAccount={()=>{setPendingAction('signup');void signIn(true);}} pending={pending} pendingAction={pendingAction} error={error}
-            onUsernameSubmit={username=>nativeRequest('login/username',undefined,{username})}
-            onCodeSubmit={async(ticket,code)=>{const session=await nativeRequest('login/code',undefined,{ticket,code});await useSession(session.token);}}/>:
+          <View style={styles.signInGroup}>
+          <Image source={require('../public/authnjs-192.png')} style={styles.signInLogo} accessibilityLabel="X-Center ID"/>
+          <AccountEntry transparent={false} onSignIn={()=>{setPendingAction('passkey');void signIn();}} onCreateAccount={()=>{setPendingAction('signup');void signIn(true);}} pending={pending} pendingAction={pendingAction} error={error}
+            onUsernameSubmit={async username=>{setEntryBusy(true);try{return await nativeRequest('login/username',undefined,{username});}finally{setEntryBusy(false);}}}
+            onCodeSubmit={async(ticket,code)=>{setEntryBusy(true);try{const session=await nativeRequest('login/code',undefined,{ticket,code});await useSession(session.token);}finally{setEntryBusy(false);}}}/>
+          </View>:
           <><Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>{accountMessage(tab[0],tab[1])}</Text>
           <Text style={{color:colors.muted}}>{tab[0]==='dashboard'?accountMessage('overviewSummary',copy.dashboard):copy[tab[0]]}</Text>
           {tab[0]==='settings'?<View style={[styles.card,{backgroundColor:colors.panel,borderColor:colors.line,borderWidth:1}]}>
@@ -183,7 +239,8 @@ function NativeAccount() {
           {action('Support','help-circle-outline',()=>setTab(pages.find(page=>page[0]==='support')!))}
           {action('Developer documentation','book-outline',()=>void openBrowserAsync(accountHost+'/docs'))}
           {action('View introduction' ,'information-circle-outline',()=>{setIntroStep(0);setIntro(true);})}
-          {action('View changelog','book-outline',()=>setReleaseNotes('history'))}
+          {action('Version history','book-outline',()=>openRelease('history'))}
+          {developer&&action('Developer changelog','code-slash-outline',()=>openRelease('history'))}
           {action('Version '+currentRelease.version,'code-slash-outline',()=>{
             if(++taps.current===3){setDeveloper(true);taps.current=0;}
             if(timer.current)clearTimeout(timer.current);
@@ -196,8 +253,7 @@ function NativeAccount() {
         </View>:<NativeSections key={tab[0]} section={tab[0] as NativeSection} account={account} token={token} colors={colors}
           expired={()=>void load(token).catch(()=>setError('Could not check your account.'))} reload={()=>load(token)} passkeys={()=>void openPasskeyEnrollment()}
           navigate={id=>{const next=pages.find(page=>page[0]===id);if(next)setTab(next);}}/>}
-        {error&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{error}</Text>}</>}
-      </>}
+        {error&&!signedOut&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{error}</Text>}</>}
     </ScrollView>
     {token&&account&&<View accessibilityRole="tablist" style={{flexDirection:'row',borderTopWidth:1,borderColor:colors.line,backgroundColor:colors.panel,paddingVertical:8}}>
       {(['dashboard','apps','settings',...(account.admin?['admin']:[])]).map(id=>{const page=pages.find(page=>page[0]===id)!;
@@ -214,6 +270,11 @@ export default function App(){return <SafeAreaProvider><NativeAccount/></SafeAre
 
 const styles=StyleSheet.create({
   screen:{flex:1},
+  tour:{flexGrow:1,justifyContent:'center',gap:24},
+  tourLogo:{width:58,height:58,borderRadius:15},
+  signInContent:{flexGrow:1,justifyContent:'center',maxWidth:520},
+  signInGroup:{gap:18},
+  signInLogo:{width:52,height:52,borderRadius:14,alignSelf:'center'},
   header:{flexDirection:'row',alignItems:'center',gap:10,paddingHorizontal:20,paddingVertical:15},
   brand:{fontSize:22,fontWeight:'800',letterSpacing:-.7},
   preferenceChoices:{flexDirection:'row',flexWrap:'wrap',gap:6},

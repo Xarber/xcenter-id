@@ -1,0 +1,632 @@
+{
+  "0.14.0": {
+    "revision": "c12d206f537c6ddea52079a683e500632d5580a6",
+    "commits": [
+      {
+        "id": "fdde5ca807a423f47b36ec820c5148d2cf4fccf8",
+        "title": "docs(sdk): use the public SDK in integration guides",
+        "detail": "Changed areas: CHANGELOG.md, apps/dashboard, docs/ACTIVE_TASKS.md, docs/INTEGRATION.md, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "22360dcb396f7701a4ed28892ad4c1b7afc4b26f",
+        "title": "docs(release): record native preview and SDK verification",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/reports."
+      },
+      {
+        "id": "3bdca936ebd56fbbbce8bf169e0b5d781f860996",
+        "title": "docs(sdk): record passing platform checks",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/reports."
+      },
+      {
+        "id": "16512dda7307c139d7df83e8f7d07bddd1d3e8f3",
+        "title": "chore(repo): retire the original AuthNJS application tree",
+        "detail": "Changed areas: .hintrc, .vscode/settings.json, AGENTS.md, HTML/about.html, HTML/assets, HTML/auth and 14 more."
+      },
+      {
+        "id": "7ecfbfd7c483aeafe73507cafbe437686e63943a",
+        "title": "feat(consent): group shared permissions and delegate account files",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/FRIENDS.md, docs/HOSTED_DATA.md, docs/INTEGRATION.md, docs/SECURITY.md and 4 more."
+      },
+      {
+        "id": "3a559396d6f5dacca92f81efa9e96c34a3f9a234",
+        "title": "fix(storage): allow registered apps to use private user containers",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/HOSTED_DATA.md, services/api, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "e3ed188d97e154db91866f43f2693e03b31939e6",
+        "title": "docs(queue): correct checkpoint reset times",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "db11c1251fe40c3e66dd7efadb53a8fdda455013",
+        "title": "feat(dashboard): refine device sign-in and the Files browser",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/FRIENDS.md, docs/HOSTED_DATA.md, docs/NAVIGATION.md, docs/SECURITY.md and 2 more."
+      },
+      {
+        "id": "49b4d5a426119b48a33027bcb18c3caeceb5caa2",
+        "title": "docs(integration): prioritize real app icons during registration",
+        "detail": "Changed areas: skills/integrate-xcenter-id."
+      },
+      {
+        "id": "cfa53ae256d95ba5f7e9a5ebc8a282124bd66d16",
+        "title": "chore(repo): remove Finder metadata from tracked skill files",
+        "detail": "Changed areas: skills/integrate-xcenter-id."
+      },
+      {
+        "id": "ee1fd30938859c35fb9e115bca09681b1a952789",
+        "title": "test(dashboard): record device and file browser verification",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/reports, services/api."
+      },
+      {
+        "id": "c12d206f537c6ddea52079a683e500632d5580a6",
+        "title": "docs(queue): checkpoint sign-in and release follow-up",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      }
+    ]
+  },
+  "0.13.0": {
+    "revision": "48d0420898b6c1c89143e53c0b164981cdf820af",
+    "commits": [
+      {
+        "id": "418f89ccf5b976e7b4c6162764ed42dadeb4e9bc",
+        "title": "docs(release): pin the 0.12.0 source history",
+        "detail": "Changed areas: CHANGELOG.md, apps/dashboard."
+      },
+      {
+        "id": "9a323151d93e2c745eea65b52c5a60eae1cb41de",
+        "title": "docs(deploy): record dashboard 0.12.0 rollout",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations."
+      },
+      {
+        "id": "762e9f97cb8aadb3ec77e52f33be0ba9003f9e25",
+        "title": "feat(expo): manage secure sign-in completion across platforms",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, packages/expo, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "f1c1e7dec4a9082b30e3e2c11eeb9407043853fe",
+        "title": "docs(queue): record native parity and public SDK requests",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "48d0420898b6c1c89143e53c0b164981cdf820af",
+        "title": "fix(dashboard): match mobile web account and administration surfaces",
+        "detail": "Changed areas: apps/dashboard, docs/DASHBOARD.md."
+      }
+    ]
+  },
+  "0.12.0": {
+    "revision": "1c3d28e2f6620155483cef880e129fff94c7fc75",
+    "commits": [
+      {
+        "id": "1c3d28e2f6620155483cef880e129fff94c7fc75",
+        "title": "feat(dashboard): improve mail setup and add version history",
+        "detail": "Changed areas: CHANGELOG.md, apps/dashboard, docs/ACTIVE_TASKS.md, docs/IDENTITY.md, docs/INDEX.md, docs/MAIL.md and 4 more."
+      }
+    ]
+  },
+  "0.11.0": {
+    "revision": "8db8fa0845c0ee07e62115682ce48d934169b9aa",
+    "commits": [
+      {
+        "id": "5f4892f8b9cd3b6afe58cbd02c3fbcc5a161fbe3",
+        "title": "fix(identity): restore browser consent and improve app management",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/HOSTED_DATA.md, docs/IDENTITY.md, docs/MAIL.md, packages/expo and 1 more."
+      },
+      {
+        "id": "f465477d694b500d8f0bc2c0f5286d9c8163a921",
+        "title": "feat(developer): add DNS-free registration and data trust controls",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/IDENTITY.md, services/api, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "3c1735ed080b1494c79c119b9a0380d1a291a840",
+        "title": "docs(deploy): record consent and mail production rollout",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations."
+      },
+      {
+        "id": "8db8fa0845c0ee07e62115682ce48d934169b9aa",
+        "title": "docs(queue): record mail polish and release history tasks",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      }
+    ]
+  },
+  "0.10.0": {
+    "revision": "fe1f11fe20b7f87fa4e3caaa2ac0354f626ad492",
+    "commits": [
+      {
+        "id": "727cabce4a83b8b3b5db5f6747847eb9fbe2655c",
+        "title": "docs(queue): record storage navigation and consent requests",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "632861f89536da342b41d6c90298773d10d769d4",
+        "title": "feat(identity): confirm app and device sign-ins",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/API.md, docs/HOSTED_DATA.md, docs/IDENTITY.md, docs/MAIL.md and 2 more."
+      },
+      {
+        "id": "b4ca80c49ccd6a4b2c6c70d13b1fce58668b1067",
+        "title": "docs(queue): record identity validation checkpoint",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "fe1f11fe20b7f87fa4e3caaa2ac0354f626ad492",
+        "title": "docs(deploy): record production identity rollout",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations."
+      }
+    ]
+  },
+  "0.9.0": {
+    "revision": "0e8a29bdcda415e2e3733ee147aa619045e64d41",
+    "commits": [
+      {
+        "id": "b6e24ea3de36ca77dee241356304b4be9ff96293",
+        "title": "fix(dashboard): refresh app branding and show trust badges",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/IDENTITY.md, docs/MAIL.md, services/api."
+      },
+      {
+        "id": "b8fadf9b24376222750c8128fa1565464dea329b",
+        "title": "fix(mail): hide delivery checks on confirmation",
+        "detail": "Changed areas: apps/dashboard."
+      },
+      {
+        "id": "5c34bad77386642e7df64fd9e5e1811828e10a4b",
+        "title": "fix(pwa): restore offline dashboard navigation",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/DASHBOARD.md, services/api."
+      },
+      {
+        "id": "73f1b343d622a5a706fb98c4ed873d246132d8d5",
+        "title": "docs(ops): record dashboard and offline rollout",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations."
+      },
+      {
+        "id": "492b5e181e5bbc8afb2e0b324e3ca9dd27892d6a",
+        "title": "docs(security): record repository publication audit",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/INDEX.md, docs/reports."
+      },
+      {
+        "id": "9d9e734c09186e8dd78d7b9b8460bfd5468695c2",
+        "title": "docs(security): verify retained private data after rewrite",
+        "detail": "Changed areas: docs/reports."
+      },
+      {
+        "id": "f44cda734622784e97072087d685ccfece5e871d",
+        "title": "docs(security): record GitHub purge request submission",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/reports."
+      },
+      {
+        "id": "3f8b33b737161ae3f350b2bfb3b2d91427b6f289",
+        "title": "feat(identity): add required claims and friend import",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/FRIENDS.md, docs/IDENTITY.md, packages/expo, services/api and 1 more."
+      },
+      {
+        "id": "8416eb8e21bba80621eccbe465f13b11d35df332",
+        "title": "docs(queue): record persistent app sessions and Expo account overview",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "5ddcb7a0153d3b73253e50f99cb14c71315fb407",
+        "title": "feat(identity): rotate app sessions and add Expo account overview",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/IDENTITY.md, packages/expo, services/api, skills/integrate-xcenter-id and 1 more."
+      },
+      {
+        "id": "23b8e1d587ccbf89f3067b7467466c3d54517cd1",
+        "title": "docs(ops): record consent and rolling session deployment",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations."
+      },
+      {
+        "id": "0e8a29bdcda415e2e3733ee147aa619045e64d41",
+        "title": "docs(skill): remove machine paths and specify Expo components",
+        "detail": "Changed areas: skills/integrate-xcenter-id."
+      }
+    ]
+  },
+  "0.8.0": {
+    "revision": "abafcd587811f3553c8b0f333b26a6fc67a5f6d6",
+    "commits": [
+      {
+        "id": "e89b9909cda227f123ee0b8307a39de8b37019bf",
+        "title": "fix(dashboard): restore app links and polish account flows",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/MAIL.md, docs/reports, services/api."
+      },
+      {
+        "id": "c1f02bc95d0b2dfa501ed10465b5a5377dafeda6",
+        "title": "fix(dashboard): apply mobile polish and composer motion",
+        "detail": "Changed areas: apps/dashboard, docs/reports, services/api."
+      },
+      {
+        "id": "aa9361903300eff110a6082aee74c2d10a1eaad7",
+        "title": "fix(dashboard): keep selection controls inline in stacked forms",
+        "detail": "Changed areas: apps/dashboard."
+      },
+      {
+        "id": "0c1567e80c096897200cfd98e8f8eb797351c80d",
+        "title": "docs(ops): record dashboard deployment and integration checks",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations."
+      },
+      {
+        "id": "0763f72e4ffa2830860660bada8dda4a57ef7222",
+        "title": "fix(apps): expose deletion and simplify admin inventory",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/INTEGRATION.md, services/api, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "a728db8020e912fa0019c45872328f344e0717b4",
+        "title": "feat(admin): report storage volume capacity and mount health",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/operations, services/api."
+      },
+      {
+        "id": "f24ec7118c2f30d7712494037a45c91e3f8e2d46",
+        "title": "docs(skill): explain hosted data and consent workflows",
+        "detail": "Changed areas: skills/integrate-xcenter-id."
+      },
+      {
+        "id": "6570cef86ac49c155da24bda92588eae06d5299f",
+        "title": "docs(ops): record storage recovery and unsigned app flow",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "87d37718093e85348c5416ae4fa7772756123930",
+        "title": "fix(identity): share linked profiles and restore email verification",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/IDENTITY.md, docs/MAIL.md, services/api, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "d33e885a5ec3788062e68f02f2f406de7b10a0fe",
+        "title": "docs(ops): record profile and verification rollout",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations."
+      },
+      {
+        "id": "85a84200116376713c3dd5ef5be3202f0e578519",
+        "title": "fix(skill): require actionable identity setup and sync integration",
+        "detail": "Changed areas: skills/integrate-xcenter-id."
+      },
+      {
+        "id": "abafcd587811f3553c8b0f333b26a6fc67a5f6d6",
+        "title": "docs(queue): checkpoint integration and verification work",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      }
+    ]
+  },
+  "0.7.0": {
+    "revision": "a28fd8c062b7fe0366014efd6fa7643545fe6433",
+    "commits": [
+      {
+        "id": "1aeefb55c30fb2e5e3019d58d4f0154bbde5faf5",
+        "title": "feat(mail): add protected client access and dashboard aliases",
+        "detail": "Changed areas: .github/workflows, apps/dashboard, docs/ACTIVE_TASKS.md, docs/MAIL.md, docs/TESTING.md, services/api."
+      },
+      {
+        "id": "f21afc2122a8b926c84a0f42d7023f6de36bfd77",
+        "title": "fix(mail): polish address states and portable TLS tests",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/TESTING.md, services/api."
+      },
+      {
+        "id": "2ce79c58cec6524c7380ca0201ddfa16e3a1d8fd",
+        "title": "docs(mail): record verified production relay rollout",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/MAIL.md, docs/operations, uads.json."
+      },
+      {
+        "id": "a28fd8c062b7fe0366014efd6fa7643545fe6433",
+        "title": "docs(qa): record mail checks and native preview submission",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/reports."
+      }
+    ]
+  },
+  "0.6.0": {
+    "revision": "7bf1f0f791cbdafc21424f26f4549e975c7bb672",
+    "commits": [
+      {
+        "id": "d0927a0dcdeac17a4de0c44675387c2633cb956c",
+        "title": "feat(skill): add secure X-Center ID integration guidance",
+        "detail": "Changed areas: docs/INTEGRATION.md, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "9e0584615b212ca99698c09753f5025c2ba8d2af",
+        "title": "feat(accounts): renew admin access and verify email through signed inbound mail",
+        "detail": "Changed areas: .github/workflows, apps/dashboard, docs/ACTIVE_TASKS.md, docs/DASHBOARD.md, docs/MAIL.md, docs/SECURITY.md and 5 more."
+      },
+      {
+        "id": "c0bd5c347983ffabf1eb86674db0706c6f84a121",
+        "title": "fix(mail): distinguish receiver connection errors and record rollout",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/MAIL.md, docs/operations, services/api."
+      },
+      {
+        "id": "d8bf0e58210b454073c46da24688b5dd345653c2",
+        "title": "docs(operations): record verified rollout and remaining mail gates",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations, docs/reports."
+      },
+      {
+        "id": "04f071a04d08eb918c7a5bf527201a479caaf7ca",
+        "title": "fix(ci): parse certificate fingerprints across apksigner versions",
+        "detail": "Changed areas: .github/workflows, scripts/apk-certificate.awk."
+      },
+      {
+        "id": "0095197c30c10c07592e08e63497cdac21e09294",
+        "title": "feat(platform): add hosted app data and reorganize account management",
+        "detail": "Changed areas: apps/dashboard, config/performance-budgets.json, config/release-metadata.json, docs/ACTIVE_TASKS.md, docs/API.md, docs/DEVELOPMENT.md and 12 more."
+      },
+      {
+        "id": "9d1df9b4ce573d829601a94901bb21555d6b00a0",
+        "title": "fix(ci): include certificate parser directory in sparse checkout",
+        "detail": "Changed areas: .github/workflows."
+      },
+      {
+        "id": "7bf1f0f791cbdafc21424f26f4549e975c7bb672",
+        "title": "docs(verification): record private native preview and email pause",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/reports."
+      }
+    ]
+  },
+  "0.5.0": {
+    "revision": "c63f267910472c20db74163c42b22cfcf8533029",
+    "commits": [
+      {
+        "id": "546e6336cc69d23ade2c8711c2dd291fe52a7336",
+        "title": "feat(account): add admin moderation and mailbox support",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/INDEX.md, docs/SUPPORT.md, services/api, uads.json."
+      },
+      {
+        "id": "ae3de187a685b1cfc88c393ab3880317d9417507",
+        "title": "docs(queue): record native preview build receipt",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "3c414967061fe78253b56ecc91b35c418d0268d5",
+        "title": "feat(mail): delete selected inbox messages together",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/MAIL.md, services/api."
+      },
+      {
+        "id": "d5a4551294c4effdfd8ff4e5168538c373a475f5",
+        "title": "feat(account): separate locking and approve username changes",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/DASHBOARD.md, docs/SUPPORT.md, services/api."
+      },
+      {
+        "id": "ec9c8ac840d2394cd8bbc1904322a192576474dc",
+        "title": "fix(ci): explicitly sign the final Android APK",
+        "detail": "Changed areas: .github/workflows, docs/ACTIVE_TASKS.md, docs/RELEASES.md."
+      },
+      {
+        "id": "c63f267910472c20db74163c42b22cfcf8533029",
+        "title": "docs(queue): record build retry and five-hour checkpoint",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      }
+    ]
+  },
+  "0.4.0": {
+    "revision": "1f10dc86e5923f36bfc71be724a5ed095d5cec68",
+    "commits": [
+      {
+        "id": "ff24785ef60b7db3a9daf5b8b5f462d7d7c98def",
+        "title": "feat(sharing): add friend file grants and private address controls",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/FRIENDS.md, docs/INDEX.md, docs/MAIL.md, docs/RELEASES.md and 1 more."
+      },
+      {
+        "id": "4100f299461baa238d041469f8ab7c475aa1a291",
+        "title": "docs(operations): checkpoint SMTP rollout and pending verification",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/MAIL.md."
+      },
+      {
+        "id": "fbb56117d39614808aaaa3cf3bbceb79925ab4d4",
+        "title": "feat(sharing): let friends share publisher-approved saved places",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/FRIENDS.md, services/api."
+      },
+      {
+        "id": "b2331e46a47a382c485eb6e2f1601cd253e32ca6",
+        "title": "fix(mail): make older inbox messages accessible",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/FRIENDS.md, docs/MAIL.md, services/api."
+      },
+      {
+        "id": "b76b48af3deeb4de55ae2d2671cd947a171feb7b",
+        "title": "fix(permissions): hide unlinked apps from the directory",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/IDENTITY.md, services/api."
+      },
+      {
+        "id": "6fd0a227c00b7117388048b474e600498479c368",
+        "title": "feat(i18n): localize core mailbox actions across clients",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/DASHBOARD.md, docs/FRIENDS.md."
+      },
+      {
+        "id": "6ccca0e769eb96802a64ae2a3c35a58fa82b88df",
+        "title": "feat(mail): open a dedicated native composer",
+        "detail": "Changed areas: apps/dashboard, docs/MAIL.md."
+      },
+      {
+        "id": "a2b5fc78c2aed5049969f9afdcf17b3a4244b2b8",
+        "title": "fix(ci): verify Android release signing identity",
+        "detail": "Changed areas: .github/workflows, docs/RELEASES.md."
+      },
+      {
+        "id": "877704268913267f476ed9ac5a07f4955ab36e51",
+        "title": "docs(qa): record isolated account verification",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/INDEX.md, docs/TESTING.md."
+      },
+      {
+        "id": "f2d37966e53d8e7744b861dec2e5d4aded339919",
+        "title": "feat(mail): give messages dedicated readers",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/MAIL.md, docs/TESTING.md, services/api."
+      },
+      {
+        "id": "7116d655c8a604e0cf88c72601e6e850508656d6",
+        "title": "fix(ci): require strict Android bundle signature verification",
+        "detail": "Changed areas: .github/workflows, docs/ACTIVE_TASKS.md, docs/RELEASES.md, docs/TESTING.md."
+      },
+      {
+        "id": "28b4b2c0324a1ccabf5ec14472e55c8c7b96f761",
+        "title": "fix(deps): patch Expo fingerprint glob matching",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/SECURITY.md."
+      },
+      {
+        "id": "1f10dc86e5923f36bfc71be724a5ed095d5cec68",
+        "title": "docs(queue): checkpoint at the weekly usage threshold",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      }
+    ]
+  },
+  "0.3.0": {
+    "revision": "62b523a10fb08625c54e46c1fcfeabe9d3c6c009",
+    "commits": [
+      {
+        "id": "703c9683d67f6ecf367cb1304055377b98c40b5f",
+        "title": "feat(identity): add native account management and app linking",
+        "detail": "Changed areas: apps/dashboard, deploy/xcenter, docs/ACTIVE_TASKS.md, docs/DASHBOARD.md, docs/IDENTITY.md, docs/MAIL.md and 3 more."
+      },
+      {
+        "id": "7c195fedcb86ca15f171a152a516bf69b86521e2",
+        "title": "feat(expo): add registered sign-in entry and refresh account on return",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/DASHBOARD.md, docs/operations, packages/expo, uads.json."
+      },
+      {
+        "id": "e087385f4b617f1ca99294cc2d2cfabdd82d8c13",
+        "title": "feat(web): refine permissions, developer profiles and mail",
+        "detail": "Changed areas: apps/dashboard, deploy/xcenter, docs/ACTIVE_TASKS.md, docs/DASHBOARD.md, docs/IDENTITY.md, docs/MAIL.md and 2 more."
+      },
+      {
+        "id": "4abe542c205cc19ee262fff3071c6a9cce515c46",
+        "title": "docs(release): record web rollout and native artifacts",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations."
+      },
+      {
+        "id": "9916ac63b66b0f1c00c092fd8695a670ef76ff5e",
+        "title": "feat(mail): add private message reading and cleanup",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/MAIL.md, services/api."
+      },
+      {
+        "id": "9ec3b406c0d677bdf7456859ab0c81ea16f35432",
+        "title": "fix(identity): revoke unlinked grants and support encrypted account renames",
+        "detail": "Changed areas: docs/IDENTITY.md, services/api."
+      },
+      {
+        "id": "be3ae5ec94efcb884eea5a7b6767ae65f29fac93",
+        "title": "docs(repo): brand the renamed X-Center ID repository",
+        "detail": "Changed areas: README.md, docs/ACTIVE_TASKS.md, docs/BRANDING.md, docs/assets, uads.json."
+      },
+      {
+        "id": "62b523a10fb08625c54e46c1fcfeabe9d3c6c009",
+        "title": "feat(account): improve signup, consent, mailbox and native dashboard",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/DASHBOARD.md, docs/IDENTITY.md, docs/MAIL.md, docs/RELEASES.md and 4 more."
+      }
+    ]
+  },
+  "0.2.0": {
+    "revision": "5eb0d8fe2d7b0d6777cbc2f3472738e5b629f0ee",
+    "commits": [
+      {
+        "id": "ba3e258b7f1353adf837e402743f4e61232c3f09",
+        "title": "feat(identity): add OIDC clients, sample apps and X-Center mail foundations",
+        "detail": "Changed areas: apps/dashboard, deploy/xcenter, docs/ACTIVE_TASKS.md, docs/BRANDING.md, docs/IDENTITY.md, docs/INDEX.md and 2 more."
+      },
+      {
+        "id": "cab67aafce39178b68bf4adf7b97fdef62a163fb",
+        "title": "chore(identity): reserve infrastructure names and retain backups",
+        "detail": "Changed areas: apps/dashboard, deploy/xcenter, docs/operations, services/api."
+      },
+      {
+        "id": "bf7071da20c3fd6911f20b573ac076650ebd810d",
+        "title": "feat(mail): add authenticated mailbox submission and document production checks",
+        "detail": "Changed areas: apps/dashboard, deploy/xcenter, docs/ACTIVE_TASKS.md, docs/MAIL.md, docs/operations, services/api and 1 more."
+      },
+      {
+        "id": "1cf827320d8654d30188c3e538338c0f5beb9ec0",
+        "title": "docs(release): record public identity and native build receipt",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "b22eac8ace89243243b8d0e681e8e10a9c680864",
+        "title": "feat(identity): redesign the account manager and sign-in",
+        "detail": "Changed areas: apps/dashboard, deploy/xcenter, docs/ACTIVE_TASKS.md, docs/DASHBOARD.md, services/api."
+      },
+      {
+        "id": "4889606662302335b3e23c1b6c93158716183923",
+        "title": "docs(identity): record dashboard verification and rollback",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/MAIL.md, docs/operations."
+      },
+      {
+        "id": "9d37dc330f5b8804bae700099a2e437d33d671d4",
+        "title": "feat(identity): improve web layout and account management",
+        "detail": "Changed areas: apps/dashboard, deploy/xcenter, docs/ACTIVE_TASKS.md, docs/DASHBOARD.md, docs/IDENTITY.md, packages/expo and 1 more."
+      },
+      {
+        "id": "125906ba46cb30936de8ba63096844dbb492c528",
+        "title": "docs(identity): record responsive dashboard deployment",
+        "detail": "Changed areas: docs/operations."
+      },
+      {
+        "id": "5eb0d8fe2d7b0d6777cbc2f3472738e5b629f0ee",
+        "title": "docs(release): record native preview submission",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      }
+    ]
+  },
+  "0.1.0": {
+    "revision": "a8ea58f1bd551ae7fe786f98683fad358d508e9c",
+    "commits": [
+      {
+        "id": "0a5c489531ad22ffba817d57bd91fa28877ebeba",
+        "title": "feat(dashboard): start Expo account manager and document legacy system",
+        "detail": "Changed areas: .github/workflows, AGENTS.md, apps/dashboard, config/uads-requirements.json, config/uads-schema.json, docs/ACTIVE_TASKS.md and 7 more."
+      },
+      {
+        "id": "dbd7e0580c633acb0fc55668c0494d3cb6cbb590",
+        "title": "fix(legacy): disable archived server by default",
+        "detail": "Changed areas: docs/SECURITY.md, index.js."
+      },
+      {
+        "id": "009c7e0973ba27a6cd192c29f61aea3c6055fa0a",
+        "title": "feat(api): add encrypted account-scoped records and app grants",
+        "detail": "Changed areas: .github/workflows, docs/API.md, services/api."
+      },
+      {
+        "id": "8dd46ce2c63c6fb6781e99089f26eee0b793c44d",
+        "title": "feat(web): redesign Expo landing page and add offline shell",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/DASHBOARD.md, docs/INDEX.md, uads.json."
+      },
+      {
+        "id": "09731ea34fca81fc5db45c1c40c66fcf4b58f8d1",
+        "title": "feat(api): require approved confidential app registrations",
+        "detail": "Changed areas: docs/API.md, services/api."
+      },
+      {
+        "id": "39e10476912b3ddec884f5d0d485922d1b9151d4",
+        "title": "feat(dashboard): add developer portal and shared account entry package",
+        "detail": "Changed areas: .github/workflows, apps/dashboard, docs/ACTIVE_TASKS.md, docs/INDEX.md, docs/INTEGRATION.md, docs/XCENTER_PREVIEW.md and 1 more."
+      },
+      {
+        "id": "a7ca739b1ad98cedb0cc17bfae4f962326cf4fe4",
+        "title": "ci(preview): add parallel native artifact jobs",
+        "detail": "Changed areas: .github/workflows, docs/ACTIVE_TASKS.md, docs/RELEASES.md."
+      },
+      {
+        "id": "aada8a67ba63de002765f07cf27fb7f78b18850a",
+        "title": "feat(expo): add native browser authorization helper",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/INTEGRATION.md, docs/XCENTER_PREVIEW.md, packages/expo, uads.json."
+      },
+      {
+        "id": "b59ee419d40d2bc6c0c38e3c4719334013cbe119",
+        "title": "feat(account): add X-Center ID passkeys and native tabs",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, packages/expo, services/api."
+      },
+      {
+        "id": "a545d8f45880fd429319d05df1a13c985a94badf",
+        "title": "fix(web): serve scoped Expo font assets",
+        "detail": "Changed areas: services/api."
+      },
+      {
+        "id": "b18a707a221ac017d42902328d380c1e149d2166",
+        "title": "docs(account): record live X-Center ID deployment",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/XCENTER_ID.md."
+      },
+      {
+        "id": "a8ea58f1bd551ae7fe786f98683fad358d508e9c",
+        "title": "docs(account): checkpoint live verification and pending integration",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/XCENTER_ID.md."
+      }
+    ]
+  },
+  "1.0.0": {
+    "revision": "6ef10669d048f838ef7bf1bf7faa3c6aeb1ad35a",
+    "commits": [
+      {
+        "id": "6ef10669d048f838ef7bf1bf7faa3c6aeb1ad35a",
+        "title": "AuthNJS First Commit",
+        "detail": "Changed areas: .hintrc, .vscode/settings.json, HTML/about.html, HTML/assets, HTML/auth, HTML/dashboard and 8 more."
+      }
+    ]
+  }
+}

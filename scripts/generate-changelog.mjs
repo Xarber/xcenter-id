@@ -4,25 +4,44 @@ import {readFileSync, writeFileSync} from 'node:fs';
 const root = new URL('../', import.meta.url);
 const releases = JSON.parse(readFileSync(new URL('apps/dashboard/src/release-history.json', root), 'utf8'));
 const git = (...args) => execFileSync('git', args, {cwd:root, encoding:'utf8'}).trim();
+const revisions = releases.map(release=>git('rev-parse','--verify',release.revision+'^{commit}'));
+const technicalNotes = {};
 const heading = [
   '# X-Center ID changelog',
   '',
-  'This history covers the original AuthNJS source and the X-Center ID rewrite. X-Center ID uses its own 0.x series.',
-  'Versions were assigned retrospectively to source milestones. Deployment and native publication are tracked separately.',
-  'Each entry below includes the actual commits in its range. The current version includes the work under this release entry.',
+  'This archive covers the original AuthNJS source and the X-Center ID rewrite. Earlier entries reconstruct source milestones. Development entries identify unreleased work. There are no published GitHub releases in this history.',
+  'Deployment and native build evidence are recorded in [release documentation](docs/RELEASES.md).',
   '',
 ].join('\n');
+
 const sections = releases.map((release, index) => {
-  const previous = releases[index+1];
-  const range = previous ? previous.revision+'..'+release.revision : release.revision;
-  const changes = git('log', '--reverse', '--format=%h %s', ...(previous ? [] : ['-1']), range)
-    .split('\n').filter(Boolean).map(line => '- `'+line.slice(0,7)+'` '+line.slice(8));
+  const previous = revisions[index+1];
+  const revision = revisions[index];
+  if(previous)git('merge-base','--is-ancestor',previous,revision);
+  const ids = git('rev-list','--reverse',previous?previous+'..'+revision:revision).split('\n').filter(Boolean);
+  technicalNotes[release.version] = {
+    revision,
+    commits:ids.map(id=>{
+      const [title,body] = git('show','-s','--format=%s%x00%b',id).split('\0');
+      const paths = body?[]:git('diff-tree','--root','--no-commit-id','--name-only','-r',id).split('\n').filter(Boolean);
+      const areas = [...new Set(paths.map(path=>path.split('/').slice(0,2).join('/')))];
+      const detail = body || (areas.length?'Changed areas: '+areas.slice(0,6).join(', ')+(areas.length>6?' and '+(areas.length-6)+' more':'')+'.':'');
+      return {id,title,detail};
+    }),
+  };
   return [
     '## '+(release.legacy?'AuthNJS ':'')+release.version+' · '+release.date,
-    '', '### '+release.title, '',
-    ...release.features.map(([, item])=>'- '+item),
-    '', ...(release.fixes.length ? ['### Fixes & improvements','', ...release.fixes.map(item=>'- '+item),''] : []),
-    '<details>', '<summary>Source changes</summary>', '', ...changes, '', '</details>', '',
+    '', release.status, '', '### '+release.title, '',
+    ...release.features.map(([, title, item])=>'- **'+title+'**. '+item),
+    '', ...(release.fixes.length ? ['### Fixes & Improvements','', ...release.fixes.map(item=>'- '+item),''] : []),
   ].join('\n');
 });
-writeFileSync(new URL('CHANGELOG.md', root), heading+'\n'+sections.join('\n'));
+for(const [path,data] of [
+  ['CHANGELOG.md',heading+'\n'+sections.join('\n')],
+  ['apps/dashboard/src/release-commits.json',JSON.stringify(technicalNotes,null,2)+'\n'],
+]){
+  const target=new URL(path,root);
+  if(process.argv.includes('--check')){
+    if(readFileSync(target,'utf8')!==data)throw new Error(path+' is stale');
+  }else writeFileSync(target,data);
+}

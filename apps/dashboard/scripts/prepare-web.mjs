@@ -30,6 +30,13 @@ self.addEventListener('activate', event => event.waitUntil(caches.keys().then(ke
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (event.request.mode === 'navigate' && (url.pathname === '/changelog' || url.pathname.startsWith('/changelog/'))) {
+    event.respondWith(fetch(event.request).catch(async () => {
+      const cache = await caches.open(CACHE);
+      return await cache.match('/') ?? Response.error();
+    }));
+    return;
+  }
   if (event.request.mode === 'navigate' && ACCOUNT_PAGE.test(url.pathname)) {
     event.respondWith(fetch(event.request).catch(async () => {
       const cache = await caches.open(CACHE);

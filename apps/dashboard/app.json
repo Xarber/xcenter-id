@@ -2,16 +2,16 @@
   "expo": {
     "name": "X-Center ID",
     "slug": "authnjs-dashboard",
-    "version": "0.13.0",
+    "version": "0.14.0",
     "scheme": "authnjs-dashboard",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "13",
+      "buildNumber": "14",
       "bundleIdentifier": "com.xarber.authnjs.dashboard"
     },
     "android": {
-      "versionCode": 13,
+      "versionCode": 14,
       "package": "com.xarber.authnjs.dashboard"
     },
     "web": {
@@ -21,7 +21,13 @@
       "expo-web-browser",
       "expo-secure-store",
       "expo-sharing",
-      ["expo-camera", { "cameraPermission": "Allow X-Center ID to scan a device sign-in code.", "recordAudioAndroid": false }],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow X-Center ID to scan a device sign-in code.",
+          "recordAudioAndroid": false
+        }
+      ],
       "@react-native-community/datetimepicker"
     ],
     "icon": "./public/authnjs-512.png"
