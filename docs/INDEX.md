@@ -1,6 +1,6 @@
 # X-Center ID
 
-X-Center ID is a passkey-first identity and consent service with an Expo account manager for web, iOS and Android. The replacement API lives in `services/api` and the account manager in `apps/dashboard`. A separate preview supports synthetic data. The original AuthNJS Node application remains available as a historical baseline.
+X-Center ID is a passkey-first identity and consent service with an Expo account manager for web, iOS and Android. The replacement API lives in `services/api` and the account manager in `apps/dashboard`. A separate preview supports synthetic data. The [legacy review](LEGACY_REVIEW.md) documents the original AuthNJS code preserved in Git history.
 
 - [Legacy code review](LEGACY_REVIEW.md) inventories the runtime, user flows, data model, integrations and findings.
 - [Replacement API](API.md) documents routes, deployment configuration and API gaps.
@@ -22,4 +22,4 @@ X-Center ID is a passkey-first identity and consent service with an Expo account
 - [Publication review](reports/REPOSITORY_PUBLICATION_2026-11-19.md) records the historical cleanup, artifact audit and visibility status.
 - [UADS verification baseline](UADS_REQUIREMENTS.md) describes the current manifest and quality checks.
 
-The legacy entry point is disabled by default and remains `index.js`. Historical developer examples are in `api.txt` and `HTML/devs.html`. The rewritten branches exclude historical account records, logs, keys and private configuration. Keep pre-rewrite clones and backups private. Use `apps/dashboard` to develop the replacement locally.
+The last tree containing the retired AuthNJS server, website and developer examples is `3bdca936ebd56fbbbce8bf169e0b5d781f860996`. The rewritten branches exclude historical account records, logs, keys and private configuration. Keep pre-rewrite clones and backups private. Use `apps/dashboard` to develop the replacement locally.
