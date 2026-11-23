@@ -443,3 +443,13 @@ AUTHN-112 · **Implemented.** Active registered apps can use private user-owned 
 | AUTHN-116 | Make the real app icon a high-priority recommendation in the integration skill | Implemented | Registration guidance prioritizes the product's real icon and leaves it optional. Local and repository skill copies updated. |
 
 Follow-up for AUTHN-108 and AUTHN-113–116. The live test registration is already active and verified, and the public issuer accepts its authorization start. Confirm the developer passkey to save the two requests, then verify the saved state before attempting live consent. The registered HTTPS callback still returns 404. Local 390-pixel browser checks passed for the Files workflow and the issuer's code form. iOS and Android bundles exported successfully. Installed-device verification remains open. See [verification report](reports/DEVICE_FILES_2026-11-23.md).
+
+### Reopen consent settings, refresh native sign-in and release
+
+| ID | Request | State | Evidence and next action |
+| --- | --- | --- | --- |
+| AUTHN-117 | Reopen and redo the live Velunivo Consent Test settings | Queued | Reopen the existing registration's storage settings, check persisted requests, then enter Recent neighborhoods and Ride insights if missing. Observe the save result after any passkey confirmation. The registration is already active and verified. The user clarified that app activation itself does not need another approval. Device sign-in still requires account-holder confirmation. The callback returned 404 at the preceding checkpoint. |
+| AUTHN-118 | Refresh the native sign-in screen with a subtle, slowly animated night background | Queued | Review the existing native AccountEntry and web sign-in layout. Add a compact background behind the existing native form, respect Reduce Motion, and verify phone layout and input behavior. |
+| AUTHN-119 | Deploy the updated app and start the native build | Queued | Finish independent implementation and verification, stage and validate the production revision with rollback available, then start and verify submission of the four-format native workflow. |
+
+23 November usage checkpoint under UADS §0. The five-hour window has 7% remaining and resets at 21:45 CET on 23 November. The weekly window has 70% remaining and resets at 11:09 CET on 30 November. No portal mutation, new implementation, production deployment or build started for this follow-up. Resume with AUTHN-117 and AUTHN-118 before the release gate.
