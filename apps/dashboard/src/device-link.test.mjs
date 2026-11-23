@@ -14,3 +14,10 @@ test('device QR scanner accepts only a complete HTTPS issuer link and one valid 
     issuer+'/device?code=BCDFGH#extra',
   ])assert.equal(deviceSignInUrl(url,issuer),null);
 });
+
+test('manual device input accepts a pasted code and rejects incomplete codes', async()=>{
+  const {normalizeDeviceCode,isDeviceCode}=await import('./device-link.ts');
+  assert.equal(normalizeDeviceCode('bc-df gh'),'BCDFGH');
+  assert.equal(normalizeDeviceCode('bcdfghj'),'BCDFGH');
+  assert.equal(isDeviceCode(normalizeDeviceCode('AB12')),false);
+});

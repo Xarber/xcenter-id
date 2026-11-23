@@ -27,6 +27,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
   const containers=db.prepare('SELECT client,sum(bytes) AS bytes,count(*) AS records FROM app_records WHERE owner=? GROUP BY client ORDER BY bytes DESC,client');
   const visible=db.prepare('SELECT 1 FROM app_file_visibility WHERE client=?');
   const ownerContainer=(owner,client)=>verified(client)&&visible.get(client)&&sourceLinked(owner,client);
+  const developerContainer=(owner,client)=>ownerContainer(owner,client)&&registry.brand(client)?.owner===owner;
   const usage=client=>serviceUsage.get(client);
   const requested=client=>JSON.parse(setting(client)?.requests??'[]').filter(item=>verified(item.source)&&registry.crossReadAllowed(item.source,client)&&JSON.parse(setting(item.source)?.shared??'[]').includes(item.collection));
   const sourceLinked=(owner,client)=>!!accounts.linkedGrant(owner,client)&&registry.access(owner,client).allowed;
@@ -48,11 +49,17 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
     requested,
     requestsForOwner,
     accountUsage:owner=>accountUsage.get(owner).used,
-    containers:owner=>containers.all(owner).map(row=>{
-      const brand=registry.brand(row.client);
-      const showInFiles=!!ownerContainer(owner,row.client);
-      return {...row,name:brand?.name??'App storage',showInFiles,...(showInFiles?{icon:brand?.icon||null}:{})};
-    }),
+    containers:owner=>{
+      const rows=new Map(containers.all(owner).map(row=>[row.client,row]));
+      for(const {client} of db.prepare('SELECT client FROM app_file_visibility ORDER BY client').all()){
+        if(!rows.has(client)&&ownerContainer(owner,client))rows.set(client,{client,bytes:0,records:0});
+      }
+      return [...rows.values()].map(row=>{
+        const brand=registry.brand(row.client);
+        return {...row,name:brand?.name??'App storage',showInFiles:!!ownerContainer(owner,row.client),
+          canManage:!!developerContainer(owner,row.client),icon:brand?.icon||null};
+      });
+    },
     revokeApp(owner,client){
       db.exec('BEGIN IMMEDIATE');
       try{
@@ -86,13 +93,16 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
       try{
         if(req.method==='OPTIONS')return answer(204,{});
         const container=/^\/account\/file-containers\/([A-Za-z0-9_-]{1,100})(?:\/([A-Za-z0-9_-]{1,80})(?:\/([A-Za-z0-9_-]{1,120}))?)?$/.exec(url.pathname);
-        if(container){
-          if(req.method!=='GET')fail(405,'App folders are read-only.');
-          const session=accounts.current(req);
-          if(!session)fail(401,'Sign in to open this folder.');
+        const fileOwner=container&&(()=>{
+          const owner=accounts.current(req)?.owner;
+          if(!owner)fail(401,'Sign in to open this folder.');
+          if(!developerContainer(owner,container[1]))fail(404,'App folder unavailable.');
+          if(req.method!=='GET'&&(!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent'))fail(403,'Change app records from your account.');
+          return owner;
+        })();
+        if(container&&req.method==='GET'){
           const [,client,collection,id]=container;
-          const owner=session.owner;
-          if(!ownerContainer(owner,client))fail(404,'App folder unavailable.');
+          const owner=fileOwner;
           if(!collection){
             const collections=db.prepare('SELECT collection,count(*) AS records FROM app_records WHERE owner=? AND client=? GROUP BY collection ORDER BY collection').all(owner,client);
             return answer(200,{collections});
@@ -100,6 +110,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
           if(id){
             const row=db.prepare('SELECT * FROM app_records WHERE client=? AND owner=? AND collection=? AND id=?').get(client,owner,collection,id);
             if(!row)fail(404,'Record unavailable.');
+            if(url.searchParams.get('edit')==='1')return answer(200,{revision:row.revision,data:decode(row).data});
             return res.writeHead(200,{'Content-Type':'application/json','Content-Disposition':'attachment; filename="'+id+'.json"',
               'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}).end(JSON.stringify(decode(row).data,null,2));
           }
@@ -137,7 +148,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
           const serviceEnabled=verified(client);
           const unsecure=!!registry.brand(client)?.local;
           db.prepare('INSERT OR IGNORE INTO app_storage(client) VALUES(?)').run(client);
-          if(req.method==='GET')return answer(200,{...usage(client),capacity:setting(client).capacity,hasKey:!!setting(client).secret,verified:serviceEnabled,unsecure,
+          if(req.method==='GET')return answer(200,{name:registry.brand(client)?.name??'App storage',icon:registry.brand(client)?.icon??null,...usage(client),capacity:setting(client).capacity,hasKey:!!setting(client).secret,verified:serviceEnabled,unsecure,
             shared:JSON.parse(setting(client).shared),requests:JSON.parse(setting(client).requests),showInFiles:!!visible.get(client),canShowInFiles:!!(owned&&serviceEnabled)});
           if(req.method!=='POST'||!accounts.allowsMutation(req)||!accounts.recentlyConfirmed(req))fail(403,'Confirm your identity before changing app storage.');
           const input=await body(req);
@@ -170,7 +181,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
           if(admin)accounts.auditAdmin(req,client,'app-storage-'+input.action);
           return answer(200,{ok:true});
         }
-        const match=/^\/(public|v1)\/apps\/([a-zA-Z0-9_-]{1,100})\/data\/([a-zA-Z0-9_-]{1,80})(?:\/([a-zA-Z0-9_-]{1,120}))?$/.exec(url.pathname);
+        const match=container?[null,'account',...container.slice(1)]:/^\/(public|v1)\/apps\/([a-zA-Z0-9_-]{1,100})\/data\/([a-zA-Z0-9_-]{1,80})(?:\/([a-zA-Z0-9_-]{1,120}))?$/.exec(url.pathname);
         if(!match)fail(404,'Unknown data endpoint.');
         const [,mode,client,collection,id]=match;
         if(!registered(client))fail(404,'Application unavailable.');
@@ -184,9 +195,12 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         }
         if(id&&!/^[a-zA-Z0-9_-]{1,120}$/.test(id))fail(422,'Invalid record ID.');
         const token=/^Bearer ([A-Za-z0-9_-]{20,200})$/.exec(req.headers.authorization??'')?.[1];
-        const authenticateRequest=()=>token?.startsWith('xid-db-')
+        const authenticateRequest=()=>{
+          if(container)return accounts.current(req)?.owner===fileOwner&&developerContainer(fileOwner,client)&&accounts.allowsMutation(req)?{client,owner:fileOwner}:null;
+          return token?.startsWith('xid-db-')
           ? (verified(client)&&setting(client)?.secret===hash(token)?{client,owner:'~app'}:null)
           : (token?authenticate(token):null);
+        };
         const principal=await authenticateRequest();
         if(!principal?.owner||!registered(principal.client))fail(401,'A valid registered application credential is required.');
         const own=principal.client===client;
@@ -210,7 +224,9 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         }
         if(!own||!id||!name.test(id)||!['PUT','DELETE'].includes(req.method))fail(405,'Choose a record and supported method.');
         const previous=db.prepare('SELECT * FROM app_records WHERE client=? AND owner=? AND collection=? AND id=?').get(...params,id);
-        const expected=req.headers['if-match'];
+        const containerInput=container?await body(req):null;
+        if(container&&(await authenticateRequest())?.owner!==fileOwner)fail(403,'App folder access changed.');
+        const expected=container&&Number.isSafeInteger(containerInput.revision)?JSON.stringify(String(containerInput.revision)):req.headers['if-match'];
         if((previous&&expected!=='"'+previous.revision+'"')||(!previous&&expected!=='"0"'))fail(409,'Record changed. Read its revision before writing.');
         if(req.method==='DELETE'){
           if(!previous)fail(404,'Record unavailable.');
@@ -222,11 +238,13 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
             db.exec('COMMIT');return answer(200,{ok:true});
           }catch(error){db.exec('ROLLBACK');throw error;}
         }
-        const input=await body(req);if(typeof input!=='object'||input===null||!Object.hasOwn(input,'data')||typeof input.public!=='boolean')fail(422,'Provide data and an explicit public flag.');
+        const input=containerInput??await body(req);
+        if(!Object.hasOwn(input,'data')||(!container&&typeof input.public!=='boolean'))fail(422,'Provide data and an explicit public flag.');
+        if(container)input.public=!!previous?.public;
         const readers=input.readers??[];
         if(!Array.isArray(readers)||readers.length>50||!readers.every(value=>typeof value==='string'&&/^[a-z][a-z0-9]{2,23}$/.test(value)))fail(422,'Choose up to 50 recipient usernames.');
-        const readerOwners=[...new Set(readers.map(username=>accounts.ownerForUsername?.(username)))];
-        if(readerOwners.some(owner=>!owner||!accounts.available(owner)||!accounts.linkedGrant(owner,client)))fail(422,'Recipients must have linked this app.');
+        const readerOwners=container?JSON.parse(previous?.readers??'[]'):[...new Set(readers.map(username=>accounts.ownerForUsername?.(username)))];
+        if(!container&&readerOwners.some(owner=>!owner||!accounts.available(owner)||!accounts.linkedGrant(owner,client)))fail(422,'Recipients must have linked this app.');
         const currentIdentity=await authenticateRequest();
         if(!currentIdentity||currentIdentity.owner!==principal.owner||currentIdentity.client!==principal.client||!registered(client))fail(401,'Application access changed.');
         if(input.public&&!verified(client))fail(403,'Public records require a verified application.');

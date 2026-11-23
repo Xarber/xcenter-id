@@ -1,6 +1,6 @@
 import {localAccountMessage} from './account-mail.mjs';
 
-export function createAdminUsers({accounts,registry,mail}){
+export function createAdminUsers({accounts,registry,mail,containers=()=>[]}){
   return async(req,res,username)=>{
     const send=(code,value)=>res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(value));
     const permits=()=>accounts.adminStatus(req,req.method!=='GET')===200&&
@@ -11,7 +11,7 @@ export function createAdminUsers({accounts,registry,mail}){
     const {owner,...publicDetails}=details;
     if(req.method==='GET')return send(200,{account:{...publicDetails,...(registry.hasDeveloper(owner)?{
       developerVerified:registry.developer(owner).status==='verified',
-    }:{})},registered:registry.managed(owner)});
+    }:{})},registered:registry.managed(owner),containers:containers(owner).map(({client,name,bytes,icon})=>({client,name,bytes,icon}))});
     if(req.method!=='POST')return send(405,{error:'Method unavailable.'});
     if(!req.headers['content-type']?.startsWith('application/json'))return send(415,{error:'JSON required.'});
     let size=0;

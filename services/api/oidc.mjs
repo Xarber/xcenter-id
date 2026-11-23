@@ -59,7 +59,13 @@ function page(content, consent = false) {
     .badge{display:inline-block;border:1px solid currentColor;border-radius:1rem;padding:.1rem .5rem;font-size:.8rem;font-weight:700}.brand{font-weight:800;letter-spacing:-.03em;color:var(--action)}.context{padding:.8rem 1rem;border-radius:.8rem;background:var(--soft);overflow-wrap:anywhere}
     .identity-contexts{display:grid;gap:.65rem}.context small{display:block;color:var(--muted);margin-bottom:.25rem}.badge-row{display:flex;flex-wrap:wrap;gap:.35rem;margin:.5rem 0}.permission-toggle.permission-fixed{cursor:default}.permission-check{margin-inline-start:auto;color:var(--action);font-weight:800}.permission-toggle small{display:block;color:var(--muted)}
     fieldset{border:1px solid var(--border);border-radius:.85rem;padding:.6rem 1rem;margin:1.2rem 0;min-width:0}legend{font-weight:700}
-    .device-back{color:var(--text)}.device-code{font-size:1.6rem;font-weight:750;letter-spacing:.15em}.device-entry input{width:100%;min-height:44px;padding:.5rem .7rem;border-radius:.6rem;font:inherit;border:1px solid var(--border);background:var(--card);color:var(--text);text-transform:uppercase}
+    .device-back{color:var(--text)}.device-code{font-size:1.6rem;font-weight:750;letter-spacing:.15em}
+    .device-boxes{position:relative;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.35rem;inline-size:min(100%,21rem);font:700 clamp(1.125rem,5vw,1.6rem)/1 ui-monospace,monospace}
+    .device-boxes span{block-size:3.15rem;border:1px solid var(--border);border-radius:.55rem;background:var(--soft)}
+    .device-boxes:focus-within span{border-color:var(--action)}
+    .device-boxes input{position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;font:inherit;color:var(--text);text-transform:uppercase;padding:0 0 0 calc((100% - 1.75rem) / 12 - .5ch);letter-spacing:calc((100cqw + .35rem) / 6 - 1ch)}
+    .device-entry{container-type:inline-size;max-inline-size:21rem}
+
     label{display:flex;gap:.7em;align-items:baseline;padding:.5em 0;overflow-wrap:anywhere}input{accent-color:var(--action)}
     button,.action{display:inline-block;font:inherit;font-weight:700;padding:.6em 1em;margin:.45rem .4rem 0 0;border-radius:.65rem;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer}
     button[value=approve],.action{background:var(--action);color:#fff;text-decoration:none;border-color:transparent}
@@ -240,7 +246,9 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         },
         userCodeInputSource(ctx,form,_out,error) {
           const help=error?'That device code is unavailable. Enter a new code from your device.':'Enter the six-character code shown on your TV or other device.';
-          devicePage(ctx,`<h1>Sign in on another device</h1><p>${help}</p><div class="device-entry">${form.replace('placeholder="Enter code"','aria-label="Device code" maxlength="6" placeholder="Device code"')}</div><button value="approve" form="op.deviceInputForm">Continue</button>`);
+          devicePage(ctx,`<h1>Sign in on another device</h1><p>${help}</p><div class="device-entry">${form.replace(/<input\b[^>]*name="user_code"[^>]*>(?:<\/input>)?/, input =>
+            `<label for="device-code">Device code</label><div class="device-boxes">${'<span aria-hidden="true"></span>'.repeat(6)}
+            ${input.replace('placeholder="Enter code"','id="device-code" maxlength="6" spellcheck="false" autocapitalize="characters"').replace(/ onfocus="[^"]*"/,'')}</div>`)}</div><button value="approve" form="op.deviceInputForm">Continue</button>`);
         },
         userCodeConfirmSource(ctx,form,client,_info,code) {
           devicePage(ctx,`<h1>Confirm sign-in on this device?</h1><p>Sign in to <strong>${escape(client.clientName)}</strong> on your other device.</p>

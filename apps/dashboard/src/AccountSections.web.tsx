@@ -1,3 +1,4 @@
+import { uploadFileBatch } from './file-upload-batch';
 import AppFileContainer from './AppFileContainer.web';
 import type { AppFileContainer as Container } from './account-file-containers';
 import TrustBadges from './TrustBadges.web';
@@ -11,8 +12,8 @@ import { accountMessage } from './account-locale';
 import type { Friend } from './friends-model';
 import type { MailMessage, PrivateAddress } from './mail-message';
 import { formatBytes, storageCategories } from './storage-summary';
-import { Database, Bold, Italic, Paperclip, UserRound, Grid2X2, BadgeCheck, Download, File, FileUp, Folder, FolderPlus, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { Database, Bold, Italic, Paperclip, UserRound, Grid2X2, BadgeCheck, Download, File, FileUp, Folder, FolderPlus, Pencil, Check, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
+import { Fragment as FileTableRows, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { api, fileAsBase64, type Account } from './web-account';
 
 function notice(error:unknown) { return error instanceof Error ? error.message : 'Could not complete this action.'; }
@@ -51,6 +52,7 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
   const [busy,setBusy]=useState(false);
   const [confirm,setConfirm]=useState('');
   const [creating,setCreating]=useState(false);
+  const [renaming,setRenaming]=useState<{id:string;name:string}|null>(null);
   const [sharing,setSharing]=useState('');
   const [friends,setFriends]=useState<Friend[]>([]);
   const query=new URLSearchParams(window.location.search);
@@ -61,19 +63,35 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
   function change(operation:()=>Promise<unknown>, message:string){
     setBusy(true);
     setStatus('');
-    void operation().then(load).then(()=>{setConfirm('');setCreating(false);setStatus(message);})
+    void operation().then(load).then(()=>{setConfirm('');setCreating(false);setRenaming(null);setStatus(message);})
       .catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
   }
   useEffect(()=>{void load().catch(error=>setStatus(notice(error)));},[]);
   function upload(event:ChangeEvent<HTMLInputElement>){
-    const file=event.target.files?.[0];
+    const files=Array.from(event.target.files??[]);
     event.target.value='';
-    if(!file)return;
-    if(file.size<1||file.size>2*1024*1024){setStatus('Choose a file between 1 byte and 2 MB.');return;}
-    change(async()=>api('files',{name:file.name,content:await fileAsBase64(file),folder}),'File uploaded.');
+    if(!files.length||busy)return;
+    setBusy(true);
+    setStatus('Uploading files…');
+    void uploadFileBatch(files.map(file=>({name:file.name,read:()=>{
+      if(file.size<1||file.size>2*1024*1024)throw new Error('File size is outside the allowed range.');
+      return fileAsBase64(file);
+    }})),(name,content)=>api('files',{name,content,folder}))
+      .then(async message=>{await load();setStatus(message);}).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
+  }
+  function nameField(label:string,value:string,submit:(name:string)=>void,cancel:()=>void){
+    return <form className="xc-file-name-form" onSubmit={event=>{
+      event.preventDefault();
+      const name=String(new FormData(event.currentTarget).get('name')??'').trim();
+      if(name)submit(name);
+    }} onKeyDown={event=>{if(event.key==='Escape')cancel();}}>
+      <input name="name" autoFocus aria-label={label} defaultValue={value} maxLength={160} required/>
+      <button type="submit" className="xc-file-icon" aria-label="Save name" disabled={busy}><Check size={17}/></button>
+      <button type="button" className="xc-file-icon" aria-label="Cancel" onClick={cancel}><X size={17}/></button>
+    </form>;
   }
   if(container){
-    const app=state?.appContainers?.find(item=>item.client===container&&item.showInFiles);
+    const app=state?.appContainers?.find(item=>item.client===container&&item.canManage);
     if(app)return <AppFileContainer app={app}/>;
     return <section className="xc-card xc-pad"><a href="/files">Back to your files</a><p role="status">{status||(state?'App folder unavailable.':'Loading folder…')}</p></section>;
   }
@@ -87,57 +105,71 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
       </div>
       <ul className="xc-storage-legend">{storageCategories.map(([id,label,color])=><li key={id}><span style={{backgroundColor:color}}/>{label}<strong>{formatBytes(state.categories[id]??0)}</strong></li>)}</ul>
       {!!state.appContainers?.length&&<div className="xc-stack"><h3>App containers in your account</h3>
-        {state.appContainers.map(app=><div className="xc-list-row" key={app.client}><span>{app.name}</span><strong>{formatBytes(app.bytes)}</strong></div>)}</div>}
+        {state.appContainers.map(app=><div className="xc-list-row" key={app.client}><div className="xc-row-head"><AppIcon icon={app.icon}/><span>{app.name}</span></div><strong>{formatBytes(app.bytes)}</strong></div>)}</div>}
       </>}
 
     {!summary && <>
-      <nav className="xc-actions xc-file-path" aria-label="Current folder">
-        <a href={folderPath(null)} aria-current={folder?undefined:'page'}>Your files</a>
-        {state?.breadcrumbs.map(item=><a key={item.id} href={folderPath(item.id)} aria-current={item.id===folder?'page':undefined}>{item.name}</a>)}
-      </nav>
-      <div className="xc-actions">
-        <label className="xc-button xc-primary"><FileUp size={17}/> Upload file<input className="xc-sr" type="file" disabled={busy} onChange={upload}/></label>
-        <button className="xc-button xc-secondary" type="button" onClick={()=>setCreating(!creating)} disabled={busy}><FolderPlus size={17}/> New folder</button>
+      <div className="xc-file-toolbar">
+        <nav className="xc-actions xc-file-path" aria-label="Current folder">
+          <a href={folderPath(null)} aria-current={folder?undefined:'page'}>Your files</a>
+          {state?.breadcrumbs.map(item=><a key={item.id} href={folderPath(item.id)} aria-current={item.id===folder?'page':undefined}>{item.name}</a>)}
+        </nav>
+        <label className="xc-file-icon" title="Upload files"><FileUp size={19} aria-hidden="true"/>
+          <input className="xc-sr" type="file" multiple aria-label="Upload files" disabled={busy} onChange={upload}/>
+        </label>
       </div>
-      {creating&&<form className="xc-inline-form" onSubmit={event=>{
-        event.preventDefault();
-        const name=new FormData(event.currentTarget).get('name');
-        change(()=>api('files/folders',{name,folder}),'Folder created.');
-      }}><label>Folder name<input name="name" maxLength={160} required/></label>
-        <button className="xc-button xc-primary" disabled={busy}>Create folder</button>
-      </form>}
-      {!folder&&state?.appContainers?.filter(app=>app.showInFiles).map(app=><div className="xc-list-row" key={app.client}>
-        <a className="xc-row-head" href={'/files?app='+encodeURIComponent(app.client)}><AppIcon icon={app.icon}/><strong>{app.name}</strong></a>
-        <span>Read-only app folder</span>
-      </div>)}
-      {state?.folders.map(item=><div className="xc-list-row" key={item.id}>
-        <a className="xc-row-head" href={folderPath(item.id)}><Folder size={18}/><strong>{item.name}</strong></a>
-        <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
-          if(confirm!==item.id){setConfirm(item.id);return;}
-          change(()=>api('files/folders/'+item.id,{},'DELETE'),'Folder removed.');
-        }} aria-label={confirm===item.id?'Confirm permanently removing '+item.name:'Remove folder '+item.name}><Trash2 size={16}/>{confirm===item.id?'Confirm removal':null}</button>
-      </div>)}
-      {state?.files.map(file=><div className="xc-list-row" key={file.id}>
-        <div className="xc-file-meta"><a href={'/account/files/'+file.id}><strong>{file.name}</strong></a><p>{size(file.size)} · {date(file.created)}</p></div>
-        <div className="xc-actions">
-        <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
-          if(sharing===file.id){setSharing('');return;}
-          setSharing(file.id);setFriends([]);
-          void api('friends').then(result=>setFriends(result.friends)).catch(error=>setStatus(notice(error)));
-        }}>Share</button>
-        <a className="xc-button xc-secondary" href={'/account/files/'+file.id} aria-label={'Download '+file.name}><Download size={16}/></a>
-        <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
-          if(confirm!==file.id){setConfirm(file.id);return;}
-          change(()=>api('files/'+file.id,{},'DELETE'),'File removed.');
-        }} aria-label={confirm===file.id?'Confirm permanently removing '+file.name:'Remove '+file.name}><Trash2 size={16}/>{confirm===file.id?'Confirm removal':null}</button></div>
-        {sharing===file.id&&<div className="xc-stack">
-          {!friends.length&&<p>Find or invite a friend from Friends.</p>}
-          {friends.map(friend=><button type="button" className="xc-button xc-secondary" key={friend.id} disabled={busy}
-            onClick={()=>change(async()=>{await api('files/shared',{file:file.id,friend:friend.id});setSharing('');},'Access granted.')}>Share with @{friend.username}</button>)}
-        </div>}
-
-      </div>)}
-      {state?.files.length===0 && state.folders.length===0 && <div className="xc-empty">This folder is empty.</div>}
+      <table className="xc-file-table">
+        <thead><tr><th scope="col">Name</th><th scope="col">Size</th><th scope="col" className="xc-file-date">Added</th><th scope="col"><span className="xc-sr">Actions</span></th></tr></thead>
+        <tbody>
+        <tr><td colSpan={4}>{creating?<div className="xc-file-name"><Folder size={18}/>
+          {nameField('New folder name','',name=>change(()=>api('files/folders',{name,folder}),'Folder created.'),()=>setCreating(false))}
+          </div>:<button type="button" className="xc-file-new" onClick={()=>{setCreating(true);setRenaming(null);}} disabled={busy}><FolderPlus size={18}/> New folder</button>}</td></tr>
+        {!folder&&state?.appContainers?.filter(app=>app.showInFiles).map(app=><tr key={app.client}>
+          <td>{app.canManage?<a className="xc-file-name" href={'/files?app='+encodeURIComponent(app.client)}><AppIcon icon={app.icon}/><strong>{app.name}</strong></a>
+            :<div className="xc-file-name"><AppIcon icon={app.icon}/><strong>{app.name}</strong></div>}</td>
+          <td>{formatBytes(app.bytes)}</td><td className="xc-file-date">—</td><td/>
+        </tr>)}
+        {state?.folders.map(item=><tr key={item.id}>
+          <td>{renaming?.id===item.id?<div className="xc-file-name"><Folder size={18}/>
+            {nameField('Folder name',renaming.name,name=>change(()=>api('files/folders/'+item.id,{name},'PATCH'),'Folder renamed.'),()=>setRenaming(null))}
+          </div>:<a className="xc-file-name" href={folderPath(item.id)}><Folder size={18}/><strong>{item.name}</strong></a>}</td>
+          <td>—</td><td className="xc-file-date">—</td><td><div className="xc-file-actions">
+            <button className="xc-file-icon" aria-label={'Rename '+item.name} onClick={()=>{setCreating(false);setRenaming(item);}} disabled={busy}><Pencil size={16}/></button>
+            <button type="button" className="xc-file-icon" disabled={busy} onClick={()=>{
+              if(confirm!==item.id){setConfirm(item.id);return;}
+              change(()=>api('files/folders/'+item.id,{},'DELETE'),'Folder removed.');
+            }} aria-label={confirm===item.id?'Confirm permanently removing '+item.name:'Remove folder '+item.name}>{confirm===item.id?<Check size={16}/>:<Trash2 size={16}/>}</button>
+          </div></td>
+        </tr>)}
+        {state?.files.map(file=><FileTableRows key={file.id}>
+          <tr>
+            <td>{renaming?.id===file.id?<div className="xc-file-name"><File size={18}/>
+              {nameField('File name',renaming.name,name=>change(()=>api('files/'+file.id,{name},'PATCH'),'File renamed.'),()=>setRenaming(null))}
+            </div>:<a className="xc-file-name" href={'/account/files/'+file.id}><File size={18}/><strong>{file.name}</strong></a>}</td>
+            <td>{formatBytes(file.size)}</td><td className="xc-file-date">{date(file.created)}</td>
+            <td><div className="xc-file-actions">
+              <button className="xc-file-icon" aria-label={'Rename '+file.name} onClick={()=>{setCreating(false);setRenaming(file);}} disabled={busy}><Pencil size={16}/></button>
+              <button type="button" className="xc-file-icon" aria-label={'Share '+file.name} disabled={busy} onClick={()=>{
+                if(sharing===file.id){setSharing('');return;}
+                setSharing(file.id);setFriends([]);
+                void api('friends').then(result=>setFriends(result.friends)).catch(error=>setStatus(notice(error)));
+              }}><UserRound size={16}/></button>
+              <a className="xc-file-icon" href={'/account/files/'+file.id} aria-label={'Download '+file.name}><Download size={16}/></a>
+              <button type="button" className="xc-file-icon" disabled={busy} onClick={()=>{
+                if(confirm!==file.id){setConfirm(file.id);return;}
+                change(()=>api('files/'+file.id,{},'DELETE'),'File removed.');
+              }} aria-label={confirm===file.id?'Confirm permanently removing '+file.name:'Remove '+file.name}>{confirm===file.id?<Check size={16}/>:<Trash2 size={16}/>}</button>
+            </div></td>
+          </tr>
+          {sharing===file.id&&<tr><td colSpan={4}><div className="xc-stack">
+            {!friends.length&&<p>Find or invite a friend from Friends.</p>}
+            {friends.map(friend=><button type="button" className="xc-button xc-secondary" key={friend.id} disabled={busy}
+              onClick={()=>change(async()=>{await api('files/shared',{file:file.id,friend:friend.id});setSharing('');},'Access granted.')}>Share with @{friend.username}</button>)}
+          </div></td></tr>}
+        </FileTableRows>)}
+        </tbody>
+      </table>
+      {state?.files.length===0 && state.folders.length===0 && (folder||!state.appContainers?.some(app=>app.showInFiles)) && <div className="xc-empty">This folder is empty.</div>}
     </>}
     {status && <p role="status">{status}</p>}
   </section>;

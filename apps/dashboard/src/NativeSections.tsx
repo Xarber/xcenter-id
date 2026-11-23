@@ -1,3 +1,4 @@
+import { uploadFileBatch } from './file-upload-batch';
 import AppFileContainer from './AppFileContainer';
 import type { AppFileContainer as Container } from './account-file-containers';
 import NativeAdminInventory from './NativeAdminInventory';
@@ -20,7 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { accountGreeting, accountShortcuts, accountStatus } from './account-overview';
 import BirthdayPicker from './BirthdayPicker';
 import type { MailMessage, PrivateAddress } from './mail-message';
-import { pickDocumentAsync, pickProfilePhoto, shareDownload } from './native-files';
+import { pickDocumentAsync, pickDocumentsAsync, pickProfilePhoto, shareDownload } from './native-files';
 import { Alert, AppState, Image, KeyboardAvoidingView, Modal, Platform, Pressable, Share, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useEffect, useState, type ReactNode } from 'react';
 import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
@@ -39,7 +40,7 @@ type Grant = {source:string;destination:string;expires:number};
 type SampleGrant = {source:string;destination:string;sourceName:string;app:string;shared:boolean;expires:number|null};
 type App = {client:string;name:string};
 type Theme = DashboardTheme;
-export type NativeSection = 'mail-clients'|'dashboard'|'profile'|'devices'|'security'|'apps'|'developer'|'permissions'|'storage'|'files'|'friends'|'mail'|'support'|'admin';
+export type NativeSection = 'mail-clients'|'dashboard'|'profile'|'devices'|'device-signin'|'security'|'apps'|'developer'|'permissions'|'storage'|'files'|'friends'|'mail'|'support'|'admin';
 
 type Props = {
   section:NativeSection;
@@ -119,6 +120,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [files,setFiles]=useState<Files|null>(null);
   const [folder,setFolder]=useState<string|null>(null);
   const [folderName,setFolderName]=useState('');
+  const [creatingFolder,setCreatingFolder]=useState(false);
+  const [renameEntry,setRenameEntry]=useState<{id:string;name:string}|null>(null);
   const [picture,setPicture]=useState<string|null|undefined>(undefined);
   const [givenName,setGiven]=useState(account.profile?.givenName??'');
   const [surname,setSurname]=useState(account.profile?.surname??'');
@@ -307,8 +310,9 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         {detailsPanel==='email'&&<IncomingEmail token={token} updated={reload} addresses={account.emails} colors={colors}/>}
         <PublicProfile token={token} colors={colors}/></>;
       break;
+    case 'device-signin':content=<DeviceSignIn colors={colors} back={()=>navigate('devices')}/>;break;
     case 'devices':
-      content=<><DeviceSignIn colors={colors}/>{devices.map(device=>row(device.id,device.label,device.current?'This device':'Signed in '+date(device.created),
+      content=<>{button('Sign in on another device',()=>navigate('device-signin'))}{devices.map(device=>row(device.id,device.label,device.current?'This device':'Signed in '+date(device.created),
         !device.current&&button('Sign out device',()=>confirm('Sign out this device?','It will need to sign in again.',
           ()=>run(()=>mutate('devices/revoke',{id:device.id}),'Device signed out.')))))}</>;
       break;
@@ -384,38 +388,94 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           <Text style={{color:colors.muted}}>{formatBytes(files.categories[id]??0)}</Text>
         </View>)}
         {!!files.appContainers?.length&&<><Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>App containers in your account</Text>
-          {files.appContainers.map(app=>row(app.client,app.name,formatBytes(app.bytes)))}</>}
+          {files.appContainers.map(app=>row(app.client,app.name,formatBytes(app.bytes),<AppIcon icon={app.icon} color={colors.accent}/>))}</>}
       </>;
       break;
-    case 'files':
+    case 'files': {
       if(fileContainer){content=<AppFileContainer app={fileContainer} token={token} colors={colors} back={()=>setFileContainer(undefined)}/>;break;}
-      content=<><View style={styles.actions}>{button('Your files',()=>setFolder(null))}
-        {files?.breadcrumbs.map(item=><View key={item.id}>{button(item.name,()=>setFolder(item.id))}</View>)}</View>
+      const icon=(label:string,name:React.ComponentProps<typeof Ionicons>['name'],onPress:()=>void)=>
+        <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={busy} onPress={onPress}
+          style={({pressed})=>[styles.fileToolbarButton,{opacity:pressed||busy?0.55:1}]}><Ionicons accessible={false} name={name} size={20} color={colors.accent}/></Pressable>;
+      const openFolder=(id:string|null)=>{setFolder(id);setCreatingFolder(false);setRenameEntry(null);};
+      const fileLine=[styles.finderRow,{borderColor:colors.line}];
+      function renderNameEditor(label:string,name:string,onChange:(value:string)=>void,save:()=>void,cancel:()=>void){
+        return <View style={styles.finderName}>
+          <TextInput autoFocus accessibilityLabel={label} value={name} onChangeText={onChange}
+            onSubmitEditing={save} maxLength={160} returnKeyType="done" editable={!busy}
+            style={[styles.finderInput,{color:colors.ink,borderColor:colors.line}]}/>
+          {icon('Save name','checkmark-outline',save)}
+          {icon('Cancel','close-outline',cancel)}
+        </View>;
+      }
+      function saveRename(id:string,isFolder:boolean){
+        const name=renameEntry?.name.trim();
+        if(!name)return;
+        run(async()=>{await mutate('files/'+(isFolder?'folders/':'')+id,{name},'PATCH');setRenameEntry(null);},isFolder?'Folder renamed.':'File renamed.');
+      }
+      function createFolder(){
+        if(!folderName.trim())return;
+        run(async()=>{await mutate('files/folders',{name:folderName.trim(),folder});setFolderName('');setCreatingFolder(false);},'Folder created.');
+      }
+      content=<>
+        <View style={styles.finderToolbar}><View style={[styles.actions,{flex:1}]}>
+          {button('Your files',()=>openFolder(null))}
+          {files?.breadcrumbs.map(item=><View key={item.id}>{button(item.name,()=>openFolder(item.id))}</View>)}
+        </View>
+        {icon('Upload files','cloud-upload-outline',()=>{if(busy)return;setBusy(true);setStatus('');void (async()=>{
+          const selected=await pickDocumentsAsync();
+          if(!selected.length)return;
+          const report=await uploadFileBatch(selected,(name,content)=>api('files',{name,content,folder}));
+          await load();
+          setStatus(report);
+        })().catch(report).finally(()=>setBusy(false));})}
+        </View>
+        <View style={fileLine}><Text accessibilityRole="header" style={[styles.finderName,{color:colors.muted}]}>Name</Text>
+          <Text accessibilityRole="header" style={{color:colors.muted}}>Size</Text></View>
+        <View style={fileLine}>
+          <Ionicons name="folder-outline" size={21} color={colors.accent} accessible={false}/>
+          {creatingFolder?renderNameEditor('New folder name',folderName,setFolderName,createFolder,()=>setCreatingFolder(false)):
+            <Pressable accessibilityRole="button" disabled={busy} style={[styles.finderName,{minHeight:44,justifyContent:'center'}]}
+              onPress={()=>{setFolderName('');setRenameEntry(null);setCreatingFolder(true);}}>
+              <Text style={{color:colors.accent,fontWeight:'700'}}>New folder</Text>
+            </Pressable>}
+        </View>
         {!folder&&files?.appContainers?.filter(app=>app.showInFiles).map(app=>
-          <Pressable accessibilityRole="button" key={app.client} onPress={()=>setFileContainer(app)}
-            style={{minHeight:52,flexDirection:'row',alignItems:'center',gap:10,borderTopWidth:1,borderColor:colors.line}}>
+          <Pressable accessibilityRole={app.canManage?"button":undefined} disabled={!app.canManage} key={app.client} onPress={()=>setFileContainer(app)} style={fileLine}>
             <AppIcon icon={app.icon} color={colors.accent}/>
-            <View style={{flex:1}}><Text style={{color:colors.ink,fontWeight:'700'}}>{app.name}</Text>{paragraph('Read-only app folder')}</View>
-            <Ionicons accessible={false} name="chevron-forward" size={18} color={colors.muted}/>
+            <Text style={[styles.finderName,{color:colors.ink,fontWeight:'700'}]}>{app.name}</Text>
+            {paragraph(formatBytes(app.bytes))}
+            {app.canManage&&<Ionicons accessible={false} name="chevron-forward" size={18} color={colors.muted}/>}
           </Pressable>)}
-        {files?.folders.map(item=>row(item.id,item.name,'Folder',<View style={styles.actions}>
-          {fileAction('Open folder '+item.name,'folder-open-outline',()=>setFolder(item.id))}
-          {fileAction('Remove folder '+item.name,'trash-outline',()=>confirm('Remove empty folder?','This action removes the folder.',
+        {files?.folders.map(item=><View style={fileLine} key={item.id}>
+          <Ionicons name="folder-outline" size={21} color={colors.accent} accessible={false}/>
+          {renameEntry?.id===item.id?renderNameEditor('Folder name',renameEntry.name,name=>setRenameEntry({...renameEntry,name}),()=>saveRename(item.id,true),()=>setRenameEntry(null)):
+            <Pressable accessibilityRole="button" style={[styles.finderName,{minHeight:44,justifyContent:'center'}]} onPress={()=>openFolder(item.id)}>
+              <Text style={{color:colors.ink,fontWeight:'700'}}>{item.name}</Text>
+            </Pressable>}
+          {icon('Rename '+item.name,'pencil-outline',()=>{setCreatingFolder(false);setRenameEntry(item);})}
+          {icon('Remove folder '+item.name,'trash-outline',()=>confirm('Remove empty folder?','This action removes the folder.',
             ()=>run(()=>mutate('files/folders/'+item.id,{},'DELETE'),'Folder removed.')))}
-        </View>))}
-        {files?.files.map(item=>row(item.id,item.name,formatBytes(item.size),<View style={styles.actions}>
-          {fileAction('Download '+item.name,'download-outline',()=>run(()=>shareDownload('files/'+item.id,item.name,token)))}
-          {button('Share',()=>setSharing(value=>value===item.id?'':item.id))}
+        </View>)}
+        {files?.files.map(item=><View key={item.id}>
+          <View style={fileLine}>
+            <Ionicons name="document-outline" size={20} color={colors.accent} accessible={false}/>
+            {renameEntry?.id===item.id?renderNameEditor('File name',renameEntry.name,name=>setRenameEntry({...renameEntry,name}),()=>saveRename(item.id,false),()=>setRenameEntry(null)):
+              <View style={styles.finderName}><Text style={{color:colors.ink,fontWeight:'700'}}>{item.name}</Text>{paragraph(formatBytes(item.size))}</View>}
+            <View style={styles.finderActions}>
+              {icon('Rename '+item.name,'pencil-outline',()=>{setCreatingFolder(false);setRenameEntry(item);})}
+              {icon('Share '+item.name,'share-social-outline',()=>setSharing(value=>value===item.id?'':item.id))}
+              {icon('Download '+item.name,'download-outline',()=>run(()=>shareDownload('files/'+item.id,item.name,token)))}
+              {icon('Remove '+item.name,'trash-outline',()=>confirm('Remove file?','This permanently removes the file.',
+                ()=>run(()=>mutate('files/'+item.id,{},'DELETE'),'File removed.')))}
+            </View>
+          </View>
           {sharing===item.id&&(friends.length?friends.map(friend=><View key={friend.id}>{button('Share with @'+friend.username,
             ()=>run(async()=>{await api('files/shared',{file:item.id,friend:friend.id});setSharing('');},'Access granted.'))}</View>):paragraph('Invite a friend from Friends.'))}
-          {fileAction('Remove '+item.name,'trash-outline',()=>confirm('Remove file?','This permanently removes the file.',
-            ()=>run(()=>mutate('files/'+item.id,{},'DELETE'),'File removed.')))}
-        </View>))}
-        {button('Upload file',()=>run(async()=>{const file=await pickDocumentAsync();if(file)await mutate('files',{...file,folder});}))}
-        {field('New folder name',folderName,setFolderName,{maxLength:160})}
-        {button('Create folder',()=>run(async()=>{await mutate('files/folders',{name:folderName,folder});setFolderName('');},'Folder created.'))}
+        </View>)}
+        {files&&!files.files.length&&!files.folders.length&&(folder||!files.appContainers?.some(app=>app.showInFiles))&&paragraph('This folder is empty.')}
       </>;
       break;
+    }
     case 'friends':
       content=<>
         {paragraph('Create a one-time code and share it privately. It expires after 15 minutes.')}
@@ -630,6 +690,12 @@ const styles=StyleSheet.create({
   mailContent:{width:'100%',maxWidth:680,alignSelf:'center'},
   composeHeader:{flexDirection:'row',alignItems:'center',gap:12},
   adminAction:{minHeight:44,flexDirection:'row',alignItems:'center',alignSelf:'flex-start',gap:7,borderWidth:1,borderRadius:10,paddingHorizontal:11,paddingVertical:7},
+  finderToolbar:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8},
+  finderRow:{minHeight:52,flexDirection:'row',alignItems:'center',gap:7,borderTopWidth:1,paddingVertical:3},
+  finderName:{flex:1,minWidth:0},
+  finderInput:{minHeight:44,borderWidth:1,borderRadius:8,paddingHorizontal:8,fontSize:16},
+  finderActions:{maxWidth:88,flexDirection:'row',flexWrap:'wrap',justifyContent:'flex-end'},
+  fileToolbarButton:{width:44,height:44,alignItems:'center',justifyContent:'center'},
   fileAction:{width:44,height:44,borderRadius:11,alignItems:'center',justifyContent:'center'},
   card:{gap:14,padding:16,borderRadius:20},
   sectionStack:{gap:14},

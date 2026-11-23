@@ -1,5 +1,8 @@
 const deviceCode = /^[BCDFGHJKLMNPQRSTVWXZ]{6}$/;
 
+export const normalizeDeviceCode = (value: string) => value.toUpperCase().replace(/[^BCDFGHJKLMNPQRSTVWXZ]/g, '').slice(0, 6);
+export const isDeviceCode = (code: string) => deviceCode.test(code);
+
 export function deviceSignInUrl(value: string, issuer: string) {
   try {
     const link = new URL(value);

@@ -11,3 +11,5 @@ Connected apps use their configured image or a default app icon. Historical exam
 Developer documentation is public at `/docs` and explains actual package distribution, registration, callback ownership, token validation and hosted data. The SDK is not published to a public npm registry. See INTEGRATION.md and HOSTED_DATA.md.
 
 Web drawer motion respects Reduced Motion; native presents a short system modal transition and retains accessible labels and selected tab state. Native device execution, screen-reader review and full dynamic-text validation require separate runtime evidence.
+
+On native, Devices opens a separate **Device sign-in** page with an on-demand QR scanner and six visible code slots. The slots use one input per platform so a full code can be pasted or entered with a screen reader. Entering or scanning a code opens review only after an explicit action. The issuer still shows the requesting app and requires confirmation before approving the sign-in. The web device page preserves its standard form and server-side confirmation.

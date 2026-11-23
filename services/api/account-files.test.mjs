@@ -42,9 +42,15 @@ test('account file uploads and downloads are owner-scoped and use attachment hea
     const upload = await call('first','POST','',{name:'inside.txt',content:Buffer.from(raw).toString('base64'),folder:child});
     assert.equal(upload.status,201);
     assert.equal((await call('first','DELETE','/folders/'+child,{})).status,409);
+    const {id:uploadedId}=await upload.json();
+    assert.equal((await call('second','PATCH','/folders/'+child,{name:'Not yours'})).status,404);
+    assert.equal((await call('first','PATCH','/folders/'+child,{name:'Archive'})).status,200);
+    assert.equal((await call('first','PATCH','/'+uploadedId,{name:'Bad/name'})).status,422);
+    assert.equal((await call('first','PATCH','/'+uploadedId,{name:'renamed.txt'})).status,200);
     const listing = await (await call('first','GET','?folder='+child)).json();
-    assert.deepEqual(listing.breadcrumbs.map(item=>item.name),['Projects','Notes']);
-    assert.equal(listing.files[0].name,'inside.txt');
+    assert.deepEqual(listing.breadcrumbs.map(item=>item.name),['Projects','Archive']);
+    assert.equal(listing.files[0].name,'renamed.txt');
+    assert.equal(await (await call('first','GET','/'+uploadedId)).text(),raw);
     const index = await (await call('first','GET')).json();
     assert.equal(index.files.length,0);
     assert.equal(index.total,1);

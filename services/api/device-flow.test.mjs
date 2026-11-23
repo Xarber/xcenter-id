@@ -183,6 +183,8 @@ test('registered device flow confirms linking and issues a single nonce-bound to
     const again=await (await begin(client)).json();
     const manual=await (await http('/device',{browser:true})).text();
     assert.match(manual,/Sign in on another device/);
+    assert.equal((manual.match(/<span aria-hidden="true"><\/span>/g)??[]).length,6);
+    assert.equal((manual.match(/name="user_code"/g)??[]).length,1);
     const manualXsrf=manual.match(/name="xsrf" value="([^"]+)"/)?.[1];
     const review=await (await http('/device',{browser:true,form:{xsrf:manualXsrf,user_code:again.user_code}})).text();
     assert.match(review,/Confirm sign-in on this device/);

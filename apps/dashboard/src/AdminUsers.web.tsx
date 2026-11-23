@@ -1,3 +1,5 @@
+import AppIcon from './AppIcon.web';
+import type {AppFileContainer as Container} from './account-file-containers';
 import TrustBadges from './TrustBadges.web';
 import {useEffect,useState,type ReactNode} from 'react';
 import {ArrowLeft,BadgeCheck,Check,Database,LockKeyhole,LogOut,Mail,Settings2,ShieldCheck,Trash2,Unlock,UserRound,X} from 'lucide-react';
@@ -22,7 +24,7 @@ type Details=ManagedAccount&{developerVerified?:boolean;externalMailLimits?:{dai
 type Registered={verified:boolean;id:string;name:string;status:string;restricted:boolean;callback:string};
 export function AdminAccounts(){
   const [users,setUsers]=useState<ManagedAccount[]>([]);
-  const [details,setDetails]=useState<{account:Details;registered:Registered[]}|null>(null);
+  const [details,setDetails]=useState<{account:Details;registered:Registered[];containers?:Container[]}|null>(null);
   const [filter,setFilter]=useState('');
   const [busy,setBusy]=useState(false);
   const [status,setStatus]=useState('');
@@ -89,6 +91,11 @@ export function AdminAccounts(){
             <IconAction label="Cancel action" disabled={busy} onClick={()=>setAction('')}><X size={20}/></IconAction></div>
         </form>}
         <details><summary>What these actions do</summary><p>Lock restricts account use while keeping sessions. Sign out all devices revokes sessions. Delete removes the identity and credentials after confirmation. Premium aliases enables named Hide My Email addresses. Verification and administrator access are separate privileges.</p></details>
+        {!!details?.containers?.length&&<section><h3>App storage in this account</h3>
+          {details.containers.map(app=><div className="xc-list-row" key={app.client}>
+            <div className="xc-row-head"><AppIcon icon={app.icon}/><strong>{app.name}</strong></div><span>{formatBytes(app.bytes)}</span>
+          </div>)}
+        </section>}
         <h3>Connected apps</h3>
         {!user.apps.length&&<p>No connected apps.</p>}
         {user.apps.map(app=><div className="xc-identity-label" key={app.client}>{app.label}<TrustBadges compact kind="app" verified={app.verified}/></div>)}

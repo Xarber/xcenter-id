@@ -195,7 +195,9 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     if(req.method==='DELETE'&&individual){
       return remove.run(owner,id).changes===1 ? json(res,200,{ok:true}):json(res,404,{error:'File unavailable.'});
     }
-    if(req.method!=='POST'||(path!=='/account/files'&&!foldersRoute)||!req.headers['content-type']?.startsWith('application/json')){
+    const rename=req.method==='PATCH'&&individual;
+    const create=req.method==='POST'&&(path==='/account/files'||foldersRoute);
+    if((!rename&&!create)||!req.headers['content-type']?.startsWith('application/json')){
       return json(res,405,{error:'Method unavailable.'});
     }
     let input;
@@ -204,7 +206,7 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
       const chunks=[];
       for await(const chunk of req.iterator({destroyOnReturn:false})){
         size+=chunk.length;
-        if(size>3*1024*1024){req.resume();return json(res,413,{error:'File exceeds 2 MB.'});}
+        if(size>(rename?4096:3*1024*1024)){req.resume();return json(res,413,{error:'File exceeds 2 MB.'});}
         chunks.push(chunk);
       }
       input=JSON.parse(Buffer.concat(chunks).toString());
@@ -213,6 +215,16 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     const name=typeof input?.name==='string'?input.name.trim().normalize('NFC'):'';
     if(!name||name==='.'||name==='..'||name.length>160||/[\\/\p{Cc}\p{Cf}]/u.test(name)){
       return json(res,422,{error:'Choose a valid name.'});
+    }
+    if(rename){
+      const row=folderItem?folderById.get(owner,id):select.get(owner,id);
+      if(!row)return json(res,404,{error:'File or folder unavailable.'});
+      const bytes=folderItem?Buffer.alloc(0):unpack(row,true).data;
+      const update=folderItem
+        ? db.prepare('UPDATE user_folders SET envelope=? WHERE owner=? AND id=?')
+        : db.prepare('UPDATE user_files SET envelope=? WHERE owner=? AND id=?');
+      update.run(pack(owner,id,name,bytes),owner,id);
+      return json(res,200,{ok:true});
     }
     const folder=input?.folder??null;
     const bytes=foldersRoute?Buffer.alloc(0):Buffer.from(typeof input.content==='string'?input.content:'','base64');

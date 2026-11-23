@@ -1,3 +1,5 @@
+import AppIcon from './AppIcon';
+import type {AppFileContainer as Container} from './account-file-containers';
 import {Surface,SurfaceTitle,type DashboardTheme} from './native-surfaces';
 import {formatBytes} from './storage-summary';
 import TrustBadges from './TrustBadges';
@@ -28,7 +30,7 @@ export default function NativeAdminUsers({token,colors,onDetail}:{token:string;c
   const [visibleLimit,setVisibleLimit]=useState(40);
   const [loading,setLoading]=useState(true);
   const [selected,setSelected]=useState('');
-  const [details,setDetails]=useState<{account:User;registered:App[]}|null>(null);
+  const [details,setDetails]=useState<{account:User;registered:App[];containers?:Container[]}|null>(null);
   const [busy,setBusy]=useState(false);
   const [status,setStatus]=useState('');
   const [deleting,setDeleting]=useState(false);
@@ -120,6 +122,10 @@ export default function NativeAdminUsers({token,colors,onDetail}:{token:string;c
             {icon('Send warning','send-outline',()=>run(async()=>{await api('admin/users/'+user.username,{action:'warn',text:warning});setWarning(null);}),busy||!warning.trim())}
             {icon('Cancel warning','close',()=>setWarning(null))}
           </View></>}
+        {!!details?.containers?.length&&<><View style={divider}><SurfaceTitle colors={colors} title="App storage in this account" icon="server-outline"/></View>
+          {details.containers.map(app=><View key={app.client} style={[divider,{flexDirection:'row',alignItems:'center',gap:12}]}>
+            <AppIcon icon={app.icon} color={colors.accent}/><Text style={{color:colors.ink,flex:1}}>{app.name}</Text><Text style={{color:colors.muted}}>{formatBytes(app.bytes)}</Text>
+          </View>)}</>}
         <View style={divider}><SurfaceTitle colors={colors} title="Connected apps" icon="apps-outline" tint="lavender"/></View>
         {!user.apps.length&&<Text style={{color:colors.muted}}>No connected apps.</Text>}
         {user.apps.map(app=><View key={app.client} style={[divider,{gap:4}]}><Text style={{color:colors.ink}}>{app.label}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View>)}

@@ -432,3 +432,12 @@ Verification links for AUTHN-105 and AUTHN-106 are in the [native dashboard and 
 23 November checkpoint at the user's direction. Five-hour usage was 4% remaining, with reset at 16:09 CET on 23 November. Weekly usage was 85% remaining, with reset on 30 November at 11:09 CET. The legacy cleanup is on the default branch as `8df94c4`, with history preserved.
 
 AUTHN-112 · **Implemented.** Active registered apps can use private user-owned records with a linked user grant and `app_data` before app verification. Service database keys, public publication and cross-app publishing still require verification. Focused hosted storage and issuer tests passed after this correction. Next action is to run full checks for the correction, sync the standalone SDK documentation and scope allowlist, and resume the pending production test app's DNS and callback setup when access is available. No feature deployment or new native build was started.
+
+### Devices, Files and integration icon guidance
+
+| ID | Request | State | Evidence and next action |
+| --- | --- | --- | --- |
+| AUTHN-113 | Dedicated native device sign-in with opt-in QR scanning and six web/native code slots | Implemented | Local issuer confirms one code input and six visual slots. Native requires a review action and the issuer still requires approval. Installed-device camera and layout verification remain. |
+| AUTHN-114 | Show app container icons and usage and limit content editing to the developer's own account | Implemented | Files, Data usage and admin show icon and usage. First-party routes enforce verified publisher ownership, opt-in and user link. See hosted storage tests. |
+| AUTHN-115 | Finder-style Files with upload icon, multiple uploads and inline create/rename | Implemented | Native and web changes, with owner and content-preservation API tests. Verify chooser, keyboard, layout and accessibility on installed devices and browser. |
+| AUTHN-116 | Make the real app icon a high-priority recommendation in the integration skill | Implemented | Registration guidance prioritizes the product's real icon and leaves it optional. Local and repository skill copies updated. |

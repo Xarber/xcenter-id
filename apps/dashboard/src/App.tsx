@@ -22,13 +22,14 @@ import type {Account} from './web-account';
 type Icon = ComponentProps<typeof Ionicons>['name'];
 const pages = [
   ['dashboard','Overview','person-circle-outline'],['profile','Profile','id-card-outline'],
-  ['devices','Devices','phone-portrait-outline'],['security','Sign-in & security','key-outline'],
+  ['devices','Devices','phone-portrait-outline'],['device-signin','Device sign-in','qr-code-outline'],['security','Sign-in & security','key-outline'],
   ['apps','Apps','apps-outline'],['permissions','Permissions','shield-checkmark-outline'],
   ['storage','Data usage','server-outline'],['files','Files','folder-open-outline'],['friends','Friends','people-outline'],['mail','Mail','mail-outline'],
   ['mail-clients','Mail clients','mail-open-outline'],['settings','Settings','settings-outline'],['support','Support','help-circle-outline'],['admin','Admin','shield-outline'],['developer','Developer apps','code-slash-outline'],
 ] as const satisfies ReadonlyArray<readonly [string,string,Icon]>;
 const copy:Record<string,string> = {
   dashboard:'Review your passkeys, profile, and connected apps.', profile:'Edit your photo, name, birthday, and email.',
+  'device-signin':'Use a QR code or enter the code shown on your other device.',
   devices:'Review active sessions and sign out other devices.', security:'Manage enrolled passkeys and security keys.',
   apps:'Review connected apps and open the developer portal.', permissions:'Choose what each app can access.',
   storage:'Review file storage used by your account.', files:'Upload, download, and manage private files.',

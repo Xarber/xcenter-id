@@ -18,6 +18,22 @@ export async function pickDocumentAsync(maxBytes=2*1024**2) {
   }
 }
 
+export async function pickDocumentsAsync() {
+  const result=await getDocumentAsync({copyToCacheDirectory:true,multiple:true});
+  return result.canceled?[]:result.assets.map(asset=>({
+    name:asset.name,
+    async read(){
+      const file=new File(asset.uri);
+      if(!file.size||file.size>2*1024**2)throw new Error('Choose a file between 1 byte and 2 MB.');
+      return file.base64();
+    },
+    dispose(){
+      const file=new File(asset.uri);
+      if(file.exists)file.delete();
+    },
+  }));
+}
+
 export async function pickProfilePhoto() {
   const response=await getDocumentAsync({type:['image/jpeg','image/png'],copyToCacheDirectory:true});
   if(response.canceled)return null;

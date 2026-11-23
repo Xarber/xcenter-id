@@ -89,7 +89,7 @@ function notifyAppChange(owner,client,kind){
   }).catch(()=>console.warn('Account activity notice could not be generated.'));
 }
 const support = createSupportRoutes({accounts,mail,sendExternal:createSupportMailer(mailConfig?.submission,mailLimits)});
-const adminUsers=createAdminUsers({accounts,registry,mail});
+const adminUsers=createAdminUsers({accounts,registry,mail,containers:owner=>applicationData?.containers(owner)??[]});
 let provider;
 const applicationData=configuration?openApplicationData({path:join(state,'app-data.sqlite'),registry,accounts,
   key:Buffer.from(hkdfSync('sha256',Buffer.from(configuration.profileKey,'hex'),'','xcenter.appdata.v1',32)),
