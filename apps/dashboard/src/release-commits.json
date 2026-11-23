@@ -1,6 +1,6 @@
 {
   "0.14.0": {
-    "revision": "c12d206f537c6ddea52079a683e500632d5580a6",
+    "revision": "a65fc5c395ad11e47acccfbbc3076002d32e7b00",
     "commits": [
       {
         "id": "fdde5ca807a423f47b36ec820c5148d2cf4fccf8",
@@ -61,6 +61,16 @@
         "id": "c12d206f537c6ddea52079a683e500632d5580a6",
         "title": "docs(queue): checkpoint sign-in and release follow-up",
         "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "e43a85fa9c35b1a66f01dadd779c7875e4f38f3b",
+        "title": "feat(dashboard): add replayable onboarding and full version history",
+        "detail": "Changed areas: CHANGELOG.md, apps/dashboard, docs/ACTIVE_TASKS.md, scripts/generate-changelog.mjs, services/api."
+      },
+      {
+        "id": "a65fc5c395ad11e47acccfbbc3076002d32e7b00",
+        "title": "feat(onboarding): show real dashboard captures on the web tour",
+        "detail": "Changed areas: apps/dashboard."
       }
     ]
   },

@@ -4,7 +4,7 @@ The Expo app in `apps/dashboard` supports iOS, Android and web. Both the web and
 
 ## Account navigation
 
-The web sidebar and native navigation include account status, profile, devices, sign-in and security, connected apps, permissions, data usage, files, mail and settings. Web accounts show Administration when the API confirms the account is in the deployment's admin allowlist. Settings can replay the introduction. Three taps on the version unlock Developer Options, including the isolated sample dashboard. The first automatic introduction is recorded in local browser storage and survives reloads.
+The web sidebar and native navigation include account status, profile, devices, sign-in and security, connected apps, permissions, data usage, files, mail and settings. Web accounts show Administration when the API confirms the account is in the deployment's admin allowlist. Settings can replay the introduction. Three taps on the version unlock Developer Options, including the isolated sample dashboard. Completing or skipping the introduction records it locally. See [version history and onboarding](RELEASES.md#version-history-and-onboarding) for the replay, update prompt and screenshot workflow.
 
 The native Overview uses the mobile web dashboard's profile hero, tinted shortcut tiles, and separate account-status card. Native Administration groups Accounts, Username requests, Support inbox, Server storage, Developer verification and Registered apps into bordered cards with row dividers. Selecting an account or opening app storage shows its own detail view. Native sidebar and bottom tabs, platform dialogs, account operations and secure browser reauthentication stay available.
 
