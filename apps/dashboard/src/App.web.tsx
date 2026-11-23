@@ -2,6 +2,7 @@ import ReleaseNotes, {DeveloperRelease, FullRelease, ReleaseArchive} from './Rel
 import {currentRelease,enteredKey,onboardingKey,releaseAnnouncement,releaseByVersion,seenReleaseKey} from './release-info';
 import TrustBadges from './TrustBadges.web';
 import {introduction} from './introduction';
+import screenshots from '../public/assets/onboarding/manifest.json';
 import MailClients from './MailClients.web';
 import ApplicationStorage from './ApplicationStorage.web';
 import DeveloperDocumentation from './DeveloperDocumentation.web';
@@ -55,6 +56,26 @@ function Logo({href='/dashboard'}:{href?:string}){
   return <a href={href} className="xc-brand"><img src="/authnjs-icon.svg" alt=""/><span>X-Center <b>ID</b></span></a>;
 }
 
+function ScreenshotGallery({close}:{close:()=>void}){
+  const dialog=useRef<HTMLDialogElement>(null);
+  const [selected,setSelected]=useState(screenshots.screenshots[0]);
+  useEffect(()=>{dialog.current?.showModal();},[]);
+  const asset='/assets/onboarding/'+selected.file;
+  return <dialog ref={dialog} className="xc-intro xc-tour" aria-labelledby="screenshot-heading" onCancel={event=>{event.preventDefault();close();}}>
+    <h2 id="screenshot-heading">Screenshots</h2>
+    <p>Web captures from {screenshots.version} with sample data.</p>
+    <div className="xc-stack"><label>Screen and device <select value={selected.file} onChange={event=>{
+      const shot=screenshots.screenshots.find(item=>item.file===event.target.value);
+      if(shot)setSelected(shot);
+    }}>
+      {screenshots.screenshots.map(shot=><option key={shot.file} value={shot.file}>{shot.feature} · {shot.deviceClass}</option>)}
+    </select></label>
+    <picture className="xc-tour-screenshot"><img src={asset} alt={selected.feature+' web screenshot'}/></picture>
+    <div className="xc-actions"><a href={asset} download={selected.file}>Download screenshot</a>
+      <button className="xc-button xc-secondary" onClick={close}>Done</button></div></div>
+  </dialog>;
+}
+
 function Intro({close}:{close:()=>void}){
   const [step,setStep]=useState(0);
   const dialog=useRef<HTMLDialogElement>(null);
@@ -65,6 +86,10 @@ function Intro({close}:{close:()=>void}){
     <img className="xc-intro-logo" src="/authnjs-icon.svg" alt="X-Center ID"/>
     <div className="xc-stack xc-tour-step" key={step}><span className="xc-symbol xc-sky"><Icon size={24}/></span>
       <small aria-live="polite">Step {step+1} of {introduction.length}</small><h2 id="intro-title">{page.title}</h2><p>{page.description}</p></div>
+    <picture className="xc-tour-screenshot">
+      <source media="(max-width: 640px)" srcSet={'/assets/onboarding/mobile-'+page.feature+'.png'}/>
+      <img src={'/assets/onboarding/desktop-'+page.feature+'.png'} alt={page.title+' shown with sample data'}/>
+    </picture>
     <div className="xc-tour-progress" aria-hidden="true">{introduction.map((entry,index)=><span key={entry.title} data-active={index<=step}/>)}</div>
     <div className="xc-actions"><button className="xc-button xc-secondary" onClick={close}>Skip</button>{step>0&&<button className="xc-button xc-secondary" onClick={()=>setStep(step-1)}>Back</button>}
       <button className="xc-button xc-primary" onClick={()=>step===introduction.length-1?close():setStep(step+1)}>{step===introduction.length-1?'Open app':'Continue'} <ArrowRight size={16}/></button></div>
@@ -222,6 +247,7 @@ export default function WebApp(){
   const [intro,setIntro]=useState(false);
   const [releaseRows,setReleaseRows]=useState<string[][]>([]);
   const [developerRelease,setDeveloperRelease]=useState('');
+  const [renderScreenshots,setRenderScreenshots]=useState(false);
   const [sampleMode,setSampleMode]=useState(false);
   const [dev,setDev]=useState(false);
   const taps=useRef(0);
@@ -418,7 +444,8 @@ export default function WebApp(){
     }}>{currentRelease.version}</button></div>
     {dev&&<div className="xc-stack"><h2>Developer Options</h2>
       <details><summary>Developer changelog</summary><ReleaseArchive developer/></details>
-      {releaseByVersion(developerRelease)&&<DeveloperRelease version={developerRelease}/>}<a href="/samples">Open sample integrations</a>
+      {releaseByVersion(developerRelease)&&<DeveloperRelease version={developerRelease}/>}
+      <button className="xc-button xc-secondary" onClick={()=>setRenderScreenshots(true)}>Render screenshots</button><a href="/samples">Open sample integrations</a>
       <button className="xc-button xc-secondary" onClick={()=>setSampleMode(!sampleMode)}>{sampleMode?'Exit sample dashboard':'Open sample dashboard'}</button>
       {sampleMode&&<div className="xc-sample"><span className="xc-pill">Sample data</span><h2>Sample dashboard</h2>
         {Object.entries(sample).map(([section,items])=><div key={section}><h3>{section}</h3>{items.map(item=><p key={item.id}>{item.title} · {item.detail}</p>)}</div>)}</div>}
@@ -463,6 +490,7 @@ export default function WebApp(){
     <nav className="xc-bottom" aria-label="Main screens">{[
       ['dashboard','Account',UserRound],['apps','Apps',Grid2X2],['settings','Settings',Settings],...(account.admin?[['admin','Admin',ShieldCheck]]:[]),
     ].map(([id,label,Icon])=>{const ItemIcon=Icon as typeof UserRound;const selected=id==='dashboard'?!['apps','permissions','developer','settings','support','mail-clients','admin'].includes(page):id==='apps'?['apps','permissions','developer'].includes(page):id==='settings'?['settings','support','mail-clients'].includes(page):page==='admin';return <a key={String(id)} href={'/'+id} aria-current={selected?'page':undefined}><ItemIcon size={22}/><span>{String(label)}</span></a>;})}</nav>
+    {dev&&renderScreenshots&&<ScreenshotGallery close={()=>setRenderScreenshots(false)}/>}
     {startupPanels}
   </div>;
 }

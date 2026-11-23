@@ -27,7 +27,7 @@ fixtures = {
     "/account/apps": {"apps": [app]},
     "/account/connected-apps": {"apps": [app]},
     "/account/data-grants": {"grants": []},
-    "/account/app-data-permissions": {"apps": [], "grants": [], "incoming": [], "outgoing": []},
+    "/account/app-data-permissions": {"permissions": []},
 }
 
 
@@ -84,14 +84,14 @@ with sync_playwright() as browser_tools:
         expect(page.get_by_role("dialog")).to_have_count(0)
 
         for feature, path, title in (
-            ("overview", "dashboard", "Good evening, Robin"),
+            ("overview", "dashboard", "Hello, Robin"),
             ("apps", "apps", "Apps using X-Center ID"),
             ("permissions", "permissions", "Permissions"),
             ("developers", "docs", "Develop with X-Center ID"),
         ):
             page.goto(origin+"/"+path)
             if feature == "overview":
-                expect(page.get_by_text("Robin Green", exact=True)).to_be_visible()
+                expect(heading(page, title)).to_be_visible()
             elif feature == "developers":
                 expect(page.locator("h1")).to_be_visible()
             else:

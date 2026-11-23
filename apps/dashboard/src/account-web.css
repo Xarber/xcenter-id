@@ -237,3 +237,6 @@ input:is([type=checkbox],[type=radio]){inline-size:1.2rem;block-size:1.2rem;min-
 .xc-release-rows p{margin:3px 0 0}
 .xc-release-entry code,.xc-stack code{overflow-wrap:anywhere}
 .xc-landing>.xc-card{margin-top:26px}
+.xc-tour-screenshot{display:flex;justify-content:center}
+.xc-tour-screenshot img{max-height:min(40dvh,360px);max-width:100%;width:auto;height:auto;object-fit:contain;border:1px solid var(--line);border-radius:14px;background:var(--surface);box-shadow:0 8px 24px #0b183519}
+@media(max-height:560px){.xc-tour-screenshot img{max-height:25dvh}}

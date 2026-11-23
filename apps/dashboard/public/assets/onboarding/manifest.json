@@ -1,0 +1,79 @@
+{
+  "version": "0.14.0",
+  "sourceRevision": "e43a85fa9c35b1a66f01dadd779c7875e4f38f3b",
+  "capturedOn": "2026-11-23",
+  "screenshots": [
+    {
+      "file": "desktop-overview.png",
+      "platform": "web",
+      "deviceClass": "desktop",
+      "feature": "overview",
+      "width": 1280,
+      "height": 800,
+      "environment": "Chromium with isolated fixture"
+    },
+    {
+      "file": "desktop-apps.png",
+      "platform": "web",
+      "deviceClass": "desktop",
+      "feature": "apps",
+      "width": 1280,
+      "height": 800,
+      "environment": "Chromium with isolated fixture"
+    },
+    {
+      "file": "desktop-permissions.png",
+      "platform": "web",
+      "deviceClass": "desktop",
+      "feature": "permissions",
+      "width": 1280,
+      "height": 800,
+      "environment": "Chromium with isolated fixture"
+    },
+    {
+      "file": "desktop-developers.png",
+      "platform": "web",
+      "deviceClass": "desktop",
+      "feature": "developers",
+      "width": 1280,
+      "height": 800,
+      "environment": "Chromium with isolated fixture"
+    },
+    {
+      "file": "mobile-overview.png",
+      "platform": "web",
+      "deviceClass": "mobile",
+      "feature": "overview",
+      "width": 390,
+      "height": 844,
+      "environment": "Chromium with isolated fixture"
+    },
+    {
+      "file": "mobile-apps.png",
+      "platform": "web",
+      "deviceClass": "mobile",
+      "feature": "apps",
+      "width": 390,
+      "height": 844,
+      "environment": "Chromium with isolated fixture"
+    },
+    {
+      "file": "mobile-permissions.png",
+      "platform": "web",
+      "deviceClass": "mobile",
+      "feature": "permissions",
+      "width": 390,
+      "height": 844,
+      "environment": "Chromium with isolated fixture"
+    },
+    {
+      "file": "mobile-developers.png",
+      "platform": "web",
+      "deviceClass": "mobile",
+      "feature": "developers",
+      "width": 390,
+      "height": 844,
+      "environment": "Chromium with isolated fixture"
+    }
+  ]
+}
