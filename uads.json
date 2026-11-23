@@ -14,7 +14,7 @@
       "ios",
       "android"
     ],
-    "framework": "Legacy Node.js and isolated Expo SDK 58 dashboard",
+    "framework": "Node.js identity and data services with an Expo SDK 58 dashboard",
     "hosting": "X-Center public HTTPS identity, private account service, and local SMTP listener"
   },
   "features": {

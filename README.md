@@ -9,6 +9,6 @@ A passkey-first account for X-Center apps. Manage connected apps, data access, d
 - [Read the project documentation](docs/INDEX.md)
 - [Check release and device verification](docs/RELEASES.md)
 
-The Expo account manager is in `apps/dashboard`. The identity and data services are in `services/api`. The legacy website remains in `HTML`, with its retired runtime disabled by default. See the dashboard and API guides for local setup and verification.
+The Expo account manager is in `apps/dashboard`. The identity and data services are in `services/api`. The original AuthNJS website and server are available in [Git history](https://github.com/Xarber/xcenter-id/tree/3bdca936ebd56fbbbce8bf169e0b5d781f860996). See the dashboard and API guides for local setup and verification.
 
-The replacement projects use AGPL-3.0-only. The historical Node project retains its original package license declaration.
+The current projects use AGPL-3.0-only.

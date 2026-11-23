@@ -1,5 +1,7 @@
 # Legacy code review
 
+The paths below refer to the original implementation. Its last retained tree is `3bdca936ebd56fbbbce8bf169e0b5d781f860996`.
+
 Baseline `e617758`, branch `main`. The source inventory covers 2,357 tracked files, including 2,093 vendored Font Awesome files. Vendored assets and binaries were inventoried as dependencies or media. Historical account data was classified by path and type without inspecting individual values or validating credentials. Findings use static source inspection.
 
 | Area | Files and relationships |
