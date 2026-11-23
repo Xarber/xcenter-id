@@ -450,7 +450,7 @@ Follow-up for AUTHN-108 and AUTHN-113–116. The live test registration is alrea
 | --- | --- | --- | --- |
 | AUTHN-117 | Reopen and redo the live Velunivo Consent Test settings | Blocked | Both requested collections were entered and Save was submitted in the live portal. The browser is awaiting the developer passkey. Verify persistence after confirmation. The registration is active and verified. The callback previously returned 404. |
 | AUTHN-118 | Refresh the native sign-in screen with a subtle, slowly animated night background | Implemented | Native sign-in preserves the existing form, adds a fixed background and pauses its subtle opacity animation when inactive or Reduce Motion is enabled. Source checks pass. Verify layout and input behavior on an installed build. |
-| AUTHN-119 | Deploy the updated app and start the native build | Queued | Finish independent implementation and verification, stage and validate the production revision with rollback available, then start and verify submission of the four-format native workflow. |
+| AUTHN-119 | Deploy the updated app and start the native build | Verified | Web/API revision `fcea370` is live and passed the staged and public checks. [Native preview 45264711602](https://github.com/Xarber/xcenter-id/actions/runs/45264711602) is running all four jobs from the same commit. Check artifacts and native runtime after completion. |
 
 23 November usage checkpoint under UADS §0. The five-hour window has 7% remaining and resets at 21:45 CET on 23 November. The weekly window has 70% remaining and resets at 11:09 CET on 30 November. No portal mutation, new implementation, production deployment or build started for this follow-up. Resume with AUTHN-117 and AUTHN-118 before the release gate.
 
@@ -459,3 +459,5 @@ Follow-up for AUTHN-108 and AUTHN-113–116. The live test registration is alrea
 | ID | Request | State | Evidence and next action |
 | --- | --- | --- | --- |
 | AUTHN-120 | Apply updated UADS §§16, 37, 40 and 44 to onboarding and past changelogs | Implemented | Added full-screen replayable tours, concise archive cards, per-version links and Developer Mode Git notes. Chromium exercised desktop and mobile with a synthetic account. Native capture, runtime checks and stable release evidence remain pending. |
+
+[Verification report](reports/ONBOARDING_RELEASE_HISTORY_2026-11-23.md) records production, preview and screenshot evidence.

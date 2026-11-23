@@ -119,3 +119,9 @@ Restore both site files from `/srv/xcenter/infra/changes/pre-dashboard-f465477`,
 Production now serves `418f89ccf5b976e7b4c6162764ed42dadeb4e9bc` on loopback 18814. Public HTTPS and issuer discovery passed. SMTP submission and IMAP returned valid TLS certificates and protocol greetings. IMAP advertises SASL LOGIN and ID. Neither production container restarted. Older SMTP logs marked connection errors as listener errors. The updated runtime distinguishes the two. Public inbound SMTP on port 25 kept its existing deployment.
 
 Web/API rollback restores the two Nginx site files from `/srv/xcenter/infra/changes/pre-dashboard-418f89c` and reloads after validation. The previous version remains on 18813. For mail-client rollback, stop `xcenter-id-clients-418f89c` and start `xcenter-id-clients-f465477`. Seven online SQLite snapshots passed quick_check at `/srv/xcenter/data/.xcenter-id-rollbacks/pre-dashboard-418f89c._eowp9h5`. Spark application setup and physical native OTP AutoFill still need verification.
+
+## 23 November dashboard 0.14.0 rollout
+
+HTTPS now serves `fcea370037e7d4c962c921fcf1a4f07bee075a30` from loopback 18815. Staging used copies of the seven verified SQLite snapshots. Prior web/API traffic can be restored by copying the two retained site files from `/srv/xcenter/infra/changes/pre-dashboard-fcea370`, validating Nginx and reloading it. The previous process remains on loopback 18814. Mail listeners kept their existing deployments.
+
+The public release archive, device entry, service worker and OpenID Connect discovery passed. See [verification report](../reports/ONBOARDING_RELEASE_HISTORY_2026-11-23.md).
