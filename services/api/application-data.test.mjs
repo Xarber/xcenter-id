@@ -11,8 +11,8 @@ test('verified app databases isolate users and services, encrypt records and gat
  const principal=token=>({['a'.repeat(25)]:{owner:'user1',client:'a'},['b'.repeat(25)]:{owner:'user1',client:'b'},['c'.repeat(25)]:{owner:'user2',client:'a'}}[token]);
  let extraBytes=0;
  let sourceLinked=true;
- const accounts={storageCapacity:()=>4096,ownerForUsername:username=>username==='bob'?'user2':username==='alice'?'user1':null,linkedGrant:(_owner,client)=>sourceLinked||client!=='a'?'fixture-grant':null,available:()=>true,isDisconnected:()=>false,current:req=>req.headers.cookie==='session'?{owner:'developer'}:req.headers.cookie==='user'?{owner:'user1'}:null,
-  allowsMutation:req=>req.headers.origin==='https://id.example.test',recentlyConfirmed:()=>true,adminStatus:()=>403,auditAdmin:()=>{}};
+ const accounts={storageCapacity:()=>4096,ownerForUsername:username=>username==='bob'?'user2':username==='alice'?'user1':null,linkedGrant:(_owner,client)=>sourceLinked||client!=='a'?'fixture-grant':null,available:()=>true,isDisconnected:()=>false,current:req=>req.headers.cookie==='session'?{owner:'developer'}:req.headers.cookie==='user'?{owner:'user1'}:req.headers.cookie==='admin'?{owner:'admin'}:null,
+  allowsMutation:req=>req.headers.origin==='https://id.example.test',recentlyConfirmed:()=>true,adminStatus:req=>req.headers.cookie==='admin'?200:403,auditAdmin:()=>{}};
  const data=openApplicationData({path:':memory:',key:Buffer.alloc(32,7),registry,accounts,authenticate:principal,otherUsage:()=>extraBytes});
  const server=createServer((req,res)=>void data.handle(req,res,new URL(req.url,'http://localhost'))).listen(0,'127.0.0.1');await once(server,'listening');
  const base='http://127.0.0.1:'+server.address().port;
@@ -79,6 +79,7 @@ test('verified app databases isolate users and services, encrypt records and gat
   assert.equal((await container('',{cookie:'user'})).status,404);
   assert.equal((await container('/posts/one',{cookie:'user'})).status,404);
   assert.equal((await container('/posts/one?edit=1',{cookie:'user'})).status,404);
+  assert.equal((await container('/posts/one?edit=1',{cookie:'admin'})).status,404);
   assert.equal((await container('/posts/one',{cookie:'user',method:'PUT',body:{data:42,revision:0}})).status,404);
   assert.deepEqual((await (await container()).json()).collections,[]);
   const details={method:'PUT',body:{data:{private:true},revision:0},origin:'https://id.example.test','x-authnjs-request':'account-consent'};
