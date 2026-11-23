@@ -5,7 +5,7 @@ const fileLimit = 2 * 1024 * 1024;
 const storageLimit = 10 * 1024 * 1024;
 const fileId = /^[0-9a-f]{8}-[0-9a-f-]{27}$/;
 
-export function createAccountFiles({ database, key, accounts, origin, friends, usage = () => ({}), appContainers = () => [] }) {
+export function createAccountFiles({ database, key, accounts, origin, friends, usage = () => ({}), appContainers = () => [], fileAccess }) {
   if (!key || key.length !== 32) return null;
   const db = new DatabaseSync(database);
   db.exec(`PRAGMA busy_timeout = 3000; PRAGMA foreign_keys = ON;
@@ -92,9 +92,16 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
   }
 
   const handle=async (req,res,path)=>{
-    const identity=accounts.current(req);
-    if(!identity) return json(res,401,{error:'Sign in to manage your files.'});
+    const delegated=path.startsWith('/v1/');
+    const shared=path==='/v1/files/shared'||path.startsWith('/v1/files/shared/');
+    if(delegated&&shared&&req.method!=='GET')return json(res,405,{error:'Shared files are read-only.'});
+    const scopes=shared?['shared_files_read']:req.method==='GET'?['files_read','files_write']:['files_write'];
+    const token=delegated&&/^Bearer (\S+)$/i.exec(req.headers.authorization??'')?.[1];
+    const identity=delegated?(token&&await fileAccess?.(token,scopes)):accounts.current(req);
+    if(!identity) return json(res,401,{error:delegated?'An access token with the matching file permission is required.':'Sign in to manage your files.'});
     const owner=identity.owner;
+    if(delegated)path='/account'+path.slice('/v1'.length);
+    if(delegated&&shared&&!friends)return json(res,404,{error:'Shared files unavailable.'});
     const shareId=/^\/account\/files\/shared\/([0-9a-f-]{36})$/.exec(path)?.[1];
     if (friends && (path==='/account/files/shared'||shareId)) {
       if (req.method==='GET'&&!shareId) {
@@ -102,6 +109,7 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
           const row=select.get(share.owner,share.file);
           return row?[{...unpack(row,false),id:share.id,from:accounts.username(share.owner)}]:[];
         });
+        if(delegated)return json(res,200,{incoming});
         const outgoing=outgoingShares.all(owner).filter(activeShare).flatMap(share=>{
           const row=select.get(owner,share.file);
           return row?[{...unpack(row,false),id:share.id,to:accounts.username(share.recipient)}]:[];
@@ -154,18 +162,23 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
         const location=new URL(req.url,origin).searchParams.get('folder');
         const breadcrumbs=trail(owner,location);
         if(!breadcrumbs)return json(res,404,{error:'Folder unavailable.'});
+        const folder=location||null;
+        const listing={
+          files:forFolder.all(owner,folder).map(row=>unpack(row,false)),
+          folders:children.all(owner,folder).map(row=>unpack(row,false)),
+          breadcrumbs,
+        };
+        if(delegated)return json(res,200,listing);
         const stats=count.get(owner);
         const categories={files:stats.bytes,...usage(owner)};
-        const folder=location||null;
-        return json(res,200,{files:forFolder.all(owner,folder).map(row=>unpack(row,false)),
-          folders:children.all(owner,folder).map(({id,envelope,size,created})=>unpack({id,owner,envelope,size,created},false)),
-          breadcrumbs,categories,appContainers:appContainers(owner),used:Object.values(categories).reduce((total,value)=>total+value,0),total:stats.total,limit:capacity});
+        return json(res,200,{...listing,categories,appContainers:appContainers(owner),
+          used:Object.values(categories).reduce((total,value)=>total+value,0),total:stats.total,limit:capacity});
       }
       const row=individual&&select.get(owner,id);
       if(!row)return json(res,404,{error:'File unavailable.'});
       return download(res,unpack(row,true));
     }
-    if(!(accounts.allowsMutation?.(req) ?? req.headers.origin===origin)||req.headers['x-authnjs-request']!=='account-consent'){
+    if(!delegated&&(!(accounts.allowsMutation?.(req) ?? req.headers.origin===origin)||req.headers['x-authnjs-request']!=='account-consent')){
       return json(res,403,{error:'Only the account manager can change your files.'});
     }
     if(req.method==='DELETE'&&individual&&folderItem){
@@ -196,6 +209,7 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
       }
       input=JSON.parse(Buffer.concat(chunks).toString());
     } catch {return json(res,422,{error:'Invalid upload.'});}
+    if(delegated&&(await fileAccess(token,scopes))?.owner!==owner)return json(res,403,{error:'File access was revoked.'});
     const name=typeof input?.name==='string'?input.name.trim().normalize('NFC'):'';
     if(!name||name==='.'||name==='..'||name.length>160||/[\\/\p{Cc}\p{Cf}]/u.test(name)){
       return json(res,422,{error:'Choose a valid name.'});

@@ -10,7 +10,8 @@ test('verified app databases isolate users and services, encrypt records and gat
  const registrations=['a','b'].map(client=>{const r=registry.submit('developer',client,'https://'+client+'.example.test/callback');registry.approve(r.id,client);registry.verifyApp(r.id,true);return r;});
  const principal=token=>({['a'.repeat(25)]:{owner:'user1',client:'a'},['b'.repeat(25)]:{owner:'user1',client:'b'},['c'.repeat(25)]:{owner:'user2',client:'a'}}[token]);
  let extraBytes=0;
- const accounts={storageCapacity:()=>4096,ownerForUsername:username=>username==='bob'?'user2':username==='alice'?'user1':null,linkedGrant:()=>({id:'fixture-grant'}),available:()=>true,isDisconnected:()=>false,current:req=>req.headers.cookie==='session'?{owner:'developer'}:null,
+ let sourceLinked=true;
+ const accounts={storageCapacity:()=>4096,ownerForUsername:username=>username==='bob'?'user2':username==='alice'?'user1':null,linkedGrant:(_owner,client)=>sourceLinked||client!=='a'?'fixture-grant':null,available:()=>true,isDisconnected:()=>false,current:req=>req.headers.cookie==='session'?{owner:'developer'}:req.headers.cookie==='user'?{owner:'user1'}:null,
   allowsMutation:req=>req.headers.origin==='https://id.example.test',recentlyConfirmed:()=>true,adminStatus:()=>403,auditAdmin:()=>{}};
  const data=openApplicationData({path:':memory:',key:Buffer.alloc(32,7),registry,accounts,authenticate:principal,otherUsage:()=>extraBytes});
  const server=createServer((req,res)=>void data.handle(req,res,new URL(req.url,'http://localhost'))).listen(0,'127.0.0.1');await once(server,'listening');
@@ -42,8 +43,16 @@ test('verified app databases isolate users and services, encrypt records and gat
   const manage=(i,body)=>request('/account/app-storage/'+registrations[i].id,{method:'POST',body,cookie:'session',origin:'https://id.example.test'});
   assert.equal((await manage(0,{action:'sharing',shared:['posts']})).status,200);
   assert.equal((await manage(1,{action:'sharing',shared:[],requests:[{source:'a',collection:'posts',label:'Read your posts in A'}]})).status,200);
+  sourceLinked=false;
+  assert.equal(data.requestsForOwner('user1','b')[0].linked,false);
+  assert.equal(data.authorize('user1','b',['a/posts']),false);
+  assert.equal((await request('/v1/apps/a/data/posts/one',{token:'b'.repeat(25)})).status,403);
+  sourceLinked=true;
   data.authorize('user1','b',['a/posts']);assert.equal((await request('/v1/apps/a/data/posts/one',{token:'b'.repeat(25)})).status,200);
   assert.equal((await request('/v1/apps/a/data/posts/one',{token:'b'.repeat(25),method:'DELETE',revision:'"2"'})).status,403);
+  sourceLinked=false;
+  assert.equal((await request('/v1/apps/a/data/posts/one',{token:'b'.repeat(25)})).status,403);
+  sourceLinked=true;
   data.authorize('user1','b',[]);assert.equal((await request('/v1/apps/a/data/posts/one',{token:'b'.repeat(25)})).status,403);
   const key=await (await manage(0,{action:'rotate-key'})).json();assert.ok(key.secret.startsWith('xid-db-'));
   assert.equal((await request('/v1/apps/b/data/posts/one',{token:key.secret})).status,401);
@@ -53,6 +62,17 @@ test('verified app databases isolate users and services, encrypt records and gat
   assert.equal(database.records,1);
   assert.ok(database.used<data.accountUsage('user1'));
   assert.equal((await manage(0,{action:'capacity',capacity:1024**3})).status,403);
+  assert.equal((await request('/account/file-containers/a',{cookie:'user'})).status,404);
+  assert.equal((await manage(0,{action:'file-visibility',enabled:true})).status,200);
+  assert.equal(data.containers('user1').find(item=>item.client==='a').showInFiles,true);
+  const container=(path='',extra={})=>request('/account/file-containers/a'+path,{cookie:'user',...extra});
+  assert.deepEqual((await (await container()).json()).collections,[{collection:'messages',records:1},{collection:'posts',records:1}]);
+  assert.deepEqual((await (await container('/posts/one')).json()),{text:'published'});
+  assert.equal((await container('/posts/service')).status,404);
+  assert.equal((await container('/posts/one',{cookie:'session'})).status,404);
+  assert.equal((await container('/posts/one',{method:'DELETE'})).status,405);
+  assert.equal((await manage(0,{action:'file-visibility',enabled:false})).status,200);
+  assert.equal((await container('/posts/one')).status,404);
   data.revokeApp('user1','a');
   assert.equal(data.accountUsage('user1'),0);
   assert.equal((await request('/v1/apps/a/data/posts/service',{token:key.secret})).status,200);

@@ -1,3 +1,5 @@
+import AppFileContainer from './AppFileContainer';
+import type { AppFileContainer as Container } from './account-file-containers';
 import NativeAdminInventory from './NativeAdminInventory';
 import { Surface, SurfaceTitle, SymbolTile, type DashboardTheme } from './native-surfaces';
 import CopyButton from './CopyButton';
@@ -31,7 +33,7 @@ import DeveloperPortal from './DeveloperPortal';
 type Device = {id:string;label:string;created:number;current:boolean};
 type ConnectedApp = {client:string;label:string;icon?:string|null;verified?:boolean;description?:string};
 type Entry = {id:string;name:string;size:number};
-type Files = {appContainers?:{client:string;name:string;bytes:number}[];folders:Entry[];files:Entry[];breadcrumbs:Entry[];categories:Record<string,number>;used:number;limit:number};
+type Files = {appContainers?:Container[];folders:Entry[];files:Entry[];breadcrumbs:Entry[];categories:Record<string,number>;used:number;limit:number};
 type Mail = {id:string;received:number;size:number;subject?:string;from?:string;preview?:string};
 type Grant = {source:string;destination:string;expires:number};
 type SampleGrant = {source:string;destination:string;sourceName:string;app:string;shared:boolean;expires:number|null};
@@ -74,6 +76,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [supportSubject,setSupportSubject]=useState('');
   const [supportText,setSupportText]=useState('');
   const [heroPhotoFailed,setHeroPhotoFailed]=useState(false);
+  const [fileContainer,setFileContainer]=useState<Container>();
   const [adminDetail,setAdminDetail]=useState<'account'|'storage'|null>(null);
   const [adminAuthorized,setAdminAuthorized]=useState(false);
   const [newUsername,setNewUsername]=useState('');
@@ -385,8 +388,16 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       </>;
       break;
     case 'files':
+      if(fileContainer){content=<AppFileContainer app={fileContainer} token={token} colors={colors} back={()=>setFileContainer(undefined)}/>;break;}
       content=<><View style={styles.actions}>{button('Your files',()=>setFolder(null))}
         {files?.breadcrumbs.map(item=><View key={item.id}>{button(item.name,()=>setFolder(item.id))}</View>)}</View>
+        {!folder&&files?.appContainers?.filter(app=>app.showInFiles).map(app=>
+          <Pressable accessibilityRole="button" key={app.client} onPress={()=>setFileContainer(app)}
+            style={{minHeight:52,flexDirection:'row',alignItems:'center',gap:10,borderTopWidth:1,borderColor:colors.line}}>
+            <AppIcon icon={app.icon} color={colors.accent}/>
+            <View style={{flex:1}}><Text style={{color:colors.ink,fontWeight:'700'}}>{app.name}</Text>{paragraph('Read-only app folder')}</View>
+            <Ionicons accessible={false} name="chevron-forward" size={18} color={colors.muted}/>
+          </Pressable>)}
         {files?.folders.map(item=>row(item.id,item.name,'Folder',<View style={styles.actions}>
           {fileAction('Open folder '+item.name,'folder-open-outline',()=>setFolder(item.id))}
           {fileAction('Remove folder '+item.name,'trash-outline',()=>confirm('Remove empty folder?','This action removes the folder.',

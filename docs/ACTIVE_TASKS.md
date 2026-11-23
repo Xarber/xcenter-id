@@ -418,3 +418,13 @@ Implemented under the user's final one-batch usage override. The integration ski
 The user overrode the usage gate for this assignment on 20 November. The standalone SDK was created from a fresh Git history with reviewed source, branding and synthetic tests. Its integration skill is also installed locally and maintained in both repositories.
 
 Verification links for AUTHN-105 and AUTHN-106 are in the [native dashboard and SDK report](reports/NATIVE_DASHBOARD_SDK_2026-11-20.md). The dashboard's first run was rejected before setup. After anonymous verification showed the repository was public, a second preview was dispatched from `fdde5ca`. A native install is still required to verify presentation and real account actions.
+
+### Consent presentation and app file access
+
+| ID | Request | State | Evidence and next action |
+| --- | --- | --- | --- |
+| AUTHN-107 | Add a still night background and group cross-app permissions by linked source | Implemented | Static consent art and source-linked consent and resource checks. Isolated issuer tests cover linked and unlinked source states. Rendered phone scrolling remains to verify. |
+| AUTHN-108 | Register and test an actual app requesting two Velunivo exports | Blocked | Private pending **Velunivo Consent Test** registration created under the signed-in developer account. Host its HTTPS callback and publish the portal DNS challenge, activate it, configure both requests, and separately approve access for the live test. Isolated issuer verified `recent-neighborhoods` and `ride-insights`. |
+| AUTHN-109 | Add delegated owned-files read, owned-files read/write, and shared-files read | Implemented | Scoped resource and consent tests cover isolation and revocation. Authenticated native and web host flows remain to verify. |
+| AUTHN-110 | Show read-only app data folders in Files when the verified developer opts in | Implemented | Storage tests cover owner-only browsing, download, mutation denial and opt-out. Installed dashboard testing remains. |
+| AUTHN-111 | Remove legacy AuthNJS from the current source | Verified | `16512dd` removes tracked retired files. Its parent retains the original tree. See [verification report](reports/CONSENT_AND_RETIRED_TREE_2026-11-23.md). |

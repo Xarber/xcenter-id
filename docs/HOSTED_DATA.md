@@ -48,3 +48,9 @@ The normal user-token route stores records in the owner's account container for 
 The existing encrypted records already carry the app and owner IDs, so this accounting change preserves IDs, revisions, permissions, payloads, and API paths. Existing records are counted under their owner immediately. Writes that increase usage are blocked when the corresponding quota is full. Reads and deletions remain available. Both namespaces share the encrypted SQLite storage engine. The account quota covers hosted records, account metadata, mail and files. This change does not relocate records to a different physical volume.
 
 Unlinking deletes that app's hosted records and saved places from the user's account, removes its incoming and outgoing grants and ends its account access. The publisher's service records and other users' records are outside that deletion. The app storage capacity editor in Administration changes the publisher service database quota. The developer page shows usage without providing a capacity editor.
+
+## Cross-app consent and read-only account folders
+
+Cross-app requests are grouped under the linked publisher's name and current icon. Requests from an unlinked publisher are declined. The issuer omits switches for them, ignores submitted approvals for them, and checks the link again on every read. Linking the publisher later makes it possible to approve the request. Unlinking clears associated cross-app grants.
+
+Developers can enable **Show this app’s data in the Files browser** in database settings for their own active, verified app. It is off by default. The setting lets account holders browse their own existing records in an icon-labeled, read-only folder and download JSON copies. App-owned service records and records owned by other users stay out of that view. Turning the setting off hides the folder immediately. Editing and deletion still go through the app's storage API and authorization rules.

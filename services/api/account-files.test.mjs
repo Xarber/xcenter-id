@@ -148,3 +148,44 @@ test('app friend import requires a scoped user token and only includes same-app 
     assert.equal(result.length,2);
   }finally{await new Promise(resolve=>server.close(resolve));friends.close();}
 });
+
+test('delegated file read, write and shared read permissions are independently enforced',async t=>{
+  const photos={name:'photo.txt',content:Buffer.from('photo').toString('base64')};
+  const friends={linked:(owner,recipient)=>owner==='first'&&recipient==='second'?'friendship':null,
+    list:owner=>owner==='first'?[{id:'friendship',owner:'second'}]:[]};
+  const grants=new Map([
+    ['read',{owner:'first',scope:'files_read'}],
+    ['write',{owner:'first',scope:'files_write'}],
+    ['other',{owner:'second',scope:'files_read'}],
+    ['share',{owner:'second',scope:'shared_files_read'}],
+  ]);
+  const handle=createAccountFiles({database:':memory:',key:randomBytes(32),origin,friends,
+    accounts:{...accounts,username:owner=>owner,allowsMutation:()=>true},
+    fileAccess:(token,scopes)=>scopes.includes(grants.get(token)?.scope)?grants.get(token):null,
+  });
+  const server=createServer((req,res)=>void handle(req,res,new URL(req.url,origin).pathname)).listen(0,'127.0.0.1');
+  await once(server,'listening');
+  t.after(()=>new Promise(resolve=>server.close(resolve)));
+  const endpoint='http://127.0.0.1:'+server.address().port;
+  const call=(path,token,method='GET',body)=>fetch(endpoint+path,{method,body:body&&JSON.stringify(body),
+    headers:{authorization:path.startsWith('/v1')?'Bearer '+token:token,'content-type':'application/json','x-authnjs-request':'account-consent'}});
+  const start='/v1/files';
+  const upload=await call(start,'write','POST',photos);
+  assert.equal(upload.status,201);
+  const {id}=await upload.json();
+  assert.equal((await call(start+'/'+id,'read')).status,200);
+  assert.equal((await call(start+'/'+id,'other')).status,404);
+  assert.equal((await call(start+'/'+id,'read','DELETE')).status,401);
+  assert.equal((await call(start,'share')).status,401);
+  assert.equal((await call(start+'/shared','other')).status,401);
+  assert.equal((await call('/account/files/shared','first','POST',{file:id,friend:'friendship'})).status,200);
+  const shared=await (await call(start+'/shared','share')).json();
+  assert.equal(shared.incoming.length,1);
+  assert.equal(shared.outgoing,undefined);
+  const sharePath=start+'/shared/'+shared.incoming[0].id;
+  assert.equal(await (await call(sharePath,'share')).text(),'photo');
+  assert.equal((await call(sharePath,'share','DELETE')).status,405);
+  grants.delete('share');
+  assert.equal((await call(sharePath,'share')).status,401);
+  assert.equal((await call(start+'/'+id,'write','DELETE')).status,200);
+});

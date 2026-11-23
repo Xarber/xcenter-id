@@ -60,6 +60,7 @@ const otherStorage=(owner,includeHosted=true)=>{
 };
 const accountFiles = configuration ? createAccountFiles({
   usage:otherStorage,friends,appContainers:owner=>applicationData?.containers(owner)??[],
+  fileAccess:(token,scopes)=>provider?.fileAccess(token,scopes),
   database:join(state,'user-files.sqlite'),accounts,origin,
   key:Buffer.from(hkdfSync('sha256',Buffer.from(configuration.profileKey,'hex'),'','authnjs.files.v1',32)),
 }) : null;
@@ -204,7 +205,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     }).catch(()=>res.writeHead(503,headers).end());
     return;
   }
-  if(applicationData&&(/^\/(?:public|v1)\/apps\//.test(path)||path.startsWith('/account/app-storage/')||path==='/account/app-data-permissions')){
+  if(applicationData&&(/^\/(?:public|v1)\/apps\//.test(path)||path.startsWith('/account/app-storage/')||path.startsWith('/account/file-containers/')||path==='/account/app-data-permissions')){
     void applicationData.handle(req,res,target);return;
   }
   const publicAvatar=/^\/public\/profiles\/([a-z][a-z0-9]{2,23})\/avatar$/.exec(path)?.[1];
@@ -250,7 +251,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     });
     return;
   }
-  if (accountFiles && (path === '/account/files' || path === '/account/files/folders' || /^\/account\/files\/shared(?:\/[0-9a-f-]{36})?$/.test(path) || /^\/account\/files\/(?:folders\/)?[0-9a-f-]{36}$/.test(path))) {
+  if (accountFiles && /^\/(?:account|v1)\/files(?:\/(?:folders|shared)(?:\/[0-9a-f-]{36})?|\/[0-9a-f-]{36})?$/.test(path)) {
     void accountFiles(req,res,path).catch(()=>{
       if(!res.headersSent) res.writeHead(500,{'Cache-Control':'no-store'});
       res.end();

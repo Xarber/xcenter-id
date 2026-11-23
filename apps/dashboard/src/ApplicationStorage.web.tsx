@@ -4,7 +4,7 @@ import {api} from './web-account';
 import {formatBytes} from './storage-summary';
 import {confirmIdentity} from './Reauthenticate.web';
 export default function ApplicationStorage({id,admin=false}:{id:string;admin?:boolean}){
- const [state,setState]=useState<{used:number;records:number;capacity:number;hasKey:boolean;verified:boolean;unsecure:boolean;shared:string[];requests:{source:string;collection:string;label:string}[]}|null>(null);
+ const [state,setState]=useState<{used:number;records:number;capacity:number;hasKey:boolean;showInFiles:boolean;canShowInFiles:boolean;verified:boolean;unsecure:boolean;shared:string[];requests:{source:string;collection:string;label:string}[]}|null>(null);
  const [edit,setEdit]=useState(false),[status,setStatus]=useState(''),[secret,setSecret]=useState(''),[busy,setBusy]=useState(false);
  const [shared,setShared]=useState(''),[requests,setRequests]=useState('[]'),[capacity,setCapacity]=useState('10'),[unit,setUnit]=useState(2);
  async function load(){const data=await api('app-storage/'+id);setState(data);setShared(data.shared.join('\n'));setRequests(JSON.stringify(data.requests,null,2));setCapacity(String(data.capacity/1024**2));}
@@ -22,6 +22,8 @@ export default function ApplicationStorage({id,admin=false}:{id:string;admin?:bo
  <label>Permissions requested from other apps<textarea value={requests} onChange={e=>setRequests(e.target.value)}/></label>
  <p>Requests use source client ID, collection and label. The source publisher must enable collection sharing first. Users approve each request while linking.</p>
  <button className="xc-button xc-primary" disabled={busy} onClick={()=>{try{if(state.unsecure&&!window.confirm('Edit permissions for this unsecure app? Its hosting domain has not been verified.'))return;act({action:'sharing',confirmUnsecure:state.unsecure,shared:shared.split(/\s+/).filter(Boolean),requests:JSON.parse(requests)});}catch{setStatus('Check the permission request JSON.');}}}>Save sharing settings</button>
+ {state.canShowInFiles&&<label>Show this app’s data in the Files browser<input type="checkbox" role="switch" checked={state.showInFiles} disabled={busy}
+   onChange={event=>act({action:'file-visibility',enabled:event.currentTarget.checked})}/><small>Users can browse their own app data and download copies. Editing stays in the app.</small></label>}
  {fromAdmin&&state.verified&&<><label>App storage capacity<input type="number" step="any" min={0.001} value={capacity} onChange={e=>setCapacity(e.target.value)}/></label><label>Unit<select aria-label="Unit" value={unit} onChange={e=>setUnit(Number(e.target.value))}>{['B','KB','MB','GB','TB'].map((u,i)=><option key={u} value={i}>{u}</option>)}</select></label>
  <button className="xc-button xc-primary" disabled={busy} onClick={()=>act({action:'capacity',capacity:Number(capacity)*1024**unit})}>Save app capacity</button></>}
  {state.verified&&<><h3>Private backend credential</h3><p>Keep this credential on your backend. Never bundle it in a mobile app or website. Native apps use each user's OAuth access token.</p>

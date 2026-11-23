@@ -1,9 +1,9 @@
 import CopyButton from './CopyButton';
-import {useEffect,useState} from 'react';import {Alert,Pressable,Text,TextInput,View} from 'react-native';
+import {useEffect,useState} from 'react';import {Alert,Pressable,Switch,Text,TextInput,View} from 'react-native';
 import {nativeRequest,nativeReauthenticate} from './native-account';import {formatBytes} from './storage-summary';
 type Colors={ink:string;muted:string;accent:string;soft:string};
 export default function ApplicationStorage({id,token,colors,admin=false,back}:{id:string;token:string;colors:Colors;admin?:boolean;back:()=>void}){
- const [data,setData]=useState<{used:number;capacity:number;records:number;hasKey:boolean;shared:string[];requests:unknown[]}|null>(null);
+ const [data,setData]=useState<{used:number;capacity:number;records:number;hasKey:boolean;showInFiles:boolean;canShowInFiles:boolean;shared:string[];requests:unknown[]}|null>(null);
  const [editing,setEditing]=useState(false),[status,setStatus]=useState(''),[secret,setSecret]=useState('');
  const [capacity,setCapacity]=useState('10'),[unit,setUnit]=useState(2),[shared,setShared]=useState(''),[requests,setRequests]=useState('[]');
  async function load(){const value=await nativeRequest('app-storage/'+id,token);setData(value);setCapacity(String(value.capacity/1024**2));setShared(value.shared.join('\n'));setRequests(JSON.stringify(value.requests));}
@@ -15,6 +15,11 @@ export default function ApplicationStorage({id,token,colors,admin=false,back}:{i
  {data&&<><Text style={{color:colors.muted}}>{formatBytes(data.used)} of {formatBytes(data.capacity)} · {data.records} records</Text>{action(editing?'Close settings':'Edit database settings',()=>setEditing(!editing))}
  {editing&&<>{field('Shared collections (one per line)',shared,setShared)}{field('Requested permissions (JSON)',requests,setRequests)}
  {action('Save sharing',()=>{try{void change({action:'sharing',shared:shared.split(/\s+/).filter(Boolean),requests:JSON.parse(requests)});}catch{setStatus('Check the JSON.');}})}
+ {data.canShowInFiles&&<View style={{gap:6}}>
+  <Text style={{color:colors.ink}}>Show this app’s data in the Files browser</Text>
+  <Text style={{color:colors.muted}}>Users can browse and download their own app data.</Text>
+  <Switch accessibilityLabel="Show this app’s data in the Files browser" value={data.showInFiles} onValueChange={enabled=>void change({action:'file-visibility',enabled})}/>
+ </View>}
  {admin&&<>{field('App capacity',capacity,setCapacity)}<View style={{flexDirection:'row',gap:6}}>{['B','KB','MB','GB','TB'].map((name,i)=>action((unit===i?'✓ ':'')+name,()=>setUnit(i)))}</View>{action('Save capacity',()=>void change({action:'capacity',capacity:Number(capacity)*1024**unit}))}</>}
  <Text style={{color:colors.muted}}>Backend credentials must stay on a server. Native apps use their user's OAuth token.</Text>
  {action(data.hasKey?'Replace backend key':'Create backend key',()=>Alert.alert('Create a backend key?','The previous key will stop working.',[{text:'Cancel',style:'cancel'},{text:'Create',onPress:()=>void change({action:'rotate-key'})}]))}

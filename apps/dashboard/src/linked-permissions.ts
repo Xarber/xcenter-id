@@ -5,6 +5,9 @@ export const permissionLabels = {
   age_range: 'Age range',
   friends: 'Friends list',
   offline_access: 'Stay signed in',
+  files_read: 'Read account files',
+  files_write: 'Read and write account files',
+  shared_files_read: 'Read files shared with you',
 };
 
 export type LinkedPermission = {

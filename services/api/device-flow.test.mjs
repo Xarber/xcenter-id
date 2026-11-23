@@ -6,6 +6,7 @@ import { once } from 'node:events';
 import { decodeJwt } from 'jose';
 import { createIdentityProvider } from './oidc.mjs';
 import { openRegistry } from './registry.mjs';
+import { openApplicationData } from './application-data.mjs';
 
 test('registered device flow confirms linking and issues a single nonce-bound token response', async () => {
   const issuer='https://id.example.test';
@@ -17,15 +18,17 @@ test('registered device flow confirms linking and issues a single nonce-bound to
     current:()=>current, identity:owner=>owner===current.owner?identity:undefined,
     grantAllowed:(owner,client,id)=>owner===current.owner&&links.get(client)===id,
     linkedGrant:(owner,client)=>owner===current.owner?links.get(client):undefined,
+    available:()=>true, allowsMutation:req=>req.headers.origin===issuer, recentlyConfirmed:()=>true,adminStatus:()=>403,
     rememberApp:(_owner,client,_label,id)=>links.set(client,id), premiumEligible:()=>false,
   };
   const jwk=generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({format:'jwk'});
-  const provider=createIdentityProvider({issuer,database:':memory:',registry,accounts,configuration:{
+  const applicationData=openApplicationData({path:':memory:',key:Buffer.alloc(32,7),registry,accounts,authenticate:()=>null});
+  const provider=createIdentityProvider({issuer,database:':memory:',registry,accounts,applicationData,configuration:{
     storageKey:'71'.repeat(32),subjectKey:'83'.repeat(32),cookieKeys:['e2'.repeat(32)],
     clients:[],jwks:{keys:[{...jwk,kid:'device-fixture',alg:'RS256',use:'sig'}]},
   }});
   async function register(name,native=false,local=false){
-    const registration=registry.submit('developer',name,local?'http://127.0.0.1:8400/callback':'https://tv.example.test/callback',undefined,native,undefined,local);
+    const registration=registry.submit(name.startsWith('Velunivo')?current.owner:'developer',name,local?'http://127.0.0.1:8400/callback':'https://tv.example.test/callback',undefined,native,undefined,local);
     const credentials=await provider.provision(registration);
     registry.approve(registration.id,credentials.clientId);
     return credentials;
@@ -34,8 +37,14 @@ test('registered device flow confirms linking and issues a single nonce-bound to
   const other=await register('Different TV');
   const publicClient=await register('Native public',true);
   const local=await register('Local backend',false,true);
+  const velunivo=await register('Velunivo fixture');
+  const readingApp=await register('Velunivo Consent Test fixture');
+  const [sourceRegistration,destinationRegistration]=[velunivo,readingApp].map(({clientId})=>registry.managed(current.owner).find(app=>app.client===clientId));
+  registry.verifyApp(sourceRegistration.id,true);
+  registry.verifyApp(destinationRegistration.id,true);
   const server=createServer((req,res)=>{
     const url=new URL(req.url,issuer);
+    if(url.pathname.startsWith('/account/app-storage/'))return void applicationData.handle(req,res,url);
     if(url.pathname.startsWith('/interaction/')){
       void provider.interaction(req,res,url.pathname).catch(error=>{
         if(!res.headersSent)res.writeHead(500);
@@ -70,6 +79,58 @@ test('registered device flow confirms linking and issues a single nonce-bound to
   }
   const begin=(credentials,scope='openid friends')=>http('/device/auth',{credentials,form:{client_id:credentials.clientId,nonce,scope}});
   try {
+    async function storageSettings(id,data){
+      return fetch('http://127.0.0.1:'+server.address().port+'/account/app-storage/'+id,{
+        method:'POST',headers:{origin:issuer,'Content-Type':'application/json'},body:JSON.stringify({action:'sharing',...data}),
+      });
+    }
+    const collections=['recent-neighborhoods','ride-insights'];
+    const labels=['Recent neighborhoods','Ride insights'];
+    assert.equal((await storageSettings(sourceRegistration.id,{shared:collections})).status,200);
+    assert.equal((await storageSettings(destinationRegistration.id,{shared:[],requests:collections.map((collection,i)=>({
+      source:velunivo.clientId,collection,label:labels[i],
+    }))})).status,200);
+    async function authorizeDevice(credentials,scope){
+      const result=await begin(credentials,scope);
+      assert.equal(result.status,200);
+      const device=await result.json();
+      const entry=await (await http(device.verification_uri_complete,{browser:true})).text();
+      const code=await (await http('/device',{browser:true,form:{xsrf:entry.match(/name="xsrf" value="([^"]+)"/)?.[1],user_code:device.user_code}})).text();
+      let stage=await http('/device',{browser:true,form:{xsrf:code.match(/name="xsrf" value="([^"]+)"/)?.[1],user_code:device.user_code,confirm:'yes'}});
+      for(let step=0;step<5&&stage.status===303;step++)stage=await http(stage.headers.get('location'),{browser:true});
+      assert.equal(stage.status,200);
+      return {stage,device};
+    }
+    const requestedScopes='openid app_data files_read files_write shared_files_read';
+    const unlinked=await authorizeDevice(readingApp,requestedScopes);
+    assert.match(await unlinked.stage.text(),/Velunivo fixture<\/h2><p>Access declined/);
+    await http(unlinked.stage.url,{browser:true,form:{action:'deny'}});
+    const sourceConsent=await authorizeDevice(velunivo,'openid app_data');
+    const sourceDone=await http(sourceConsent.stage.url,{browser:true,form:{action:'approve'}});
+    await http(sourceDone.headers.get('location'),{browser:true});
+    assert.ok(accounts.linkedGrant(current.owner,velunivo.clientId));
+    const destination=await authorizeDevice(readingApp,requestedScopes);
+    const destinationHtml=await destination.stage.text();
+    assert.match(destinationHtml,/<body class="consent">/);
+    assert.match(destinationHtml,/position:fixed/);
+    assert.match(destinationHtml,/class="source-permissions"[\s\S]*Velunivo fixture[\s\S]*Recent neighborhoods[\s\S]*Ride insights/);
+    assert.match(destinationHtml,/value="files_write" aria-label="Read and write account files">/);
+    const approvedScopes=new URLSearchParams({action:'approve'});
+    approvedScopes.append('permission','files_read');
+    approvedScopes.append('permission','shared_files_read');
+    approvedScopes.append('data-permission',velunivo.clientId+'/recent-neighborhoods');
+    const destinationDone=await http(destination.stage.url,{browser:true,form:approvedScopes});
+    await http(destinationDone.headers.get('location'),{browser:true});
+    const issued=await (await http('/token',{credentials:readingApp,form:{
+      grant_type:'urn:ietf:params:oauth:grant-type:device_code',device_code:destination.device.device_code,
+    }})).json();
+    assert.ok(await provider.fileAccess(issued.access_token,['files_read']));
+    assert.ok(await provider.fileAccess(issued.access_token,['shared_files_read']));
+    assert.equal(await provider.fileAccess(issued.access_token,['files_write']),null);
+    assert.deepEqual(applicationData.permissions(current.owner).filter(permission=>permission.destination===readingApp.clientId)
+      .map(({collection,enabled})=>[collection,enabled]),[['recent-neighborhoods',true],['ride-insights',false]]);
+    await provider.connectedPermissions(current.owner,readingApp.clientId,{scope:'files_read',enabled:false});
+    assert.equal(await provider.fileAccess(issued.access_token,['files_read']),null);
     assert.equal((await begin(publicClient)).status,400);
     assert.equal((await begin(local)).status,200);
     const source=registry.managed('developer').find(app=>app.name==='Different TV');
@@ -168,6 +229,6 @@ test('registered device flow confirms linking and issues a single nonce-bound to
 
   } finally {
     await new Promise(resolve=>server.close(resolve));
-    registry.close();
+    applicationData.close();registry.close();
   }
 });

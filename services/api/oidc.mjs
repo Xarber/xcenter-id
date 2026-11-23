@@ -5,7 +5,13 @@ import { openOidcStore } from './oidc-store.mjs';
 const deviceGrant = 'urn:ietf:params:oauth:grant-type:device_code';
 const deviceCodePattern = /^[BCDFGHJKLMNPQRSTVWXZ]{6}$/;
 const refreshIdleSeconds = 14 * 24 * 60 * 60;
-const accountPermissions = ['profile','app_data','email','age_range','friends','offline_access'];
+const filePermissions = {
+  files_read: ['Read account files','List folders and download your own files.'],
+  files_write: ['Read and write account files','List, download, add and delete your own files and folders.'],
+  shared_files_read: ['Read files shared with you','List and download files other people currently share with you.'],
+};
+const fileScopes=Object.keys(filePermissions);
+const accountPermissions = ['profile','app_data','email','age_range','friends','offline_access',...fileScopes];
 
 function approveScopes(grant, scopes) {
   if(grant.rejected?.openid?.scope){
@@ -25,16 +31,30 @@ function pageHeaders(callbackOrigin = '') {
   };
 }
 
-function html(res, content, status = 200, callbackOrigin = '') {
-  res.writeHead(status, pageHeaders(callbackOrigin)).end(page(content));
+function html(res, content, status = 200, callbackOrigin = '', consent = false) {
+  res.writeHead(status, pageHeaders(callbackOrigin)).end(page(content, consent));
 }
 
-function page(content) {
+function page(content, consent = false) {
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Continue with X-Center ID</title><style>
     :root{color-scheme:light dark;font:1rem/1.5 system-ui;--bg:#f4f7fc;--card:#fff;--text:#17223a;--muted:#526078;--border:#dbe3ef;--action:#214fbe;--soft:#edf2ff}
     *{box-sizing:border-box}body{margin:0;padding:clamp(1rem,5vw,3rem);background:var(--bg);color:var(--text)}
     main{max-width:34rem;margin:clamp(0rem,4vh,3rem) auto;padding:clamp(1.25rem,5vw,2.25rem);background:var(--card);border:1px solid var(--border);border-radius:1.45rem}
+    body.consent{background:#10182e}
+    body.consent::before{content:'';position:fixed;inset:0;pointer-events:none;background:
+      radial-gradient(circle at 13% 21%,#d6e4ff80 0 1px,transparent 4px),
+      radial-gradient(circle at 84% 17%,#c4d6ff66 0 1px,transparent 4px),
+      radial-gradient(circle at 8% 63%,#e1e8ff55 0 1px,transparent 3px),
+      radial-gradient(circle at 74% 87%,#d7e4ff66 0 1px,transparent 4px),
+      radial-gradient(circle at 94% 58%,#c5d6ff55 0 1px,transparent 3px),
+      radial-gradient(circle at 35% 76%,#cbdcff44 0 1px,transparent 3px),
+      radial-gradient(ellipse at 75% 8%,#202e4d,transparent 68%),linear-gradient(145deg,#11192d,#0c1325)}
+    body.consent main{position:relative;box-shadow:0 24px 70px #060b1766}
+    .source-permissions{margin:1rem 0;border:1px solid var(--border);border-radius:.9rem;padding:.85rem}
+    .source-heading{display:flex;align-items:center;gap:.65rem;margin:0;overflow-wrap:anywhere;font-size:1rem}
+    .source-heading .source-icon{width:2rem;height:2rem;border-radius:.5rem;object-fit:cover;background:var(--soft);color:var(--action);display:grid;place-items:center;flex:none}
+    .source-permissions .permission-list{margin-bottom:0}
     h1{font-size:clamp(1.55rem,6vw,2.15rem);line-height:1.12;letter-spacing:-.04em;overflow-wrap:anywhere}p{color:var(--muted)}
     .badge{display:inline-block;border:1px solid currentColor;border-radius:1rem;padding:.1rem .5rem;font-size:.8rem;font-weight:700}.brand{font-weight:800;letter-spacing:-.03em;color:var(--action)}.context{padding:.8rem 1rem;border-radius:.8rem;background:var(--soft);overflow-wrap:anywhere}
     .identity-contexts{display:grid;gap:.65rem}.context small{display:block;color:var(--muted);margin-bottom:.25rem}.badge-row{display:flex;flex-wrap:wrap;gap:.35rem;margin:.5rem 0}.permission-toggle.permission-fixed{cursor:default}.permission-check{margin-inline-start:auto;color:var(--action);font-weight:800}.permission-toggle small{display:block;color:var(--muted)}
@@ -54,7 +74,7 @@ function page(content) {
     .permission-list li{display:flex;align-items:center;gap:.7rem}.permission-list svg,.connection svg{width:20px;height:20px;flex:none}
     :focus{outline:none}:focus-visible{box-shadow:0 0 0 2px #6b94ff}
     @media(prefers-color-scheme:dark){:root{--bg:#101522;--card:#192132;--text:#f3f6ff;--muted:#b1c1dc;--border:#35445e;--action:#375fce;--soft:#23355d}.brand{color:#adc5ff}}
-    </style><main><span class="brand">X-Center ID</span>${content}</main></html>`;
+    </style><body class="${consent?'consent':''}"><main><span class="brand">X-Center ID</span>${content}</main></body></html>`;
 }
 
 const iconPaths={
@@ -182,7 +202,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     clients, adapter: Adapter, jwks: configuration.jwks,
     cookies: { keys: configuration.cookieKeys, short: { secure: true, httpOnly: true, sameSite: 'lax' },
       long: { secure: true, httpOnly: true, sameSite: 'lax' } },
-    claims: scopeClaims, scopes: ['openid','profile','email','age_range','app_data','friends','offline_access'], subjectTypes: ['pairwise','public'],
+    claims: scopeClaims, scopes: ['openid','profile','email','age_range','app_data','friends','offline_access',...fileScopes], subjectTypes: ['pairwise','public'],
     pkce: { required: () => true },
     ttl: { AccessToken:600, AuthorizationCode:90, DeviceCode:300, Interaction:300, RefreshToken:refreshIdleSeconds, Grant:refreshIdleSeconds },
     async issueRefreshToken(ctx,client,source) {
@@ -334,6 +354,8 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const appData=scopes.has('app_data');
     const ownsStorage=appData&&(!brand||brand.verified)&&!brand?.local;
     const showFriends=scopes.has('friends')&&(missing.has('friends')||explicitConsent);
+    const requestedFileScopes=fileScopes.filter(scope=>scopes.has(scope));
+    const previouslyAllowed=scope=>existingScopes.has(scope);
     const showOffline=scopes.has('offline_access')&&(missing.has('offline_access')||explicitConsent);
     if (req.method === 'POST') {
       if (req.headers.origin !== issuer) return html(res,'<h1>Could not verify the request</h1>',403);
@@ -364,11 +386,14 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       if (selected!=='current' && email && !alias && !premium && !primary && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
       if(appData&&brand?.local&&input.get('confirm-unsecure')!=='yes')return html(res,'<h1>Confirm unsecure app access</h1><p>Confirm the warning in the authorization form.</p>',400);
       const dataChanged=appData&&applicationData?.authorize(active.owner,client.client_id,input.getAll('data-permission'));
+      const selectedPermissions=new Set(input.getAll('permission'));
+      const fileAllowed=requestedFileScopes.filter(scope=>selectedPermissions.has(scope));
+      const fileDenied=requestedFileScopes.filter(scope=>!selectedPermissions.has(scope));
       const keepSession=showOffline&&input.getAll('permission').includes('offline_access');
       const shareFriends=showFriends&&input.getAll('permission').includes('friends');
       const ageAllowed=scopes.has('age_range')&&showAge&&(requiredAge||input.getAll('permission').includes('age_range'));
-      const allowed=['openid','profile',...(ageAllowed?['age_range']:[]),...(appData?['app_data']:[]),...(shareFriends?['friends']:[]),...(keepSession?['offline_access']:[]),...(email||scopes.has('email')&&sharedEmail&&(!existingGrant||requiredEmail)?['email']:[])];
-      const denied=[...(showAge&&!ageAllowed?['age_range']:[]),...((chooseEmail&&!email||linked&&scopes.has('email')&&!existingScopes.has('email')&&!allowed.includes('email'))?['email']:[]),...(showFriends&&!shareFriends?['friends']:[]),...(showOffline&&!keepSession?['offline_access']:[])];
+      const allowed=['openid','profile',...fileAllowed,...(ageAllowed?['age_range']:[]),...(appData?['app_data']:[]),...(shareFriends?['friends']:[]),...(keepSession?['offline_access']:[]),...(email||scopes.has('email')&&sharedEmail&&(!existingGrant||requiredEmail)?['email']:[])];
+      const denied=[...fileDenied,...(showAge&&!ageAllowed?['age_range']:[]),...((chooseEmail&&!email||linked&&scopes.has('email')&&!existingScopes.has('email')&&!allowed.includes('email'))?['email']:[]),...(showFriends&&!shareFriends?['friends']:[]),...(showOffline&&!keepSession?['offline_access']:[])];
       const grant=existingGrant||new provider.Grant({accountId:active.owner,clientId:client.client_id});
       approveScopes(grant, allowed);
       if(denied.length)grant.rejectOIDCScope(denied);
@@ -403,6 +428,26 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const activeDataPermissions=appData?(applicationData?.permissions(active.owner)??[]).filter(item=>item.destination===client.client_id&&item.enabled):[];
     const hasEmailChoice=!!(sharedEmail||mail||person.emails.length);
     const fixed=(icon,label,note='')=>`<li><div class="permission-toggle permission-fixed">${glyph(icon)}<span>${label}${note?`<small>${note}</small>`:''}</span><span class="permission-check" role="img" aria-label="Allowed">✓</span></div></li>`;
+    const sources = new Map();
+    for (const item of appData ? applicationData?.requestsForOwner(active.owner,client.client_id) ?? [] : []) {
+      if (!sources.has(item.source)) sources.set(item.source, []);
+      sources.get(item.source).push(item);
+    }
+    const sourceSections = [...sources].map(([source, items]) => {
+      const profile = registry.brand(source);
+      const name = profile?.name ?? registry.publicDetails(source)?.name ?? source;
+      const icon = profile?.icon
+        ? `<img alt="" class="source-icon" src="data:image/png;base64,${escape(profile.icon)}">`
+        : `<span class="source-icon" aria-hidden="true">${escape(name.slice(0,2).toUpperCase())}</span>`;
+      const title = `<h2 class="source-heading">${icon}${escape(name)}</h2>`;
+      const access = items[0].linked ? `<ul class="permission-list">${items.map(item => {
+        const checked = activeDataPermissions.some(permission => permission.source===source&&permission.collection===item.collection);
+        const label = escape(item.label);
+        return `<li><label class="permission-toggle">${glyph('records')}<span>${label}<small>Read ${escape(item.collection)}</small></span>
+          <input type="checkbox" role="switch" name="data-permission" value="${escape(source+'/'+item.collection)}" aria-label="${label}"${checked?' checked':''}></label></li>`;
+      }).join('')}</ul>` : '<p>Access declined. Link this app to your account first.</p>';
+      return `<section class="source-permissions">${title}${access}</section>`;
+    }).join('');
     return html(res,`<div class="connection" aria-hidden="true">
       <span class="avatar">${person.hasPicture?'<img alt="" src="/account/avatar">':glyph('user')}</span>${glyph('link')}
       <span class="avatar">${brand?.icon?`<img alt="" src="data:image/png;base64,${escape(brand.icon)}">`:visual?glyph(visual):escape(title.slice(0,2).toUpperCase())}</span></div>
@@ -428,11 +473,17 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         ${requiredAge||!showAge&&existingScopes.has('age_range')?fixed('age','Age range',requiredAge?requiredNote:''):''}
         ${showFriends?`<li><label class="permission-toggle">${glyph('user')}<span>Friends list<small>Share accepted friends and identify those who already use this app.</small></span><input type="checkbox" role="switch" name="permission" value="friends" aria-label="Friends list"${existingScopes.has('friends')?' checked':''}></label></li>`:existingScopes.has('friends')?fixed('user','Friends list'):''}
         ${showOffline?`<li><label class="permission-toggle">${glyph('id')}<span>Stay signed in<small>Let this app renew your session while you use it.</small></span><input type="checkbox" role="switch" name="permission" value="offline_access" aria-label="Stay signed in"${existingScopes.has('offline_access')||!incremental?' checked':''}></label></li>`:existingScopes.has('offline_access')?fixed('id','Stay signed in'):''}
+        ${fileScopes.filter(scope=>scopes.has(scope)||previouslyAllowed(scope)).map(scope=>{
+          const [label,description]=filePermissions[scope];
+          return scopes.has(scope)
+            ? `<li><label class="permission-toggle">${glyph('records')}<span>${label}<small>${description}</small></span><input type="checkbox" role="switch" name="permission" value="${scope}" aria-label="${label}"${previouslyAllowed(scope)?' checked':''}></label></li>`
+            : fixed('records',label,description);
+        }).join('')}
         ${ownsStorage?fixed('records','Private app storage','This app can save and access your records in its own storage.'):''}
         ${!chooseEmail&&sharedEmail?fixed('mail','Email address',escape(sharedEmail)+(requiredEmail?` · ${requiredNote}`:'')):''}
       </ul>
       ${appData&&brand?.local?'<p role="alert">Granting data access shares records with an unsecure app.</p><label><input type="checkbox" name="confirm-unsecure" value="yes">I understand the risk of granting this app access.</label>':''}
-      ${appData?(applicationData?.requested(client.client_id)??[]).map(item=>`<label class="permission-toggle"><span>${escape(item.label)}<small> · Read ${escape(item.collection)} from ${escape(registry.publicDetails(item.source)?.name??item.source)}</small></span><input type="checkbox" role="switch" name="data-permission" value="${escape(item.source+'/'+item.collection)}"${activeDataPermissions.some(permission=>permission.source===item.source&&permission.collection===item.collection)?' checked':''}></label>`).join(''):''}
+      ${sourceSections}
       <p>You can review app access in X-Center ID.</p>
       ${emailUnavailable?'<p role="alert">This app needs a verified email address. Unlink it in <a href="/apps">Linked apps</a>, then link it again to choose an address.</p>':''}
       ${chooseEmail ? `<fieldset><legend>Email address to share</legend>
@@ -442,7 +493,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       ${(mail?.maskedAvailable||mail?.premiumAvailable&&accounts.premiumEligible(active.owner)) ? '<label><input type="radio" name="email" value="masked">Hide my email</label>' : ''}
       ${person.emails.map(({address}) => `<label><input type="radio" name="email" value="${escape(address)}">${escape(address)}</label>`).join('')}
       </fieldset>` : ''}
-      <button name="action" value="approve"${(emailUnavailable||requiredEmail&&chooseEmail&&!hasEmailChoice)?' disabled':''}>${incremental?(missing.size||explicitConsent?'Authorize selected permissions':'Authorize sign-in'):'Link app'}</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin);
+      <button name="action" value="approve"${(emailUnavailable||requiredEmail&&chooseEmail&&!hasEmailChoice)?' disabled':''}>${incremental?(missing.size||explicitConsent?'Authorize selected permissions':'Authorize sign-in'):'Link app'}</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin,true);
   }
 
   async function activeGrant(access) {
@@ -513,6 +564,15 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const access = await provider.AccessToken.find(value);
       if (!access?.accountId || !registry?.has(access.clientId) || (!native&&(await provider.Client.find(access.clientId))?.tokenEndpointAuthMethod!=='client_secret_basic') || !await activeGrant(access) || !access.scope?.split(' ').includes('app_data')) return null;
       return { owner:access.accountId, client:access.clientId, confidential:true };
+    },
+    async fileAccess(token, scopes) {
+      const access=await provider.AccessToken.find(token);
+      if(!access?.accountId||!registry?.has(access.clientId)||!accounts.linkedGrant(access.accountId,access.clientId))return null;
+      const grant=await activeGrant(access);
+      const current=new Set(grant?.getOIDCScope().split(' '));
+      const issued=new Set(access.scope?.split(' '));
+      if(!scopes.some(scope=>fileScopes.includes(scope)&&current.has(scope)&&issued.has(scope)))return null;
+      return {owner:access.accountId,client:access.clientId};
     },
     async profileAvatar(token) {
       const access=await provider.AccessToken.find(token);

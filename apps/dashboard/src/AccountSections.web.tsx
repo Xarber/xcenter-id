@@ -1,3 +1,5 @@
+import AppFileContainer from './AppFileContainer.web';
+import type { AppFileContainer as Container } from './account-file-containers';
 import TrustBadges from './TrustBadges.web';
 import AdminStorageVolumes from './AdminStorageVolumes.web';
 import AppIcon from './AppIcon.web';
@@ -20,7 +22,7 @@ const size = (value:number)=>value>1024*1024 ? (value/(1024*1024)).toFixed(1)+' 
 type Session = { id:string;label:string;created:number;current:boolean };
 type StoredFile = { id:string;name:string;size:number;created:number };
 type FolderItem = {id:string;name:string};
-type Files = { appContainers?:{client:string;name:string;bytes:number}[]; files:StoredFile[]; folders:FolderItem[]; breadcrumbs:FolderItem[]; categories:Record<string,number>; used:number; total:number; limit:number };
+type Files = { appContainers?:Container[]; files:StoredFile[]; folders:FolderItem[]; breadcrumbs:FolderItem[]; categories:Record<string,number>; used:number; total:number; limit:number };
 
 export function DevicesPage() {
   const [devices,setDevices]=useState<Session[]>([]);
@@ -51,7 +53,9 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
   const [creating,setCreating]=useState(false);
   const [sharing,setSharing]=useState('');
   const [friends,setFriends]=useState<Friend[]>([]);
-  const folder=summary?null:new URLSearchParams(window.location.search).get('folder');
+  const query=new URLSearchParams(window.location.search);
+  const container=summary?null:query.get('app');
+  const folder=summary||container?null:query.get('folder');
   const folderPath=(id:string|null)=>id?'/files?folder='+encodeURIComponent(id):'/files';
   async function load(){setState(await api('files'+(folder?'?folder='+encodeURIComponent(folder):'')));}
   function change(operation:()=>Promise<unknown>, message:string){
@@ -67,6 +71,11 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
     if(!file)return;
     if(file.size<1||file.size>2*1024*1024){setStatus('Choose a file between 1 byte and 2 MB.');return;}
     change(async()=>api('files',{name:file.name,content:await fileAsBase64(file),folder}),'File uploaded.');
+  }
+  if(container){
+    const app=state?.appContainers?.find(item=>item.client===container&&item.showInFiles);
+    if(app)return <AppFileContainer app={app}/>;
+    return <section className="xc-card xc-pad"><a href="/files">Back to your files</a><p role="status">{status||(state?'App folder unavailable.':'Loading folder…')}</p></section>;
   }
   return <section className="xc-card xc-pad">
     <div className="xc-row-head"><span className="xc-symbol xc-lavender">{summary?<HardDrive size={21}/>:<File size={21}/>}</span>
@@ -97,6 +106,10 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
       }}><label>Folder name<input name="name" maxLength={160} required/></label>
         <button className="xc-button xc-primary" disabled={busy}>Create folder</button>
       </form>}
+      {!folder&&state?.appContainers?.filter(app=>app.showInFiles).map(app=><div className="xc-list-row" key={app.client}>
+        <a className="xc-row-head" href={'/files?app='+encodeURIComponent(app.client)}><AppIcon icon={app.icon}/><strong>{app.name}</strong></a>
+        <span>Read-only app folder</span>
+      </div>)}
       {state?.folders.map(item=><div className="xc-list-row" key={item.id}>
         <a className="xc-row-head" href={folderPath(item.id)}><Folder size={18}/><strong>{item.name}</strong></a>
         <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
