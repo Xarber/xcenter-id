@@ -11,7 +11,7 @@ Start with the [sign-in contract](integration.md). Request only the scopes neede
 | Import accepted friends | Request optional `friends` and fetch `GET /v1/profile/friends`. Use `sub` only when present. |
 | Store product-wide records | Use the app's backend key in its dedicated app-owned namespace. |
 | Store data belonging to one signed-in user | Use that app's user access token with `app_data`. |
-| Let users browse and share personal files | Direct them to Files or Friends in the X-Center dashboard. A third-party app token cannot access the account's file cabinet. |
+| Let users browse and share personal files | Direct them to Files or Friends in the X-Center dashboard. An app that needs direct file access can request the separate scopes documented below when issuer discovery exposes them. |
 | Read data offered by a different app | Configure exact source collections, obtain consent, then read the authorized source collection. |
 | Present an opted-in public profile or record | Use the documented public profile or public record endpoint. |
 
