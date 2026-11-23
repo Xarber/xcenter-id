@@ -1,12 +1,14 @@
 # Hosted application database
 
-The identity service provides an encrypted JSON document database for active, administrator-verified registered apps. This is separate from account files, the historical sample-data store and the internal identity database. Its entry point is `services/api/application-data.mjs`; storage is `app-data.sqlite`, encrypted with a dedicated HKDF-derived key. Never upload or execute arbitrary SQL or database files.
+The identity service provides encrypted JSON storage for active registered apps. This is separate from account files, the historical sample-data store and the internal identity database. Its entry point is `services/api/application-data.mjs`; storage is `app-data.sqlite`, encrypted with a dedicated HKDF-derived key. Never upload or execute arbitrary SQL or database files.
 
 ## Namespaces and credentials
 
-An app's user access token needs the `app_data` scope. The server resolves its actual client and account from the provider, checks the active registration, verification and current grant, and never accepts a caller-supplied owner. Public native clients use the same supported data scope with PKCE and verified HTTPS callbacks. Existing legacy saved-place APIs retain their separate confidential-client restriction.
+An app's user access token needs the `app_data` scope. The server resolves its actual client and account from the provider, checks the active registration and current grant, and never accepts a caller-supplied owner. Public native clients use the same supported data scope with PKCE and verified HTTPS callbacks. Existing legacy saved-place APIs retain their separate confidential-client restriction.
 
-Publishers can create one-time backend keys from the application's database page after passkey confirmation. Only a SHA-256 digest is stored. A key is scoped to one app and its app-owned namespace. It cannot impersonate a user, access user-owned private records or another app's database. Keep it off mobile clients. Replacing or revoking the key takes effect on the next request. Locking/deleting the publisher, restricting/deleting the app or removing app verification disables database access and public reads.
+Administrator-verified publishers can create one-time backend keys from the application's database page after passkey confirmation. Only a SHA-256 digest is stored. A key is scoped to one app and its app-owned namespace. It cannot impersonate a user, access user-owned private records or another app's database. Keep it off mobile clients. Replacing or revoking the key takes effect on the next request. Locking/deleting the publisher, restricting/deleting the app or removing app verification disables app-owned database access and public reads.
+
+All active registered apps can use private, user-owned storage with `app_data`, including before administrator verification. Service keys, anonymous public records, and publishing cross-app collections require verification. User-owned storage is charged to the user’s quota.
 
 ## Record API
 

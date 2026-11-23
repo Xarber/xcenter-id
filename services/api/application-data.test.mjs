@@ -26,6 +26,15 @@ test('verified app databases isolate users and services, encrypt records and gat
   extraBytes=3500;
   assert.equal((await request('/v1/apps/b/data/posts/two',{token:'b'.repeat(25),method:'PUT',body:{data:'backup',public:false},revision:'"0"'})).status,409);
   extraBytes=0;
+  assert.equal(registry.verifyApp(registrations[1].id,false),true);
+  const privateBackup='/v1/apps/b/data/backups/profile';
+  const userB='b'.repeat(25);
+  assert.equal((await request(privateBackup,{token:userB,method:'PUT',revision:'"0"',body:{data:{label:'private backup'},public:false}})).status,200);
+  assert.equal((await (await request(privateBackup,{token:userB})).json()).data.label,'private backup');
+  assert.equal((await request(privateBackup,{token:userB,method:'PUT',revision:'"1"',body:{data:'publish',public:true}})).status,403);
+  assert.equal((await request('/public/apps/b/data/backups')).status,404);
+  assert.equal((await request(privateBackup,{token:userB,method:'DELETE',revision:'"1"'})).status,200);
+  assert.equal((await request('/account/app-storage/'+registrations[1].id,{method:'POST',body:{action:'rotate-key'},cookie:'session',origin:'https://id.example.test'})).status,403);
   assert.equal((await request('/v1/apps/a/data/posts/one',{token:'b'.repeat(25)})).status,403);
   assert.equal((await request('/v1/apps/a/data/posts/one',{token:'c'.repeat(25)})).status,404);
   assert.deepEqual((await (await request('/public/apps/a/data/posts')).json()).records,[]);
@@ -77,6 +86,9 @@ test('verified app databases isolate users and services, encrypt records and gat
   assert.equal(data.accountUsage('user1'),0);
   assert.equal((await request('/v1/apps/a/data/posts/service',{token:key.secret})).status,200);
   assert.equal((await request('/v1/apps/a/data/posts/one',{token:'a'.repeat(25)})).status,404);
+  assert.equal(registry.verifyApp(registrations[0].id,false),true);
+  assert.equal((await request('/v1/apps/a/data/posts/service',{token:key.secret})).status,401);
+  assert.equal(registry.verifyApp(registrations[0].id,true),true);
   await manage(0,{action:'revoke-key'});assert.equal((await request('/v1/apps/a/data/posts/service',{token:key.secret})).status,401);
   registry.moderate('developer',registrations[0].id,'restrict');assert.equal((await request('/public/apps/a/data/posts')).status,404);
  }finally{await new Promise(resolve=>server.close(resolve));data.close();registry.close();}

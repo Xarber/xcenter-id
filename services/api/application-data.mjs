@@ -20,14 +20,15 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
     CREATE TABLE IF NOT EXISTS app_data_grants(owner TEXT NOT NULL,source TEXT NOT NULL,destination TEXT NOT NULL,collection TEXT NOT NULL,
       PRIMARY KEY(owner,source,destination,collection)) STRICT;`);
   const setting=client=>db.prepare('SELECT * FROM app_storage WHERE client=?').get(client);
-  const active=client=>registry.has(client)&&!!registry.brand(client)?.verified&&accounts.available(registry.brand(client)?.owner);
+  const registered=client=>registry.has(client)&&accounts.available(registry.brand(client)?.owner);
+  const verified=client=>registered(client)&&!!registry.brand(client)?.verified;
   const serviceUsage=db.prepare("SELECT coalesce(sum(bytes),0) AS used,count(*) AS records FROM app_records WHERE client=? AND owner='~app'");
   const accountUsage=db.prepare('SELECT coalesce(sum(bytes),0) AS used FROM app_records WHERE owner=?');
   const containers=db.prepare('SELECT client,sum(bytes) AS bytes,count(*) AS records FROM app_records WHERE owner=? GROUP BY client ORDER BY bytes DESC,client');
   const visible=db.prepare('SELECT 1 FROM app_file_visibility WHERE client=?');
-  const ownerContainer=(owner,client)=>active(client)&&visible.get(client)&&sourceLinked(owner,client);
+  const ownerContainer=(owner,client)=>verified(client)&&visible.get(client)&&sourceLinked(owner,client);
   const usage=client=>serviceUsage.get(client);
-  const requested=client=>JSON.parse(setting(client)?.requests??'[]').filter(item=>active(item.source)&&registry.crossReadAllowed(item.source,client)&&JSON.parse(setting(item.source)?.shared??'[]').includes(item.collection));
+  const requested=client=>JSON.parse(setting(client)?.requests??'[]').filter(item=>verified(item.source)&&registry.crossReadAllowed(item.source,client)&&JSON.parse(setting(item.source)?.shared??'[]').includes(item.collection));
   const sourceLinked=(owner,client)=>!!accounts.linkedGrant(owner,client)&&registry.access(owner,client).allowed;
   const requestsForOwner=(owner,client)=>requested(client).map(item=>({...item,linked:sourceLinked(owner,item.source)}));
   const aad=r=>Buffer.from(JSON.stringify(['xcenter.appdata.v1',r.client,r.owner,r.collection,r.id,r.revision,r.public,r.readers]));
@@ -133,17 +134,17 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
           // A verification badge never substitutes for active callback ownership.
           const client=app?.client??(all&&registry.clientForId(management));
           if(!client||!registry.has(client))fail(409,'Activate this app first.');
-          const verified=active(client);
+          const serviceEnabled=verified(client);
           const unsecure=!!registry.brand(client)?.local;
           db.prepare('INSERT OR IGNORE INTO app_storage(client) VALUES(?)').run(client);
-          if(req.method==='GET')return answer(200,{...usage(client),capacity:setting(client).capacity,hasKey:!!setting(client).secret,verified,unsecure,
-            shared:JSON.parse(setting(client).shared),requests:JSON.parse(setting(client).requests),showInFiles:!!visible.get(client),canShowInFiles:!!(owned&&verified)});
+          if(req.method==='GET')return answer(200,{...usage(client),capacity:setting(client).capacity,hasKey:!!setting(client).secret,verified:serviceEnabled,unsecure,
+            shared:JSON.parse(setting(client).shared),requests:JSON.parse(setting(client).requests),showInFiles:!!visible.get(client),canShowInFiles:!!(owned&&serviceEnabled)});
           if(req.method!=='POST'||!accounts.allowsMutation(req)||!accounts.recentlyConfirmed(req))fail(403,'Confirm your identity before changing app storage.');
           const input=await body(req);
-          if(!verified&&(input.action!=='sharing'||!Array.isArray(input.shared)||input.shared.length))fail(403,'Service storage requires a verified app.');
+          if(!serviceEnabled&&(input.action!=='sharing'||!Array.isArray(input.shared)||input.shared.length))fail(403,'Service storage requires a verified app.');
           if(unsecure&&input.confirmUnsecure!==true)fail(422,'Confirm editing sharing for an unsecure app.');
           if(input.action==='file-visibility'){
-            if(!owned||!verified||typeof input.enabled!=='boolean')fail(403,'Only the developer of a verified app can change file browser visibility.');
+            if(!owned||!serviceEnabled||typeof input.enabled!=='boolean')fail(403,'Only the developer of a verified app can change file browser visibility.');
             if(input.enabled)db.prepare('INSERT OR IGNORE INTO app_file_visibility VALUES(?)').run(client);
             else db.prepare('DELETE FROM app_file_visibility WHERE client=?').run(client);
             return answer(200,{ok:true});
@@ -161,7 +162,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
           }else if(input.action==='sharing'){
             if(!Array.isArray(input.shared)||input.shared.length>30||!input.shared.every(x=>typeof x==='string'&&name.test(x)))fail(422,'Choose valid shared collections.');
             const requests=input.requests??[];
-            if(!Array.isArray(requests)||requests.length>30||!requests.every(x=>x&&typeof x==='object'&&typeof x.source==='string'&&x.source!==client&&name.test(x.collection)&&typeof x.label==='string'&&x.label.length>0&&x.label.length<=160&&!/[\p{Cc}\p{Cf}]/u.test(x.label)&&active(x.source)&&JSON.parse(setting(x.source)?.shared??'[]').includes(x.collection)))fail(422,'Requests must target collections published for sharing by verified apps.');
+            if(!Array.isArray(requests)||requests.length>30||!requests.every(x=>x&&typeof x==='object'&&typeof x.source==='string'&&x.source!==client&&name.test(x.collection)&&typeof x.label==='string'&&x.label.length>0&&x.label.length<=160&&!/[\p{Cc}\p{Cf}]/u.test(x.label)&&verified(x.source)&&JSON.parse(setting(x.source)?.shared??'[]').includes(x.collection)))fail(422,'Requests must target collections published for sharing by verified apps.');
             const removed=JSON.parse(setting(client).shared).filter(collection=>!input.shared.includes(collection));
             for(const collection of removed)db.prepare('DELETE FROM app_data_grants WHERE source=? AND collection=?').run(client,collection);
             db.prepare('UPDATE app_storage SET shared=?,requests=? WHERE client=?').run(JSON.stringify([...new Set(input.shared)]),JSON.stringify([...new Map(requests.map(({source,collection,label})=>[source+'/'+collection,{source,collection,label:label.trim()}])).values()]),client);
@@ -172,9 +173,10 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         const match=/^\/(public|v1)\/apps\/([a-zA-Z0-9_-]{1,100})\/data\/([a-zA-Z0-9_-]{1,80})(?:\/([a-zA-Z0-9_-]{1,120}))?$/.exec(url.pathname);
         if(!match)fail(404,'Unknown data endpoint.');
         const [,mode,client,collection,id]=match;
-        if(!active(client))fail(404,'Application unavailable.');
+        if(!registered(client))fail(404,'Application unavailable.');
         const cursor=url.searchParams.get('cursor')??'';if(cursor&&!/^[a-zA-Z0-9_-]{1,120}$/.test(cursor))fail(422,'Invalid cursor.');
         if(mode==='public'){
+          if(!verified(client))fail(404,'Application unavailable.');
           if(req.method!=='GET')fail(405,'Public endpoints are read-only.');
           const rows=id?db.prepare('SELECT * FROM app_records WHERE client=? AND collection=? AND public=1 AND public_key=?').all(client,collection,id):db.prepare('SELECT * FROM app_records WHERE client=? AND collection=? AND public=1 AND public_key>? ORDER BY public_key LIMIT 101').all(client,collection,cursor);
           const values=rows.filter(row=>row.owner==='~app'||accounts.available(row.owner)).map(row=>({...decode(row),id:row.public_key}));
@@ -182,13 +184,14 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         }
         if(id&&!/^[a-zA-Z0-9_-]{1,120}$/.test(id))fail(422,'Invalid record ID.');
         const token=/^Bearer ([A-Za-z0-9_-]{20,200})$/.exec(req.headers.authorization??'')?.[1];
-        let principal;
-        if(token?.startsWith('xid-db-')&&setting(client)?.secret===hash(token))principal={client,owner:'~app'};
-        else if(token)principal=await authenticate(token);
-        if(!principal?.owner||!registry.has(principal.client)||!accounts.available(registry.brand(principal.client)?.owner))fail(401,'A valid registered application credential is required.');
+        const authenticateRequest=()=>token?.startsWith('xid-db-')
+          ? (verified(client)&&setting(client)?.secret===hash(token)?{client,owner:'~app'}:null)
+          : (token?authenticate(token):null);
+        const principal=await authenticateRequest();
+        if(!principal?.owner||!registered(principal.client))fail(401,'A valid registered application credential is required.');
         const own=principal.client===client;
         if(!own){
-          if(req.method!=='GET'||!registry.crossReadAllowed(client,principal.client)||!sourceLinked(principal.owner,client)||!JSON.parse(setting(client)?.shared??'[]').includes(collection)||!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(principal.owner,client,principal.client,collection))fail(403,'This data permission has not been granted.');
+          if(req.method!=='GET'||!verified(client)||!registry.crossReadAllowed(client,principal.client)||!sourceLinked(principal.owner,client)||!JSON.parse(setting(client)?.shared??'[]').includes(collection)||!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(principal.owner,client,principal.client,collection))fail(403,'This data permission has not been granted.');
         }
         const params=[client,principal.owner,collection];
         if(req.method==='GET'){
@@ -224,8 +227,9 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         if(!Array.isArray(readers)||readers.length>50||!readers.every(value=>typeof value==='string'&&/^[a-z][a-z0-9]{2,23}$/.test(value)))fail(422,'Choose up to 50 recipient usernames.');
         const readerOwners=[...new Set(readers.map(username=>accounts.ownerForUsername?.(username)))];
         if(readerOwners.some(owner=>!owner||!accounts.available(owner)||!accounts.linkedGrant(owner,client)))fail(422,'Recipients must have linked this app.');
-        const currentIdentity=token?.startsWith('xid-db-')&&setting(client)?.secret===hash(token)?{client,owner:'~app'}:await authenticate(token);
-        if(!currentIdentity||currentIdentity.owner!==principal.owner||currentIdentity.client!==principal.client||!active(client)||!active(principal.client))fail(401,'Application access changed.');
+        const currentIdentity=await authenticateRequest();
+        if(!currentIdentity||currentIdentity.owner!==principal.owner||currentIdentity.client!==principal.client||!registered(client))fail(401,'Application access changed.');
+        if(input.public&&!verified(client))fail(403,'Public records require a verified application.');
         const raw=Buffer.from(JSON.stringify(input.data));if(raw.length>60000)fail(413,'Record too large.');
         const charged=raw.length+1024+readerOwners.length*256;
         if(path!==':memory:'){const space=statfsSync(dirname(path));if(Number(space.bavail)*Number(space.bsize)<256*1024**2)fail(503,'Storage is temporarily unavailable.');}

@@ -352,7 +352,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const emailUnavailable=requiredEmail&&!chooseEmail&&!sharedEmail;
     const showAge=scopes.has('age_range')&&(missing.has('age_range')||!existingGrant||explicitConsent||requiredAge&&!existingScopes.has('age_range'));
     const appData=scopes.has('app_data');
-    const ownsStorage=appData&&(!brand||brand.verified)&&!brand?.local;
+    const ownsStorage=appData;
     const showFriends=scopes.has('friends')&&(missing.has('friends')||explicitConsent);
     const requestedFileScopes=fileScopes.filter(scope=>scopes.has(scope));
     const previouslyAllowed=scope=>existingScopes.has(scope);
@@ -562,7 +562,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     },
     async dataAccess(value,{native=false}={}) {
       const access = await provider.AccessToken.find(value);
-      if (!access?.accountId || !registry?.has(access.clientId) || (!native&&(await provider.Client.find(access.clientId))?.tokenEndpointAuthMethod!=='client_secret_basic') || !await activeGrant(access) || !access.scope?.split(' ').includes('app_data')) return null;
+      if (!access?.accountId || !registry?.has(access.clientId) || !accounts.linkedGrant(access.accountId,access.clientId) || (!native&&(await provider.Client.find(access.clientId))?.tokenEndpointAuthMethod!=='client_secret_basic') || !await activeGrant(access) || !access.scope?.split(' ').includes('app_data')) return null;
       return { owner:access.accountId, client:access.clientId, confidential:true };
     },
     async fileAccess(token, scopes) {
