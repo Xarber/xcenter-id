@@ -461,3 +461,15 @@ Follow-up for AUTHN-108 and AUTHN-113–116. The live test registration is alrea
 | AUTHN-120 | Apply updated UADS §§16, 37, 40 and 44 to onboarding and past changelogs | Implemented | Added full-screen replayable tours, concise archive cards, per-version links and Developer Mode Git notes. Chromium exercised desktop and mobile with a synthetic account. Native capture, runtime checks and stable release evidence remain pending. |
 
 [Verification report](reports/ONBOARDING_RELEASE_HISTORY_2026-11-23.md) records production, preview and screenshot evidence.
+
+### File transfers, developer settings and device-code follow-up
+
+| ID | Request | State | Next action and verification |
+| --- | --- | --- | --- |
+| AUTHN-121 | Use remaining account storage as the file limit and upload simultaneously with per-file progress and cancellation | Queued | Replace the 2 MB buffered upload and 100-file cap with bounded encrypted streaming, quota reservation and cancellation cleanup. Preserve legacy downloads and folder listings. Wire web and native transfer rows once the API is ready. |
+| AUTHN-122 | Drag files in or between folders, add Move and remove the redundant Download button | Queued | Add owner-scoped file and folder moves with cycle checks. Connect web drop targets and platform-appropriate move controls. Keep filename download and existing share rules. |
+| AUTHN-123 | Give changelog pages Back, put Developer notes on full notes, and expose Developer Mode and app container settings | Queued | Preserve the return route, move the gated Git notes to each version’s full page, and show an explicit Developer Mode switch and managed settings entry. |
+| AUTHN-124 | Replace the simulated device-code slots with six actual inputs | Implemented | Source changes cover paste, focus and deletion on web and native. Issuer test checks actual inputs, CSP nonce and preserved confirmation. Forty API tests, fifteen dashboard tests and TypeScript passed. Browser and installed-device input testing remain. |
+| AUTHN-125 | Reconcile previous requests, including the test registration and unverified app storage | Queued | Recheck live portal persistence and callback, inspect the active queue, and preserve linked users’ private app storage for active unverified apps. |
+
+Usage checkpoint under UADS §0 on 23 November. Five-hour usage has 9% remaining and resets at 02:46 CET on 24 November. Weekly usage has 55% remaining and resets at 11:09 CET on 30 November. Resume with AUTHN-121 and AUTHN-122 before any deployment or native build. The consent callback still returned HTTP 404. The passkey-gated sharing save is unverified. The active-unverified-app rule for user-owned storage remains implemented and covered by the API suite.

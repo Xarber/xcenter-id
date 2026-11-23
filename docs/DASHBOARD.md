@@ -55,3 +55,5 @@ The private file list has labeled download and trash actions on both platforms. 
 The native account overview no longer constructs Intl.PluralRules. The catalog uses its supported language rules and falls back to decimal digits when Intl.NumberFormat is unavailable. A regression test removes those constructors to exercise the Hermes failure reported by the user. Passing source checks and browser QA do not establish an installed iOS result.
 
 The service worker checks the network first when opening dashboard routes such as Profile, Permissions, and Mail. If that request fails offline, it displays a cached public fallback with a retry action. Private API responses, login and consent transactions, and account data stay outside the worker cache.
+
+Web and native device sign-in render six independently focusable code fields. Paste can fill the code, and entering a character advances focus. The web page keeps the issuer form as a fallback and submits the combined code to the same confirmation step.

@@ -181,10 +181,14 @@ test('registered device flow confirms linking and issues a single nonce-bound to
     assert.equal((await provider.connectedPermissions(current.owner,client.clientId,{scope:'friends',enabled:false})).find(scope=>scope.scope==='friends').enabled,false);
     assert.equal((await provider.connectedPermissions(current.owner,client.clientId,{scope:'friends',enabled:true})).find(scope=>scope.scope==='friends').enabled,true);
     const again=await (await begin(client)).json();
-    const manual=await (await http('/device',{browser:true})).text();
+    const manualResponse=await http('/device',{browser:true});
+    const manual=await manualResponse.text();
     assert.match(manual,/Sign in on another device/);
-    assert.equal((manual.match(/<span aria-hidden="true"><\/span>/g)??[]).length,6);
-    assert.equal((manual.match(/name="user_code"/g)??[]).length,1);
+    assert.equal((manual.match(/<input type="text" aria-label="Character [1-6] of 6"/g)??[]).length,6);
+    const scriptNonce=manual.match(/<script nonce="([^"]+)"/)?.[1];
+    assert.ok(scriptNonce);
+    assert.ok(manualResponse.headers.get('content-security-policy').includes("script-src 'nonce-"+scriptNonce+"'"));
+    assert.equal((manual.match(/<input[^>]+name="user_code"/g)??[]).length,1);
     const manualXsrf=manual.match(/name="xsrf" value="([^"]+)"/)?.[1];
     const review=await (await http('/device',{browser:true,form:{xsrf:manualXsrf,user_code:again.user_code}})).text();
     assert.match(review,/Confirm sign-in on this device/);

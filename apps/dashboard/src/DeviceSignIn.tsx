@@ -1,5 +1,5 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useRef, useState } from 'react';
+import { useRef, useState, type ComponentRef } from 'react';
 import { Alert, Linking, Pressable, Text, TextInput, View } from 'react-native';
 import { deviceSignInUrl, isDeviceCode, normalizeDeviceCode } from './device-link';
 import { accountHost } from './native-account';
@@ -7,8 +7,9 @@ import { accountHost } from './native-account';
 export default function DeviceSignIn({colors,back}: {colors:{ink:string;accent:string;muted:string;soft:string;line:string};back:()=>void}) {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
-  const [code,setCode] = useState('');
-  const [focused,setFocused] = useState(false);
+  const [characters,setCharacters] = useState<string[]>(()=>Array(6).fill(''));
+  const inputs=useRef<Array<ComponentRef<typeof TextInput>|null>>([]);
+  const code=characters.join('');
   const [status, setStatus] = useState('');
   const opening = useRef(false);
   const action = (label:string, onPress:()=>void) =>
@@ -64,16 +65,30 @@ export default function DeviceSignIn({colors,back}: {colors:{ink:string;accent:s
       {action('Close scanner',()=>{setScanning(false);setStatus('');})}
     </> : action('Scan QR code',()=>void scan())}
     <Text style={{color:colors.ink,fontWeight:'700'}}>Enter a device code</Text>
-    <View style={{flexDirection:'row',gap:6,position:'relative',maxWidth:350}}>
-      {Array.from({length:6},(_,index)=><View key={index} accessible={false} importantForAccessibility="no-hide-descendants"
-        style={{flex:1,minHeight:52,borderWidth:1,borderColor:focused&&index===Math.min(code.length,5)?colors.accent:colors.line,borderRadius:10,alignItems:'center',justifyContent:'center',backgroundColor:colors.soft}}>
-        <Text style={{color:colors.ink,fontSize:22,fontWeight:'700'}}>{code[index]}</Text>
-      </View>)}
-      <TextInput accessibilityLabel="Six-character device code" value={code} onChangeText={value=>setCode(normalizeDeviceCode(value))}
-        onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)} autoCapitalize="characters" autoCorrect={false}
-        autoComplete="one-time-code" caretHidden selectionColor="transparent" returnKeyType="go"
+    <View style={{flexDirection:'row',gap:6,maxWidth:350}}>
+      {characters.map((character,index)=><TextInput key={index}
+        ref={input=>{inputs.current[index]=input;}} accessibilityLabel={`Character ${index+1} of 6`}
+        value={character} selectTextOnFocus autoCapitalize="characters" autoCorrect={false}
+        autoComplete={index===0?'one-time-code':'off'} returnKeyType="go"
+        onKeyPress={({nativeEvent})=>{
+          if(index>0&&nativeEvent.key==='Backspace'&&!character)inputs.current[index-1]?.focus();
+        }}
+        onChangeText={value=>{
+          const text=normalizeDeviceCode(value);
+          const start=text.length===6?0:index;
+          const letters=text.slice(0,6-start);
+          setCharacters(previous=>{
+            const next=[...previous];
+            if(!letters)next[index]='';
+            else Array.from(letters).forEach((letter,offset)=>{next[start+offset]=letter;});
+            return next;
+          });
+          if(letters)inputs.current[Math.min(start+letters.length,5)]?.focus();
+        }}
         onSubmitEditing={()=>{if(isDeviceCode(code))review(accountHost+'/device?code='+code);}}
-        style={{position:'absolute',left:0,right:0,top:0,bottom:0,color:'transparent',fontSize:20}}/>
+        style={{flex:1,minWidth:0,minHeight:52,borderWidth:1,borderColor:colors.line,borderRadius:10,
+          backgroundColor:colors.soft,color:colors.ink,fontSize:22,fontWeight:'700',textAlign:'center',paddingHorizontal:0}}/>
+      )}
     </View>
     <Pressable accessibilityRole="button" disabled={!isDeviceCode(code)} onPress={()=>review(accountHost+'/device?code='+code)}
       style={({pressed})=>({minHeight:44,justifyContent:'center',paddingHorizontal:12,borderRadius:12,backgroundColor:colors.soft,opacity:pressed||!isDeviceCode(code)?0.55:1})}>

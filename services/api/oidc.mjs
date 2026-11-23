@@ -24,10 +24,10 @@ const escape = (value) => String(value).replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[c]);
 
-function pageHeaders(callbackOrigin = '') {
+function pageHeaders(callbackOrigin = '', scriptNonce = '') {
   return {
     'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'same-origin',
-    'Content-Security-Policy': `default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'self' ${callbackOrigin}; base-uri 'none'`,
+    'Content-Security-Policy': `default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'self' ${callbackOrigin}; base-uri 'none'${scriptNonce ? `; script-src 'nonce-${scriptNonce}'` : ''}`,
   };
 }
 
@@ -60,11 +60,10 @@ function page(content, consent = false) {
     .identity-contexts{display:grid;gap:.65rem}.context small{display:block;color:var(--muted);margin-bottom:.25rem}.badge-row{display:flex;flex-wrap:wrap;gap:.35rem;margin:.5rem 0}.permission-toggle.permission-fixed{cursor:default}.permission-check{margin-inline-start:auto;color:var(--action);font-weight:800}.permission-toggle small{display:block;color:var(--muted)}
     fieldset{border:1px solid var(--border);border-radius:.85rem;padding:.6rem 1rem;margin:1.2rem 0;min-width:0}legend{font-weight:700}
     .device-back{color:var(--text)}.device-code{font-size:1.6rem;font-weight:750;letter-spacing:.15em}
-    .device-boxes{position:relative;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.35rem;inline-size:min(100%,21rem);font:700 clamp(1.125rem,5vw,1.6rem)/1 ui-monospace,monospace}
-    .device-boxes span{block-size:3.15rem;border:1px solid var(--border);border-radius:.55rem;background:var(--soft)}
-    .device-boxes:focus-within span{border-color:var(--action)}
-    .device-boxes input{position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;font:inherit;color:var(--text);text-transform:uppercase;padding:0 0 0 calc((100% - 1.75rem) / 12 - .5ch);letter-spacing:calc((100cqw + .35rem) / 6 - 1ch)}
-    .device-entry{container-type:inline-size;max-inline-size:21rem}
+    .device-boxes{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.35rem;inline-size:min(100%,21rem);font:700 clamp(1.125rem,5vw,1.6rem)/1 ui-monospace,monospace}
+    .device-boxes[hidden]{display:none}
+    .device-boxes input{min-width:0;width:100%;height:3.15rem;border:1px solid var(--border);border-radius:.55rem;background:var(--soft);font:inherit;color:var(--text);text-align:center;text-transform:uppercase;padding:0}
+    .device-boxes input:focus-visible{outline:2px solid var(--action);outline-offset:1px}
 
     label{display:flex;gap:.7em;align-items:baseline;padding:.5em 0;overflow-wrap:anywhere}input{accent-color:var(--action)}
     button,.action{display:inline-block;font:inherit;font-weight:700;padding:.6em 1em;margin:.45rem .4rem 0 0;border-radius:.65rem;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer}
@@ -200,8 +199,8 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
   policy.get('consent').checks.add(new interactionPolicy.Check('confirm_linked_signin','Confirm sign-in to the linked app',ctx=>
     !ctx.oidc.result?.consent?.grantId&&!!accounts.linkedGrant(ctx.oidc.session.accountId,ctx.oidc.client.clientId)));
   const deviceAttempts=new Map();
-  function devicePage(ctx,content) {
-    ctx.set(pageHeaders());
+  function devicePage(ctx,content,scriptNonce) {
+    ctx.set(pageHeaders('',scriptNonce));
     ctx.body=page(content+'<p><a class="device-back" href="/devices">Back to Devices</a> · <a class="device-back" href="/dashboard">Open dashboard</a></p>');
   }
   const provider = new Provider(issuer, {
@@ -246,9 +245,41 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         },
         userCodeInputSource(ctx,form,_out,error) {
           const help=error?'That device code is unavailable. Enter a new code from your device.':'Enter the six-character code shown on your TV or other device.';
-          devicePage(ctx,`<h1>Sign in on another device</h1><p>${help}</p><div class="device-entry">${form.replace(/<input\b[^>]*name="user_code"[^>]*>(?:<\/input>)?/, input =>
-            `<label for="device-code">Device code</label><div class="device-boxes">${'<span aria-hidden="true"></span>'.repeat(6)}
-            ${input.replace('placeholder="Enter code"','id="device-code" maxlength="6" spellcheck="false" autocapitalize="characters"').replace(/ onfocus="[^"]*"/,'')}</div>`)}</div><button value="approve" form="op.deviceInputForm">Continue</button>`);
+          const nonce=randomBytes(18).toString('base64');
+          const boxes=Array.from({length:6},(_,index)=>
+            `<input type="text" aria-label="Character ${index+1} of 6" autocapitalize="characters" spellcheck="false" autocomplete="${index===0?'one-time-code':'off'}" required form="op.deviceInputForm">`).join('');
+          devicePage(ctx,`<h1>Sign in on another device</h1><p>${help}</p>${form}
+            <fieldset class="device-boxes" hidden><legend>Device code</legend>${boxes}</fieldset>
+            <button value="approve" form="op.deviceInputForm">Continue</button>
+            <script nonce="${nonce}">
+              const original = document.querySelector('input[name="user_code"]');
+              const group = document.querySelector('.device-boxes');
+              const cells = [...group.querySelectorAll('input')];
+              if (original) {
+                original.type = 'hidden';
+                group.hidden = false;
+                const update = () => { original.value = cells.map(cell => cell.value).join(''); };
+                const enter = (index, value) => {
+                  const text = value.toUpperCase().replace(/[^BCDFGHJKLMNPQRSTVWXZ]/g, '');
+                  if (!text) { cells[index].value = ''; update(); return; }
+                  const start = text.length >= 6 ? 0 : index;
+                  const letters = text.slice(0, cells.length - start);
+                  [...letters].forEach((letter, offset) => { cells[start + offset].value = letter; });
+                  update();
+                  cells[Math.min(start + letters.length, cells.length - 1)].focus();
+                };
+                cells.forEach((cell, index) => {
+                  cell.addEventListener('focus', () => cell.select());
+                  cell.addEventListener('input', () => enter(index, cell.value));
+                  cell.addEventListener('paste', event => {
+                    event.preventDefault(); enter(index, event.clipboardData.getData('text'));
+                  });
+                  cell.addEventListener('keydown', event => {
+                    if (index && event.key === 'Backspace' && !cell.value) cells[index - 1].focus();
+                  });
+                });
+              }
+            </script>`,nonce);
         },
         userCodeConfirmSource(ctx,form,client,_info,code) {
           devicePage(ctx,`<h1>Confirm sign-in on this device?</h1><p>Sign in to <strong>${escape(client.clientName)}</strong> on your other device.</p>
