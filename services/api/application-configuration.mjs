@@ -13,7 +13,11 @@ export function appConfiguration({accounts,registry,applicationData}){
   return async (req,res,id) => {
     const answer=(status,body)=>res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(body));
     const owner=accounts.current(req)?.owner;
-    const lookup=()=>owner&&accounts.current(req)?.owner===owner&&accounts.available(owner)&&registry.managed(owner).find(item=>item.id===id&&item.status!=='revoked');
+    const lookup=()=>{
+      if(!owner||accounts.current(req)?.owner!==owner||!accounts.available(owner))return null;
+      const app=registry.lookupWithBrand(owner,id);
+      return app?.status!=='revoked'?app:null;
+    };
     const view=app=>{
       const access=registry.accessSettings(owner,id);
       return {version:1, profile:{name:app.name,description:app.description,repository:app.repository,callbacks:app.callbacks,icon:app.icon??null},

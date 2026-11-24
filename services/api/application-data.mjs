@@ -66,8 +66,8 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
     sharing,
     prepareSharing,
     fileVisibility:client=>!!visible.get(client),
-    sharingSources(client){
-      return registry.published().filter(app=>app.client!==client&&verified(app.client)&&registry.crossReadAllowed(app.client,client))
+    sharingSources(client,owner){
+      return registry.published().filter(app=>app.client!==client&&verified(app.client)&&registry.access(owner,app.client).allowed&&registry.crossReadAllowed(app.client,client))
         .map(app=>({client:app.client,name:app.name,collections:sharing(app.client).shared})).filter(app=>app.collections.length);
     },
     requestsForOwner,
@@ -172,7 +172,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
           const unsecure=!!registry.brand(client)?.local;
           db.prepare('INSERT OR IGNORE INTO app_storage(client) VALUES(?)').run(client);
           if(req.method==='GET')return answer(200,{name:registry.brand(client)?.name??'App storage',icon:registry.brand(client)?.iconUrl??registry.brand(client)?.icon??null,...usage(client),capacity:setting(client).capacity,hasKey:!!setting(client).secret,verified:serviceEnabled,unsecure,
-            ...sharing(client),sources:this.sharingSources(client),showInFiles:!!visible.get(client),canShowInFiles:!!(owned&&serviceEnabled)});
+            ...sharing(client),sources:this.sharingSources(client,session.owner),showInFiles:!!visible.get(client),canShowInFiles:!!(owned&&serviceEnabled)});
           if(req.method!=='POST'||!accounts.allowsMutation(req)||!accounts.recentlyConfirmed(req))fail(403,'Confirm your identity before changing app storage.');
           const input=await body(req);
           if(!serviceEnabled&&(input.action!=='sharing'||!Array.isArray(input.shared)||input.shared.length))fail(403,'Service storage requires a verified app.');
@@ -229,7 +229,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         if(!principal?.owner||!registered(principal.client))fail(401,'A valid registered application credential is required.');
         const own=principal.client===client;
         if(!own){
-          if(req.method!=='GET'||!verified(client)||!registry.crossReadAllowed(client,principal.client)||!sourceLinked(principal.owner,client)||!JSON.parse(setting(client)?.shared??'[]').includes(collection)||!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(principal.owner,client,principal.client,collection))fail(403,'This data permission has not been granted.');
+          if(req.method!=='GET'||!verified(client)||!registry.crossReadAllowed(client,principal.client)|| !sourceLinked(principal.owner,client)||!requested(principal.client).some(permission=>permission.source===client&&permission.collection===collection)||!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(principal.owner,client,principal.client,collection))fail(403,'This data permission has not been granted.');
         }
         const params=[client,principal.owner,collection];
         if(req.method==='GET'){

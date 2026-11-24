@@ -30,6 +30,7 @@ export function openRegistry(path) {
   const list = db.prepare(`SELECT c.id,c.name,c.callback,c.client,c.status,b.developer_name AS developerName,b.icon,p.description,p.repository,p.callbacks,p.verified,EXISTS(SELECT 1 FROM client_native n WHERE n.id=c.id) AS native FROM clients c
     LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN app_profiles p ON p.id=c.id WHERE c.developer=? ORDER BY c.name,c.id`);
   const lookup = db.prepare('SELECT c.*,p.description,p.repository,p.callbacks,p.verified,EXISTS(SELECT 1 FROM client_native n WHERE n.id=c.id) AS native FROM clients c LEFT JOIN app_profiles p ON p.id=c.id WHERE c.id=? AND c.developer=?');
+  const storedIcon=db.prepare('SELECT icon FROM client_brand WHERE id=?');
   const active = db.prepare("SELECT 1 FROM clients WHERE client = ? AND status = 'active' AND id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)");
   const approve = db.prepare("UPDATE clients SET client = ?, status = 'active' WHERE id = ? AND status = 'pending'");
   const revoke = db.prepare("UPDATE clients SET status = 'revoked' WHERE id = ? AND status IN ('pending','active')");
@@ -154,7 +155,7 @@ export function openRegistry(path) {
       db.prepare('ATTACH DATABASE ? AS hosted_config').run(path);
     },
     saveConfiguration(owner,id,configuration,storageChange){
-      const previous=appView(lookup.get(id,owner));
+      const previous=this.lookupWithBrand(owner,id);
       if(!previous||previous.status==='revoked')return false;
       const {profile,requirements,access}=configuration;
       if(previous.status!=='pending'&&new URL(previous.callback).origin!==new URL(profile.callbacks[0]).origin)return false;
@@ -247,6 +248,10 @@ export function openRegistry(path) {
     managed: owner=>list.all(owner).map(row=>({...appView(row),restricted:
       db.prepare('SELECT restricted FROM app_restrictions WHERE id=?').get(row.id)?.restricted===1})),
     lookup: (owner,id) => appView(lookup.get(id,owner)),
+    lookupWithBrand(owner,id){
+      const app=lookup.get(id,owner);
+      return appView(app&&{...app,icon:storedIcon.get(id)?.icon??null});
+    },
     list: (developer) => list.all(developer).map(appView),
     published: () => db.prepare("SELECT client,name,coalesce(p.verified,0) AS verified FROM clients LEFT JOIN app_profiles p USING(id) WHERE status='active' AND id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1) ORDER BY name,client LIMIT 200").all().map(app=>({...app,verified:!!app.verified})),
     revokeOwned: (owner,id) => db.prepare("UPDATE clients SET status='revoked' WHERE developer=? AND id=? AND status IN ('pending','active')").run(owner,id).changes === 1,

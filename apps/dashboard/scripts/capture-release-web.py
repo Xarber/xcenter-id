@@ -40,6 +40,36 @@ fixtures = {
     ]},
 }
 
+registration = {
+    "id": "18b0cb52-e0c5-4a97-9ac6-ecb51cb85669", "name": "Garden Journal", "status": "active",
+    "client": app["client"], "description": "Keep a record of what you grow.", "verified": True,
+    "callback": "https://garden.example.test/callback", "callbacks": ["https://garden.example.test/callback"],
+    "icon": None, "requirements": {"email": False, "age_range": False},
+}
+configuration_path = "/account/developer/apps/" + registration["id"] + "/configuration"
+app_storage_path = "/account/app-storage/" + registration["id"]
+configuration = {
+    "version": 1,
+    "profile": {key: registration[key] for key in ("name", "description", "callbacks", "icon")} | {"repository": ""},
+    "requirements": registration["requirements"],
+    "access": {"private": False, "allowRequests": False, "readerTrust": "secure"},
+    "storage": {"shared": [], "requests": [], "showInFiles": False},
+}
+folder_path = "/account/files/folders/08518242-bc8a-4842-a888-dea54dd47db4"
+fixtures.update({
+    "/account/developer/apps": {"apps": [registration]},
+    "/account/developer/apps/" + registration["id"] + "/access": {"members": [], "private": False, "requests": False, "readerTrust": "secure"},
+    configuration_path: {"configuration": configuration, "revision": "fixture-revision"},
+    app_storage_path: {
+        "name": app["name"], "verified": True, "used": 0, "records": 0, "capacity": 10 * 1024 ** 2, "shared": [], "requests": [],
+        "sources": [{"name": "Greenhouse", "client": "greenhouse", "collections": ["plants", "notes"]}],
+    },
+    "/account/session/access": {"confirmed": True},
+    "/account/username-change": {"request": None},
+    "/account/files": {"files": [], "folders": [{"name": "Archive", "id": folder_path.rsplit("/", 1)[-1]}],
+                       "breadcrumbs": [], "categories": {}, "used": 0, "total": 0, "limit": 10 * 1024 ** 2},
+})
+
 
 class Preview(SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -51,7 +81,7 @@ class Preview(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps(fixtures.get(path, {})).encode())
         else:
-            if path in ("/", "/dashboard", "/apps", "/permissions", "/docs", "/settings", "/changelog") or path.startswith(("/changelog/", "/permissions/")) or path == "/signin":
+            if path in ("/", "/dashboard", "/apps", "/permissions", "/docs", "/settings", "/changelog") or path.startswith(("/changelog/", "/permissions/")) or path in ("/signin", "/signup", "/developer", "/files", "/profile/username") or path.startswith("/developer/storage/"):
                 self.path = "/index.html" if path != "/" else "/"
             super().do_GET()
 
@@ -77,7 +107,20 @@ with sync_playwright() as browser_tools:
     for kind, width, height in (("desktop", 1280, 800), ("mobile", 390, 844)):
         context = browser.new_context(viewport={"width": width, "height": height}, reduced_motion="reduce")
         signed_in = False
+        mutations = []
         def route_fixture(route):
+            path = urlsplit(route.request.url).path
+            if route.request.url.startswith(origin+"/") and route.request.method in ("POST", "PUT", "DELETE"):
+                mutations.append((path, route.request.post_data_json if route.request.post_data else None))
+                if path == "/account/login/username":
+                    route.fulfill(json={"method": "passkey"})
+                elif path == "/account/signup/options":
+                    route.fulfill(status=422, json={"error": "Fixture stopped before passkey creation."})
+                elif path == configuration_path:
+                    route.fulfill(json={"configuration": mutations[-1][1]["configuration"], "revision": "saved"})
+                else:
+                    route.fulfill(json={"ok": True})
+                return
             if not route.request.url.startswith(origin+"/"):
                 route.abort()
             elif route.request.url == origin+"/account/me" and not signed_in:
@@ -112,8 +155,16 @@ with sync_playwright() as browser_tools:
         assert page.locator(".xc-auth-night").evaluate("(e)=>getComputedStyle(e,'::after').animationName") == 'xc-star-shimmer'
         assert page.locator(".xc-auth-night").evaluate("(e)=>getComputedStyle(e,'::before').position") == 'fixed'
         page.emulate_media(reduced_motion="reduce")
+        username = "3.a_b-c"
+        page.get_by_label("X-Center username").fill(username)
+        button(page,"Continue").click()
+        expect(button(page,"Use passkey")).to_be_visible()
+        assert mutations[-1][1]["username"] == username
+        page.goto(origin+"/signup")
+        page.get_by_label("X-Center username").fill(username)
+        assert page.get_by_label("X-Center username").evaluate("(field) => field.checkValidity()")
         signed_in = True
-        page.reload()
+        page.goto(origin)
         expect(heading(page, "Your X-Center ID")).to_be_visible()
         button(page, "Continue").click()
         expect(heading(page, "Connect your apps")).to_be_visible()
@@ -170,6 +221,66 @@ with sync_playwright() as browser_tools:
         for label in ("Read plants", "Read notes"):
             expect(page.get_by_role("switch", name=f"{label} · Greenhouse").locator("span")).to_be_visible()
         expect(page.get_by_text("No outgoing data access.")).to_be_visible()
+        page.goto(origin+"/profile/username")
+        page.get_by_label("New username").fill(username)
+        button(page,"Request change").click()
+        page.wait_for_function("() => !document.querySelector('.xc-inline-form button')?.disabled")
+        assert mutations[-1] == ("/account/username-change", {"action": "request", "username": username})
+
+        page.goto(origin+"/files")
+        remove = button(page,"Remove folder Archive")
+        remove.click()
+        dialog = page.get_by_role("dialog")
+        expect(dialog).to_contain_text("Archive")
+        expect(dialog.get_by_role("button",name="Cancel")).to_be_focused()
+        page.keyboard.press("Escape")
+        expect(dialog).to_have_count(0)
+        expect(remove).to_be_focused()
+        assert not any(path == folder_path for path, _ in mutations)
+        remove.click()
+        dialog.get_by_role("button",name="Confirm").click()
+        expect(page.get_by_text("Folder and contents removed.")).to_be_visible()
+        assert mutations[-1][0] == folder_path
+
+        page.goto(origin+"/developer/storage/"+registration["id"])
+        button(page,"Edit database settings").click()
+        button(page,"Add permission").click()
+        page.get_by_label("Source app").select_option("greenhouse")
+        page.get_by_label("Collection",exact=True).select_option("plants")
+        page.get_by_label("Permission name").fill("read_plants")
+        page.get_by_label("Title",exact=True).fill("Read plants")
+        page.get_by_label("Description").fill("Show your plants in the journal")
+        page.get_by_label("Icon",exact=True).select_option("folder")
+        button(page,"Save sharing settings").click()
+        expect(page.get_by_text("Saved.",exact=True)).to_be_visible()
+        assert mutations[-1][0] == app_storage_path
+        assert mutations[-1][1]["requests"] == [{
+            "source":"greenhouse", "collection":"plants", "label":"Read plants",
+            "name":"read_plants", "description":"Show your plants in the journal", "icon":"folder",
+        }]
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+
+        page.goto(origin+"/developer?app="+registration["id"])
+        button(page,"App configuration").click()
+        editor = page.get_by_label("Configuration JSON")
+        expect(editor).to_be_visible()
+        expect(button(page,"Copy app configuration")).to_be_visible()
+        editor.fill("{")
+        button(page,"Format JSON").click()
+        expect(page.get_by_text("Enter a valid JSON object.")).to_be_visible()
+        updated = json.loads(json.dumps(configuration))
+        updated["profile"]["callbacks"].append("https://garden.example.test/second")
+        editor.fill(json.dumps(updated))
+        button(page,"Format JSON").click()
+        button(page,"Apply configuration").click()
+        dialog = page.get_by_role("dialog",name="Apply this configuration?")
+        dialog.get_by_role("button",name="Apply configuration").click()
+        expect(page.get_by_text("Configuration saved.")).to_be_visible()
+        assert mutations[-1] == (configuration_path, {"configuration":updated,"revision":"fixture-revision","confirmUnsecure":False})
+        name = f"{kind}-app-configuration.png"
+        page.screenshot(path=args.output / name, animations="disabled")
+        shots.append({"file": name, "platform": "web", "deviceClass": kind, "feature": "app-configuration",
+                      "width": width, "height": height, "environment": "Chromium with isolated fixture"})
         page.evaluate("localStorage.setItem('authnjs.dashboard.lastRelease','0.11.0')")
         page.goto(origin+"/dashboard")
         expect(heading(page, f"What’s new in {version}")).to_be_visible()
