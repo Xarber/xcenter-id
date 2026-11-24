@@ -31,12 +31,12 @@ export default function SharingEditor({value,onChange,sources,canPublish}: Shari
               onClick={()=>onChange({...value,requests:requests.filter((_,i)=>i!==index)})}><Trash2 size={17}/></button>
           </div>
           <div className="xc-permission-editor-grid">
-            <label>Source app<select value={request.source} onChange={event=>setRequest(index,{source:event.target.value,collection:''})}>
+            <label>Source app<select aria-label="Source app" value={request.source} onChange={event=>setRequest(index,{source:event.target.value,collection:''})}>
               <option value="">Select an app</option>
               {!!request.source&&!sources.some(source=>source.client===request.source)&&<option value={request.source}>{request.source} · unavailable</option>}
               {sources.map(source=><option value={source.client} key={source.client}>{source.name}</option>)}
             </select></label>
-            <label>Collection<select value={request.collection} disabled={!request.source} onChange={event=>setRequest(index,{collection:event.target.value})}>
+            <label>Collection<select aria-label="Collection" value={request.collection} disabled={!request.source} onChange={event=>setRequest(index,{collection:event.target.value})}>
               <option value="">Select a collection</option>
               {!!request.collection&&!collections.includes(request.collection)&&<option value={request.collection}>{request.collection} · unavailable</option>}
               {collections.map(name=><option key={name}>{name}</option>)}
@@ -47,7 +47,7 @@ export default function SharingEditor({value,onChange,sources,canPublish}: Shari
               onChange={event=>setRequest(index,{label:event.target.value})}/></label>
             <label>Description <small>Optional</small><textarea rows={2} value={request.description??''} maxLength={300}
               onChange={event=>setRequest(index,{description:event.target.value})}/></label>
-            <label>Icon<select value={request.icon??''} onChange={event=>setRequest(index,{icon:(event.target.value||undefined) as SharingRequest['icon']})}>
+            <label>Icon<select aria-label="Icon" value={request.icon??''} onChange={event=>setRequest(index,{icon:(event.target.value||undefined) as SharingRequest['icon']})}>
               <option value="">Default</option>{sharingIcons.map(([icon,name])=><option key={icon} value={icon}>{name}</option>)}
             </select></label>
           </div>

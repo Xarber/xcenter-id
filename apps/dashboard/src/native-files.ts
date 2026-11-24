@@ -72,8 +72,8 @@ export async function pickProfilePhoto(source: ProfilePhotoSource) {
       return saved.base64;
     }finally{if(cache.exists)cache.delete();}
   }finally{
-    // DocumentPicker copies to cache. Other platforms may return a provider-owned URI.
-    if(source==='files'&&original.exists)original.delete();
+    const cachePrefix=Paths.cache.uri.replace(/\/?$/,'/');
+    if((source==='files'||original.uri.startsWith(cachePrefix))&&original.exists)original.delete();
   }
 }
 
