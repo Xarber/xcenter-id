@@ -1,7 +1,7 @@
 {
   "version": 1,
   "repository": "Xarber/xcenter-id",
-  "visibility": "private",
+  "visibility": "public",
   "previewWorkflow": "native-preview.yml",
   "sourceBranch": "testing",
   "artifactCommitRequired": true,

@@ -125,3 +125,9 @@ Web/API rollback restores the two Nginx site files from `/srv/xcenter/infra/chan
 HTTPS now serves `fcea370037e7d4c962c921fcf1a4f07bee075a30` from loopback 18815. Staging used copies of the seven verified SQLite snapshots. Prior web/API traffic can be restored by copying the two retained site files from `/srv/xcenter/infra/changes/pre-dashboard-fcea370`, validating Nginx and reloading it. The previous process remains on loopback 18814. Mail listeners kept their existing deployments.
 
 The public release archive, device entry, service worker and OpenID Connect discovery passed. See [verification report](../reports/ONBOARDING_RELEASE_HISTORY_2026-11-23.md).
+
+## 24 November dashboard 0.15.0 rollout
+
+Public HTTPS serves `ddee0106834dc3ecc6b8360f6166a9932489e5e9` on loopback 18817. The candidate passed the staging and public checks with zero restarts. Seven SQLite snapshots passed integrity checks at `/srv/xcenter/data/.xcenter-id-rollbacks/pre-dashboard-ddee010.7zDLqK`. Restore the two site files from `/srv/xcenter/infra/changes/pre-dashboard-ddee010`, validate Nginx and reload to restore the retained web/API process on 18815. The storage additions are backward-compatible. Files finalized by 0.15.0 use chunk records, so validate file availability before serving an older API during a rollback. Deleting an account remains permanent even after a code rollback.
+
+The Velunivo test callback is served by the existing sample host virtual server. Credentials are held only in the protected service configuration. The callback validates an expiring browser-bound state, PKCE and nonce; it discards the returned tokens. Its live success requires an approved sign-in. The established mail services were not redeployed.

@@ -424,7 +424,7 @@ Verification links for AUTHN-105 and AUTHN-106 are in the [native dashboard and 
 | ID | Request | State | Evidence and next action |
 | --- | --- | --- | --- |
 | AUTHN-107 | Add a still night background and group cross-app permissions by linked source | Implemented | Static consent art and source-linked consent and resource checks. Isolated issuer tests cover linked and unlinked source states. Rendered phone scrolling remains to verify. |
-| AUTHN-108 | Register and test an actual app requesting two Velunivo exports | Blocked | Private pending **Velunivo Consent Test** registration created under the signed-in developer account. Host its HTTPS callback and publish the portal DNS challenge, activate it, configure both requests, and separately approve access for the live test. Isolated issuer verified `recent-neighborhoods` and `ride-insights`. |
+| AUTHN-108 | Register and test an actual app requesting two Velunivo exports | Implemented | Live registration is active. Both Velunivo collection declarations are saved. The test app homepage, PKCE redirect and rejection of an unauthenticated callback passed. Live approval and successful code exchange require the account holder. |
 | AUTHN-109 | Add delegated owned-files read, owned-files read/write, and shared-files read | Implemented | Scoped resource and consent tests cover isolation and revocation. Authenticated native and web host flows remain to verify. |
 | AUTHN-110 | Show read-only app data folders in Files when the verified developer opts in | Implemented | Storage tests cover owner-only browsing, download, mutation denial and opt-out. Installed dashboard testing remains. |
 | AUTHN-111 | Remove legacy AuthNJS from the current source | Verified | `16512dd` removes tracked retired files. Its parent retains the original tree. See [verification report](reports/CONSENT_AND_RETIRED_TREE_2026-11-23.md). |
@@ -448,7 +448,7 @@ Follow-up for AUTHN-108 and AUTHN-113–116. The live test registration is alrea
 
 | ID | Request | State | Evidence and next action |
 | --- | --- | --- | --- |
-| AUTHN-117 | Reopen and redo the live Velunivo Consent Test settings | Blocked | Both requested collections were entered and Save was submitted in the live portal. The browser is awaiting the developer passkey. Verify persistence after confirmation. The registration is active and verified. The callback previously returned 404. |
+| AUTHN-117 | Reopen and redo the live Velunivo Consent Test settings | Verified | Read-only production configuration verification confirmed both Recent neighborhoods and Ride insights are saved. |
 | AUTHN-118 | Refresh the native sign-in screen with a subtle, slowly animated night background | Implemented | Native sign-in preserves the existing form, adds a fixed background and pauses its subtle opacity animation when inactive or Reduce Motion is enabled. Source checks pass. Verify layout and input behavior on an installed build. |
 | AUTHN-119 | Deploy the updated app and start the native build | Verified | Web/API revision `fcea370` is live and passed the staged and public checks. [Native preview 45264711602](https://github.com/Xarber/xcenter-id/actions/runs/45264711602) is running all four jobs from the same commit. Check artifacts and native runtime after completion. |
 
@@ -466,11 +466,11 @@ Follow-up for AUTHN-108 and AUTHN-113–116. The live test registration is alrea
 
 | ID | Request | State | Next action and verification |
 | --- | --- | --- | --- |
-| AUTHN-121 | Use remaining account storage as the file limit and upload simultaneously with per-file progress and cancellation | Implemented | Dashboard transfer rows and quota-limited chunk API are implemented. API regression covers payloads above legacy limit, parallel reservations and cancellation. Web interaction and native install evidence pending. |
-| AUTHN-122 | Drag files in or between folders, add Move and remove the redundant Download button | Implemented | Web drag and drop, folder Move pickers on both platforms, and file-name download implemented. API validates ownership and folder bounds. Native external drop uses the system picker. |
-| AUTHN-123 | Give changelog pages Back, put Developer notes on full notes, and expose Developer Mode | Implemented | Back navigation, per-version commit notes, and explicit Developer Mode implemented. App container toggle stays in Manage application database. |
-| AUTHN-124 | Replace the simulated device-code slots with six actual inputs | Implemented | Source changes cover paste, focus and deletion on web and native. Issuer test checks actual inputs, CSP nonce and preserved confirmation. Forty API tests, fifteen dashboard tests and TypeScript passed. Browser and installed-device input testing remain. |
-| AUTHN-125 | Reconcile previous requests, including the test registration and unverified app storage | Implemented | Earlier requests reviewed against source and existing production/build receipts. Live test-portal session expired; private user-owned app storage remains available without app verification. |
+| AUTHN-121 | Use remaining account storage as the file limit and upload simultaneously with per-file progress and cancellation | Implemented | Web browser verified parallel rows, per-file cancel and large downloads. API tests verify quota and encrypted transfer handling. Native runtime remains pending. |
+| AUTHN-122 | Drag files in or between folders, add Move and remove the redundant Download button | Implemented | Web local upload drop and internal drag-to-folder verified. Both platforms have Move pickers. Native uses the system document picker for incoming files. |
+| AUTHN-123 | Give changelog pages Back, put Developer notes on full notes, and expose Developer Mode | Verified | Web archive Back, gated full-version commit notes and explicit Developer Mode passed browser checks. Native source passed TypeScript. |
+| AUTHN-124 | Replace the simulated device-code slots with six actual inputs | Implemented | Production web exposes six inputs. Staged 320 px browser verified independent fields, focus and combined code entry. Native runtime remains pending. |
+| AUTHN-125 | Reconcile previous requests, including the test registration and unverified app storage | Implemented | Earlier requests reconciled against source and deployment receipts. Test registration and callback tracked by AUTHN-108 and AUTHN-117. Linked unverified apps retain user-owned private storage. |
 
 Usage checkpoint under UADS §0 on 23 November. Five-hour usage has 9% remaining and resets at 02:46 CET on 24 November. Weekly usage has 55% remaining and resets at 11:09 CET on 30 November. Resume with AUTHN-121 and AUTHN-122 before any deployment or native build. The consent callback still returned HTTP 404. The passkey-gated sharing save is unverified. The active-unverified-app rule for user-owned storage remains implemented and covered by the API suite.
 
@@ -479,13 +479,13 @@ Usage checkpoint under UADS §0 on 23 November. Five-hour usage has 9% remaining
 | ID | Request | State | Dependencies and acceptance criteria |
 | --- | --- | --- | --- |
 | AUTHN-126 | Show app pictures in Administration and keep app icons current | Implemented | Admin app lists show canonical, versioned icon URLs or a fallback. Auth and Permissions also use current app artwork. |
-| AUTHN-127 | Open directly to login and show onboarding after first sign-in | Implemented | Web opens directly to sign-in; signed-in profiles get the first tour. Native onboarding also waits for an account profile. |
+| AUTHN-127 | Open directly to login and show onboarding after first sign-in | Implemented | Browser verified direct login and onboarding after sign-in at desktop and phone widths. Native runtime remains pending. |
 | AUTHN-128 | Let users delete their own accounts | Implemented | Own-account delete requests require fresh identity and matching username. Tombstone and durable cleanup implemented. Synthetic authenticated and cross-account tests passed. |
 | AUTHN-129 | Match the app container browser to the Files UI | Implemented | Container lists match Files layout with compact unframed artwork and filename download. Existing JSON record and owner boundaries retained. |
 | AUTHN-130 | Use app-requested cross-app permissions and current app identity | Implemented | Linked views show requested app-to-app access with incoming/outgoing switches. Existing older grants can be revoked. Consent uses live app names and icons. |
 | AUTHN-131 | Animate the native sign-in night wallpaper subtly | Implemented | Two native star layers drift and change brightness slowly. Reduce Motion and background lifecycle are respected. Native visual evidence pending. |
 | AUTHN-132 | Add a three-account switcher to the dashboard website and native app | Implemented | Browser and native switchers retain up to three local sessions and show selection and active-only sign-out. Browser isolation tests passed. Native install checks pending. |
-| AUTHN-133 | Match the main web sign-in background to the other authentication screens and remove Pause animation | Implemented | Main web sign-in uses the fixed consent-style night sky, and the animated foreground and manual pause control are removed. |
+| AUTHN-133 | Match the main web sign-in background to the other authentication screens and remove Pause animation | Verified | Web browser verified direct night sign-in and no Pause animation button, with fixed backdrop in the production export. |
 | AUTHN-134 | Fix the split native sign-in background and review rows of buttons | Implemented | Native background is continuous and Theme and Language use single-choice pickers. Installed phone and tablet visual verification pending. |
 
 Paused at the user’s explicit request. Only the queue was updated in this turn. When usage permits and work resumes, continue AUTHN-121 through AUTHN-125, then the follow-up items above. The persisted consent settings and live callback remain tracked under AUTHN-117 and AUTHN-125.
@@ -493,3 +493,5 @@ Paused at the user’s explicit request. Only the queue was updated in this turn
 24 November resumption checkpoint under UADS §0. The five-hour window recovered to 99% remaining and resets at 11:28 CET on 24 November. The weekly window has 54% remaining, resets at 11:09 CET on 30 November, and has no reset credits. The 55% weekly threshold applies until 24 November at 11:09:58 CET. At 11:10 CET, recheck both windows and resume AUTHN-121 by tracing the current file upload and download format and implementing streaming quota enforcement. No code, deployment or build began.
 
 24 November authorization. The user resumed the saved batch and explicitly waived both usage thresholds for this batch only. Source validation and live test configuration proceed before the native build.
+
+0.15.0 rollout and [verification report](reports/FILES_AND_ACCOUNTS_2026-11-24.md). Web/API revision `ddee010` is live. Native preview [45338367140](https://github.com/Xarber/xcenter-id/actions/runs/45338367140) started from the same revision. Pending gates are live consent and installed native tests. This batch-only usage override ends at the checkpoint.
