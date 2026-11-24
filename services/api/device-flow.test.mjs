@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { createHash,generateKeyPairSync, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { decodeJwt } from 'jose';
@@ -14,12 +14,20 @@ test('registered device flow confirms linking and issues a single nonce-bound to
   const links=new Map();
   const current={owner:'example-account',created:Date.now()};
   const identity={username:'example',givenName:'Test',surname:'Person',ageRange:'adult',emails:[]};
+  const second={owner:'alternate-account',created:Date.now()};
+  const alternative={...identity,username:'alternate',givenName:'Second'};
+  let selected=current;
   const accounts={
-    current:()=>current, identity:owner=>owner===current.owner?identity:undefined,
-    grantAllowed:(owner,client,id)=>owner===current.owner&&links.get(client)===id,
-    linkedGrant:(owner,client)=>owner===current.owner?links.get(client):undefined,
+    current:()=>selected, identity:owner=>owner===current.owner?identity:owner===second.owner?alternative:undefined,
+    browserAccountOptions:()=>({canAdd:true,accounts:[identity,alternative].map((person,slot)=>({...person,slot,current:slot===Number(selected===second)}))}),
+    activateBrowserAccount:(req,_res,slot)=>{
+      if(req.headers.origin!==issuer||!([0,1].includes(slot)))return false;
+      selected=slot===0?current:second;return true;
+    },
+    grantAllowed:(owner,client,id)=>links.get(owner+':'+client)===id,
+    linkedGrant:(owner,client)=>links.get(owner+':'+client),
     available:()=>true, allowsMutation:req=>req.headers.origin===issuer, recentlyConfirmed:()=>true,adminStatus:()=>403,
-    rememberApp:(_owner,client,_label,id)=>links.set(client,id), premiumEligible:()=>false,
+    rememberApp:(owner,client,_label,id)=>links.set(owner+':'+client,id), premiumEligible:()=>false,
   };
   const jwk=generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({format:'jwk'});
   const applicationData=openApplicationData({path:':memory:',key:Buffer.alloc(32,7),registry,accounts,authenticate:()=>null});
@@ -221,7 +229,9 @@ test('registered device flow confirms linking and issues a single nonce-bound to
     let blocked=await http('/device',{browser:true,form:{xsrf:formXsrf,user_code:constrained.user_code,confirm:'yes'}});
     for(let step=0;step<5&&blocked.status===303;step++)blocked=await http(blocked.headers.get('location'),{browser:true});
     assert.equal(blocked.headers.get('referrer-policy'),'same-origin');
-    assert.match(await blocked.text(),/don’t have permission/);
+    const blockedHtml=await blocked.text();
+    assert.match(blockedHtml,/don’t have permission/);
+    assert.match(blockedHtml,/aria-label="Switch account"/);
     const requested=await http('/interaction/'+blocked.url.split('/interaction/')[1],{browser:true,form:{action:'request'}});
     assert.match(await requested.text(),/Access requested/);
     assert.equal(registry.access(current.owner,client.clientId).pending,true);
@@ -232,6 +242,61 @@ test('registered device flow confirms linking and issues a single nonce-bound to
     assert.equal((await begin(rotated)).status,200);
     await provider.changeClientSecret(client.clientId,'revoke');
     assert.notEqual((await begin(rotated)).status,200);
+
+    // Start a normal browser authorization with an existing dashboard account.
+    const webClient=await register('Browser switching');
+    const verifier=randomBytes(32).toString('base64url');
+    const state=randomBytes(32).toString('base64url');
+    const callback='https://tv.example.test/callback';
+    let web=await http('/auth?'+new URLSearchParams({
+      client_id:webClient.clientId,redirect_uri:callback,response_type:'code',scope:'openid',state,nonce,
+      code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',
+    }),{browser:true});
+    for(let step=0;step<6&&web.status===303;step++)web=await http(web.headers.get('location'),{browser:true});
+    const webHtml=await web.text();
+    assert.match(webHtml,/Link Browser switching to X-Center ID/);
+    assert.doesNotMatch(webHtml,/<h1>Choose your account/);
+    assert.match(webHtml,/@example/);
+    const original=new URL(web.url).pathname;
+    const choose=original+'?choose=account';
+    const choices=await(await http(choose,{browser:true})).text();
+    assert.match(choices,/<h1>Choose your account/);
+    assert.match(choices,/value="1"[\s\S]*@alternate/);
+    assert.match(choices,/Add another account/);
+    assert.doesNotMatch(choices,/Sign out/);
+
+    let switched=await http(choose,{browser:true,form:{slot:'1'}});
+    assert.equal(switched.headers.get('location'),original);
+    assert.equal((await http(original,{browser:true,form:{action:'approve'}})).status,409);
+    for(let step=0;step<8;step++){
+      if(switched.status===303){
+        switched=await http(switched.headers.get('location'),{browser:true});
+      }else {
+        const text=await switched.clone().text();
+        const action=text.match(/<form method="post" action="([^"]+session\/end\/confirm)"/)?.[1];
+        if(!action)break;
+        const xsrf=text.match(/name="xsrf" value="([^"]+)"/)?.[1];
+        assert.ok(xsrf);
+        switched=await http(action,{browser:true,form:{xsrf,logout:'yes'}});
+      }
+    }
+    const newHtml=await switched.text();
+    assert.match(newHtml,/Link Browser switching to X-Center ID/);
+    assert.match(newHtml,/@alternate/);
+    assert.doesNotMatch(newHtml,/@example/);
+    let browserGrant=await http(new URL(switched.url).pathname,{browser:true,form:{action:'approve'}});
+    for(let step=0;step<5&&browserGrant.status===303&&new URL(browserGrant.headers.get('location'),issuer).origin===issuer;step++){
+      browserGrant=await http(browserGrant.headers.get('location'),{browser:true});
+    }
+    const redirect=new URL(browserGrant.headers.get('location'));
+    assert.equal(redirect.searchParams.get('state'),state);
+    const tokenResponse=await http('/token',{credentials:webClient,form:{
+      grant_type:'authorization_code',code:redirect.searchParams.get('code'),redirect_uri:callback,code_verifier:verifier,
+    }});
+    assert.equal(tokenResponse.status,200,await tokenResponse.clone().text());
+    assert.ok(accounts.linkedGrant(second.owner,webClient.clientId));
+    assert.equal(accounts.linkedGrant(current.owner,webClient.clientId),undefined);
+    assert.ok(accounts.linkedGrant(current.owner,readingApp.clientId));
 
   } finally {
     await new Promise(resolve=>server.close(resolve));

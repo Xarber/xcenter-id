@@ -25,7 +25,7 @@ export default function PermissionsPage({client}:{client?:string}){
     {apps.map(app=><a className="xc-card xc-permission-link" key={app.client} href={'/permissions/'+encodeURIComponent(app.client)}>
       <AppIcon icon={app.icon}/>
       <span className="xc-permission-name"><strong className="xc-identity-label">{app.label}<TrustBadges compact kind="app" verified={app.verified}/></strong>
-        <span>Linked to your X-Center ID</span></span><ChevronRight size={20} aria-hidden="true"/>
+        <span>Linked to your X-Center ID</span></span><ChevronRight className="xc-permission-chevron" size={20} aria-hidden="true"/>
     </a>)}
     {!apps.length&&<p className="xc-empty">No linked apps.</p>}
   </section>;

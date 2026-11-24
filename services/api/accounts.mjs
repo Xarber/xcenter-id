@@ -236,6 +236,27 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       return [{...current,value}];
     });
   }
+  function browserAccountOptions(req){
+    const current=session(req,true);
+    const entries=browserAccounts(req);
+    return {
+      canAdd:entries.length<3,
+      accounts:entries.flatMap((entry,slot)=>{
+        const person=profile(entry.owner);
+        return person?[{slot,current:entry.hash===current?.hash,username:person.username,givenName:person.givenName,
+          surname:person.surname,hasPicture:!!person.picture}]:[];
+      }),
+    };
+  }
+  function activateBrowserAccount(req,res,slot){
+    if(nativeRequest(req)||req.headers.origin!==origin||!Number.isInteger(slot))return false;
+    const entries=browserAccounts(req);
+    const selected=entries[slot];
+    if(!selected)return false;
+    setBrowserAccounts(res,selected.value,entries.filter(entry=>entry!==selected));
+    return true;
+  }
+
   function setBrowserAccounts(res,activeValue,others){
     setCookie(res,browserCookie,activeValue,activeValue?sessionAge/1000:0);
     const saved=others.slice(0,activeValue?2:3).map(entry=>entry.value).join('.');
@@ -301,7 +322,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     const challenge = challenges.get(id);
     challenges.delete(id);
     requireCondition(challenge && challenge.action === action && challenge.expires > now() &&
-      challenge.sessionHash === active?.hash, 400, 'This passkey request expired. Start again.');
+      (challenge.target&&action==='reauth'||challenge.sessionHash===active?.hash), 400, 'This passkey request expired. Start again.');
     return challenge;
   }
 
@@ -309,6 +330,13 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     if (now() - windowStart >= 60_000) { windowStart = now(); attempts = 0; }
     requireCondition(++attempts <= 120, 429, 'Too many requests. Try again shortly.');
     for (const [id, flow] of challenges) if (flow.expires <= now()) challenges.delete(id);
+  }
+
+  function nativeConfirmation(request){
+    if(typeof request!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(request))return null;
+    const row=q(`SELECT s.hash,s.owner FROM native_confirmations c JOIN account_sessions s ON c.hash=s.hash
+      WHERE c.code=? AND c.expires>? AND s.expires>?`).get(digest(request),now(),now());
+    return row&&native.accepts(row.hash)&&available(row.owner)?row:null;
   }
 
   function recent(active) {
@@ -333,12 +361,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     }
     if(req.method==='GET'&&pathname==='/account/switcher'){
       requireCondition(!nativeRequest(req),403,'Use the device account switcher.');
-      const current=session(req,true);
-      return {accounts:browserAccounts(req).flatMap((entry,slot)=>{
-        const person=profile(entry.owner);
-        return person?[{slot,current:entry.hash===current?.hash,username:person.username,givenName:person.givenName,
-          surname:person.surname,hasPicture:!!person.picture}]:[];
-      })};
+      return browserAccountOptions(req);
     }
     const switcherPhoto=/^\/account\/switcher\/avatar\/([012])$/.exec(pathname)?.[1];
     if(req.method==='GET'&&switcherPhoto){
@@ -476,10 +499,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     if(active)requireCondition(session(req),401,'Sign in first.');
     if(pathname==='/account/switcher'){
       requireCondition(!nativeRequest(req)&&req.headers['x-authnjs-request']==='account-consent',403,'Switch accounts from the dashboard.');
-      const entries=browserAccounts(req);
-      const selected=Number.isInteger(input.slot)&&entries[input.slot];
-      requireCondition(selected,404,'This sign-in is unavailable.');
-      setBrowserAccounts(res,selected.value,entries.filter(entry=>entry!==selected));
+      requireCondition(activateBrowserAccount(req,res,input.slot),404,'This sign-in is unavailable.');
       return {ok:true};
     }
     if(pathname==='/account/delete'){
@@ -708,26 +728,26 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
 
     const action = pathname.split('/')[2];
     requireCondition(['signup', 'login', 'add','reauth'].includes(action), 404, 'Account route unavailable.');
-    if(action==='reauth')requireCondition(active,401,'Sign in first.');
-    else if (action === 'add') recent(active);
-    else allowNewSignIn(req,active,input);
+    if(action==='add')recent(active);
+    else if(action!=='reauth')allowNewSignIn(req,active,input);
     if (pathname.endsWith('/options')) {
       if(action==='signup')checkBrowserCapacity(req,undefined);
       limitChallenges();
       if (action === 'login'||action==='reauth') {
+        let nativeTarget;
+        if(action==='reauth'){
+          if(input.request!==undefined){
+            nativeTarget=nativeConfirmation(input.request);
+            requireCondition(nativeTarget,403,'This confirmation expired. Open it again from the X-Center ID app.');
+          }else requireCondition(active,401,'Sign in first.');
+        }
+        const owner=nativeTarget?.owner??active?.owner;
         const options = await generateAuthenticationOptions({ rpID, userVerification: 'required',
-          ...(action==='reauth'?{allowCredentials:keys.all(active.owner).map(({id,transports})=>({id,transports:JSON.parse(transports)}))}:{}) });
+          ...(action==='reauth'?{allowCredentials:keys.all(owner).map(({id,transports})=>({id,transports:JSON.parse(transports)}))}:{}) });
         const username = typeof input.username === 'string' ? input.username.trim().toLowerCase() : '';
         requireCondition(!username || /^[a-z][a-z0-9]{2,23}$/.test(username),422,'Enter a valid X-Center username.');
-        let target;
-        if(action==='reauth'&&input.request){
-          requireCondition(typeof input.request==='string'&&/^[A-Za-z0-9_-]{43}$/.test(input.request),422,'Invalid confirmation.');
-          target=q(`SELECT c.hash FROM native_confirmations c JOIN account_sessions s ON c.hash=s.hash
-            WHERE c.code=? AND c.expires>? AND s.owner=? AND s.expires>?`).get(digest(input.request),now(),active.owner,now())?.hash;
-          requireCondition(target,403,'Open confirmation from the signed-in app.');
-        }
-        prepare(res, { action, username, expected: options.challenge, sessionHash:active?.hash,
-          ...(action==='reauth'?{target,request:input.request}:{}) });
+        prepare(res, { action, username, expected:options.challenge, sessionHash:active?.hash,
+          ...(nativeTarget?{target:nativeTarget.hash,request:input.request}:{}) });
         return options;
       }
       const name = passkeyLabel(input.name);
@@ -757,7 +777,11 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     if (action === 'login'||action==='reauth') {
       const saved = key.get(input.response.id);
       requireCondition(saved&&(available(saved.owner)||action==='login'&&restriction.get(saved.owner)?.status==='locked'), 401, 'Could not sign in with this passkey.');
-      if(action==='reauth')requireCondition(saved.owner===active.owner,403,'Use a passkey for the signed-in account.');
+      if(action==='reauth'){
+        const target=challenge.target?nativeConfirmation(challenge.request):session(req);
+        requireCondition(target&&(!challenge.target||target.hash===challenge.target),403,'This confirmation expired. Start again.');
+        requireCondition(saved.owner===target.owner,403,'Use a passkey for the account requesting confirmation.');
+      }
       const handle = input.response.response?.userHandle;
       requireCondition(!handle || handle === Buffer.from(saved.owner).toString('base64url'), 401, 'Could not sign in with this passkey.');
       const result = await verifyAuthenticationResponse({
@@ -771,16 +795,16 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       requireCondition(q('UPDATE passkeys SET counter=? WHERE id=? AND counter=?')
         .run(result.authenticationInfo.newCounter, saved.id, saved.counter).changes === 1, 409, 'Sign-in changed. Try again.');
       if(action==='reauth'){
-        requireCondition(session(req),401,'Sign in first.');
+        const target=challenge.target?nativeConfirmation(challenge.request):session(req);
+        requireCondition(target?.owner===saved.owner&&target.hash===(challenge.target??active?.hash),403,'This confirmation expired. Start again.');
         const elevate=q('INSERT INTO session_confirmations VALUES(?,?) ON CONFLICT(hash) DO UPDATE SET expires=excluded.expires');
         db.exec('BEGIN IMMEDIATE');
         try {
           if(challenge.target){
             requireCondition(q('DELETE FROM native_confirmations WHERE code=? AND hash=? AND expires>?')
               .run(digest(challenge.request),challenge.target,now()).changes===1,403,'Confirmation expired.');
-            elevate.run(challenge.target,now()+30*60_000);
           }
-          elevate.run(active.hash,now()+30*60_000);
+          elevate.run(target.hash,now()+30*60_000);
           db.exec('COMMIT');
         }catch(error){db.exec('ROLLBACK');throw error;}
         return {ok:true,...(challenge.target?{returnTo:'authnjs-dashboard://reauth?state='+challenge.request}:{})};
@@ -840,7 +864,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     }
   }
   return {
-    handle,
+    handle,browserAccountOptions,activateBrowserAccount,
     retryDeletions:()=>{for(const {owner} of q('SELECT owner FROM account_deletion_jobs LIMIT 20').all())finishDeletion(owner);},
     current: (req) => session(req),
     supportCurrent: req=>session(req,true),

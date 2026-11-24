@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash,generateKeyPairSync,sign } from 'node:crypto';
+import {isoCBOR} from '@simplewebauthn/server/helpers';
 import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -293,5 +294,74 @@ test('explicit add-account intent permits passkey and email login while preservi
     const active=completed.headers.getSetCookie().find(value=>value.startsWith('__Host-authnjs=')).split(';')[0];
     const me=await (await fetch(base+'me',{headers:{cookie:active}})).json();
     assert.equal(me.account.profile.username,'seconduser');
+  }finally{await new Promise(resolve=>server.close(resolve));db.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('native confirmation verifies the app account passkey independently of the browser account',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'authnjs-native-admin-'));
+  const database=join(dir,'accounts.sqlite');
+  const origin='https://id.example.test';
+  const service=createAccounts({database,origin});
+  const db=new DatabaseSync(database);
+  const now=Date.now();
+  const digest=value=>createHash('sha256').update(value).digest();
+  const token='n'.repeat(43),browserToken='b'.repeat(43);
+  const nativeHash=digest(token).toString('hex');
+  const browserHash=digest(browserToken).toString('hex');
+  db.exec(`INSERT INTO accounts VALUES ('native','Native admin',0),('browser','Browser user',0);
+    INSERT INTO account_flags(owner,admin) VALUES('native',1);
+    INSERT INTO identity_profiles VALUES('native','nativeuser','Native','Admin','adult'),('browser','browseruser','Browser','User','adult');`);
+  const insert=db.prepare('INSERT INTO account_sessions VALUES(?,?,?,?)');
+  insert.run(nativeHash,'native',now-400_000,now+600_000);
+  insert.run(browserHash,'browser',now-400_000,now+600_000);
+  db.prepare('INSERT INTO native_sessions VALUES(?)').run(nativeHash);
+  function passkey(owner){
+    const {publicKey,privateKey}=generateKeyPairSync('ec',{namedCurve:'prime256v1'});
+    const {x,y}=publicKey.export({format:'jwk'});
+    const id=Buffer.from(owner+' synthetic test credential').toString('base64url');
+    const cose=isoCBOR.encode(new Map([[1,2],[3,-7],[-1,1],[-2,Buffer.from(x,'base64url')],[-3,Buffer.from(y,'base64url')]]));
+    db.prepare('INSERT INTO passkeys VALUES(?,?,?,?,?,?,?)').run(id,owner,'Fixture key',cose,0,'[]',now);
+    return {id,assertion(options){
+      const clientData=Buffer.from(JSON.stringify({type:'webauthn.get',challenge:options.challenge,origin,crossOrigin:false}));
+      const authenticatorData=Buffer.concat([digest(new URL(origin).hostname),Buffer.from([5,0,0,0,1])]);
+      const signature=sign('sha256',Buffer.concat([authenticatorData,digest(clientData)]),privateKey);
+      return {id,rawId:id,type:'public-key',clientExtensionResults:{},response:{
+        clientDataJSON:clientData.toString('base64url'),authenticatorData:authenticatorData.toString('base64url'),
+        signature:signature.toString('base64url'),userHandle:Buffer.from(owner).toString('base64url'),
+      }};
+    }};
+  }
+  const primary=passkey('native'),other=passkey('browser');
+  const server=createServer((req,res)=>void service.handle(req,res,req.url)).listen(0,'127.0.0.1');
+  await once(server,'listening');
+  const base='http://127.0.0.1:'+server.address().port+'/account/';
+  const nativeHeaders={'x-authnjs-native':'account-manager',authorization:'Bearer '+token};
+  const browserCookie='__Host-authnjs='+browserToken;
+  const post=(route,data,headers)=>fetch(base+route,{method:'POST',body:JSON.stringify(data),
+    headers:{'content-type':'application/json',...headers}});
+  try{
+    const admin=async()=> (await(await fetch(base+'admin/access',{headers:nativeHeaders})).json()).authorized;
+    assert.equal(await admin(),false);
+    const {state}=await(await post('reauth/native',{},nativeHeaders)).json();
+    const open=(cookie='')=>post('reauth/options',{request:state},{origin,...(cookie?{cookie}:{})});
+    const anonymous=await open();
+    assert.equal(anonymous.status,200);
+    assert.deepEqual((await anonymous.json()).allowCredentials.map(item=>item.id),[primary.id]);
+
+    const confirm=async(key)=>{
+      const opened=await open(browserCookie);
+      assert.equal(opened.status,200);
+      const challengeCookie=opened.headers.getSetCookie()[0].split(';')[0];
+      const response=key.assertion(await opened.json());
+      return post('reauth/finish',{response},{origin,cookie:browserCookie+'; '+challengeCookie});
+    };
+    assert.equal((await confirm(other)).status,403);
+    assert.equal(await admin(),false);
+    const success=await confirm(primary);
+    assert.equal(success.status,200,await success.clone().text());
+    assert.equal((await success.json()).returnTo,'authnjs-dashboard://reauth?state='+state);
+    assert.equal(await admin(),true);
+    assert.equal(db.prepare('SELECT 1 AS found FROM session_confirmations WHERE hash=?').get(browserHash),undefined);
+    assert.equal((await open(browserCookie)).status,403);
   }finally{await new Promise(resolve=>server.close(resolve));db.close();rmSync(dir,{recursive:true,force:true});}
 });

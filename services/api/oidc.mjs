@@ -58,6 +58,12 @@ function page(content, consent = false) {
     .source-permissions .permission-list{margin-bottom:0}
     h1{font-size:clamp(1.55rem,6vw,2.15rem);line-height:1.12;letter-spacing:-.04em;overflow-wrap:anywhere}p{color:var(--muted)}
     .badge{display:inline-block;border:1px solid currentColor;border-radius:1rem;padding:.1rem .5rem;font-size:.8rem;font-weight:700}.brand{font-weight:800;letter-spacing:-.03em;color:var(--action)}.context{padding:.8rem 1rem;border-radius:.8rem;background:var(--soft);overflow-wrap:anywhere}
+    .account-choice{color:var(--text);display:flex;align-items:center;gap:.65rem;text-align:left;width:100%;min-height:48px;margin:0;padding:.55rem .65rem;border:1px solid var(--border);border-radius:.7rem;background:var(--card);text-decoration:none}
+    .account-choice:hover{border-color:var(--action)}.account-choice .account-text{flex:1;min-width:0;overflow-wrap:anywhere}
+    .account-choice .account-handle{display:block;font-size:.8rem;color:var(--muted)}
+    .account-choice .avatar{display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:50%;background:var(--soft);overflow:hidden}
+    .account-choice img{width:100%;height:100%;object-fit:cover}.account-choice svg{width:18px;height:18px}
+    .account-choices{display:grid;gap:.6rem;margin-block:1rem}.account-actions{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap}
     .identity-contexts{display:grid;gap:.65rem}.context small{display:block;color:var(--muted);margin-bottom:.25rem}.badge-row{display:flex;flex-wrap:wrap;gap:.35rem;margin:.5rem 0}.permission-toggle.permission-fixed{cursor:default}.permission-check{margin-inline-start:auto;color:var(--action);font-weight:800}.permission-toggle small{display:block;color:var(--muted)}
     fieldset{border:1px solid var(--border);border-radius:.85rem;padding:.6rem 1rem;margin:1.2rem 0;min-width:0}legend{font-weight:700}
     .device-back{color:var(--text)}.device-code{font-size:1.6rem;font-weight:750;letter-spacing:.15em}
@@ -352,15 +358,47 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const missing=new Set(prompt.details.missingOIDCScope??[]);
     const requiredEmail=!!brand?.requiresEmail;
     const requiredAge=!!brand?.requiresAgeRange;
-    if (!person) {
-      const location = '/signin?continue=' + encodeURIComponent(path);
-      res.writeHead(303,{Location:location,'Cache-Control':'no-store'}).end();
+    const choose=new URL(req.url,issuer).searchParams.get('choose')==='account';
+    const chooser=path+'?choose=account';
+    const signIn=(adding=false)=>'/signin?continue='+encodeURIComponent(path)+(adding?'&addAccount=1':'');
+    const title=brand?.name??client.client_name??client.client_id;
+    const redirect=(location)=>res.writeHead(303,{Location:location,'Cache-Control':'no-store'}).end();
+    const accountRow=(selected,avatar)=>`<span class="avatar">${selected.hasPicture?`<img alt="" src="${avatar}">`:glyph('user')}</span>
+      <span class="account-text"><strong>${escape(selected.givenName)} ${escape(selected.surname)}</strong><span class="account-handle">@${escape(selected.username)}</span></span>
+      <span aria-hidden="true">›</span>`;
+    const accountPicker=person?`<a class="account-choice" href="${chooser}" aria-label="Switch account">${accountRow(person,'/account/avatar')}</a>`:'';
+    if(choose){
+      if(req.method==='POST'){
+        if(req.headers.origin!==issuer)return html(res,'<h1>Could not verify the request</h1>',403);
+        let input;
+        try{input=await form(req);}catch{return html(res,'<h1>Invalid request</h1>',400);}
+        const slot=input.get('slot');
+        if(!/^[012]$/.test(slot??'')||!accounts.activateBrowserAccount?.(req,res,Number(slot))){
+          return html(res,'<h1>Account unavailable</h1><p>Choose a signed-in account or add another.</p>',409);
+        }
+        return redirect(path);
+      }
+      if(req.method!=='GET')return html(res,'<h1>Method unavailable</h1>',405);
+      const saved=accounts.browserAccountOptions?.(req)??{accounts:[],canAdd:true};
+      const rows=saved.accounts.map(item=>`<button class="account-choice" name="slot" value="${item.slot}"${item.current?' aria-current="true"':''}>
+        ${accountRow(item,'/account/switcher/avatar/'+item.slot)}</button>`).join('');
+      return html(res,`<h1>Choose your account</h1><p>Select an account to continue to ${escape(title)}.</p>
+        <form action="${chooser}" method="post" class="account-choices">${rows}</form>
+        <div class="account-actions">${saved.canAdd?`<a class="action" href="${escape(signIn(true))}">Add another account</a>`:''}
+        <a class="device-back" href="${path}">Back</a></div>`,200,callbackOrigin,true);
+    }
+    if(!person)return redirect(signIn());
+    const device=!!details.deviceCode;
+    if(req.method==='GET'&&(prompt.name==='login'||details.session?.accountId!==active.owner)){
+      const authTime=Math.floor(active.created/1000);
+      const wantsFresh=String(params.prompt??'').split(' ').includes('login')&&authTime<(details.iat??0);
+      const expired=params.max_age!==undefined&&(Number(params.max_age)===0?authTime<(details.iat??0):Date.now()/1000-authTime>=Number(params.max_age));
+      if(wantsFresh||expired)return redirect(signIn(true));
+      await provider.interactionFinished(req,res,{login:{accountId:active.owner,ts:authTime}},{mergeWithLastSubmission:false});
       return;
     }
-    const device=!!details.deviceCode;
-    if(req.method==='GET'&&prompt.name==='login'&&params.prompt!=='login'&&params.max_age===undefined&&(device||accounts.linkedGrant(active.owner,client.client_id))){
-      await provider.interactionFinished(req,res,{login:{accountId:active.owner,ts:Math.floor(active.created/1000)}},{mergeWithLastSubmission:false});
-      return;
+    if(req.method==='POST'&&details.session?.accountId!==active.owner){
+      return html(res,`<h1>The signed-in account changed</h1><p><a href="${path}">Review this authorization again</a></p>`,409,callbackOrigin);
     }
     if(!canUse(active.owner,client.client_id)){
       const access=registry.access(active.owner,client.client_id);
@@ -370,7 +408,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         try{input=await form(req);}catch{return html(res,'<h1>Invalid request</h1>',400);}
         if(input.get('action')==='request'&&access.canRequest&&accounts.current(req)?.owner===active.owner){
           if(!registry.requestAccess(active.owner,client.client_id))return html(res,'<h1>Request unavailable</h1>',409);
-          return html(res,'<h1>Access requested</h1><p>Return to the app after its developer approves your request.</p><a href="/dashboard">Open dashboard</a>');
+          return html(res,`<h1>Access requested</h1><p>Return to the app after its developer approves your request.</p>${accountPicker}<p><a href="/dashboard">Open dashboard</a></p>`,200,callbackOrigin,true);
         }
         if(input.get('action')==='deny'){
           await provider.interactionFinished(req,res,{error:'access_denied',error_description:"You don't have permission to use this app."},{mergeWithLastSubmission:false});
@@ -379,9 +417,9 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         return html(res,'<h1>Invalid request</h1>',400);
       }
       if(req.method!=='GET')return html(res,'<h1>Method unavailable</h1>',405);
-      return html(res,`<h1>You don’t have permission to use this app</h1><p>${escape(client.client_name??client.client_id)} is private.</p>
+      return html(res,`<h1>You don’t have permission to use this app</h1><p>${escape(title)} is private.</p>${accountPicker}
         <form method="post">${access.pending?'<p>Your access request is pending.</p>':access.canRequest?'<button name="action" value="request">Request access</button>':''}
-        <button name="action" value="deny">Return to app</button></form>`,200,callbackOrigin);
+        <button name="action" value="deny">Return to app</button></form>`,200,callbackOrigin,true);
     }
     const linked=accounts.linkedGrant(active.owner,client.client_id);
     const existingGrant=linked&&await provider.Grant.find(linked);
@@ -403,10 +441,6 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       try { input = await form(req); } catch { return html(res,'<h1>Invalid request</h1>',400); }
       if (input.get('action') !== 'approve') {
         await provider.interactionFinished(req,res,{ error:'access_denied', error_description:'The user declined.' },{mergeWithLastSubmission:false});
-        return;
-      }
-      if (prompt.name === 'login') {
-        await provider.interactionFinished(req,res,{ login:{ accountId:active.owner, ts:Math.floor(active.created/1000) } },{mergeWithLastSubmission:false});
         return;
       }
       if (prompt.name !== 'consent' || details.session?.accountId !== active.owner || accounts.current(req)?.owner!==active.owner || !canUse(active.owner,client.client_id)) {
@@ -452,17 +486,12 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       return;
     }
     if (req.method !== 'GET') return html(res,'<h1>Method unavailable</h1>',405);
-    const title=brand?.name??client.client_name??client.client_id;
     const personBadges=[person.verified&&'<span class="badge">✓ Verified profile</span>',person.admin&&'<span class="badge">◆ Administrator</span>'].filter(Boolean).join('');
     const badgeRow=content=>content?'<div class="badge-row">'+content+'</div>':'';
     const visual=client.client_id.startsWith('notes-')||client.client_id.startsWith('places-')?'notes':client.client_id.startsWith('trips-')?'trips':null;
     const developer=brand?.owner&&accounts.identity(brand.owner);
     const developerProfile=brand?.owner?registry.developer(brand.owner):null;
     const developerName=developerProfile?.name||brand?.developerName||developer?.username||'X-Center';
-    if(prompt.name==='login'){
-      return html(res,`<h1>Choose your account</h1><p>Continue to ${escape(title)} as ${escape(person.givenName)} ${escape(person.surname)}.</p>${badgeRow(personBadges)}
-        <form method="post"><button name="action" value="approve">Continue</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin);
-    }
     const incremental=!!existingGrant;
     const requiredNote='This app requires this info to work.';
     const activeDataPermissions=appData?(applicationData?.permissions(active.owner)??[]).filter(item=>item.destination===client.client_id&&item.enabled):[];
@@ -503,7 +532,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
           ${developerProfile?.status==='verified'?badgeRow('<span class="badge">✓ Verified developer</span>'):''}
         </section>
         <section class="context" aria-label="Signing in as"><small>Signing in as</small>
-          <strong>${escape(person.givenName)} ${escape(person.surname)}</strong>${badgeRow(personBadges)}
+          ${accountPicker}${badgeRow(personBadges)}
         </section>
       </div>
       <form method="post"><h2>Permissions</h2>

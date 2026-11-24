@@ -511,3 +511,14 @@ Paused at the user’s explicit request. Only the queue was updated in this turn
 The user explicitly waived the weekly and session thresholds for this batch only.
 
 The batch-only usage override ends here. See the [0.15.1 verification report](reports/SIGNIN_AND_DASHBOARD_2026-11-24.md).
+
+### Authorization account choice and native confirmation
+
+| ID | Request | State | Acceptance criteria |
+| --- | --- | --- | --- |
+| AUTHN-142 | Open consent immediately for the current signed-in browser account and offer explicit account switching | In Progress | Use the existing dashboard session for ordinary authorization. Offer a separate account picker only from the account row, including on private-app access denial. Return to the same authorization, preserve saved sessions, and keep explicit fresh sign-in requirements. |
+| AUTHN-143 | Confirm native administration for the native account | In Progress | Use the one-time request from the native session and verify that account’s passkey even when the browser has another account or is signed out. Elevate the native session only. |
+| AUTHN-144 | Align the orbit, permission chevron and grouped permission switches | In Progress | Put the service tiles on the same orbit, move the arrow to the row edge, align the group spacing and show the same visible switch as other permissions. |
+| AUTHN-145 | Verify and deploy this batch | Queued | Verify account and consent boundaries, source and browser checks, then stage and verify production. |
+
+Usage thresholds were waived for this batch only.

@@ -20,14 +20,14 @@ export default function HostedDataPermissions({client}:{client:string}){
     {permissionDirections.map(([direction,title,empty])=>{
       const groups=groupHostedPermissions(items,client,direction);
       const DirectionIcon=direction==='destination'?ArrowDownLeft:ArrowUpRight;
-      return <section className="xc-card xc-pad" key={direction}>
+      return <section className="xc-card xc-pad xc-hosted-permissions" key={direction}>
         <div className="xc-row-head"><DirectionIcon size={20} aria-hidden="true"/><h2>{title}</h2></div>
         {groups.map(group=><section className="xc-permission-group" key={group.id}>
           <div className="xc-row-head"><AppIcon icon={group.icon}/><h3>{group.name}</h3></div>
           {group.permissions.map(item=><div className="xc-list-row" key={item.collection}>
             <span>{item.label}</span>
             <button type="button" role="switch" aria-checked={item.enabled} aria-label={item.label+' · '+group.name}
-              className="xc-permission-switch" disabled={busy} onClick={()=>change(item,!item.enabled)}/>
+              className="xc-permission-switch" disabled={busy} onClick={()=>change(item,!item.enabled)}><span aria-hidden="true"/></button>
           </div>)}
         </section>)}
         {!groups.length&&<div className="xc-empty"><LockKeyhole size={17} aria-hidden="true"/> {empty}</div>}

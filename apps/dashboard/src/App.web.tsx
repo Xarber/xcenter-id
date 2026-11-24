@@ -370,6 +370,9 @@ export default function WebApp(){
     </main>;
   }
   if(path==='docs')return <DeveloperDocumentation/>;
+  const nativeConfirmation=new URLSearchParams(window.location.search).get('request');
+  if(path==='reauth'&&nativeConfirmation)return <main className="xc-setup"><Logo href="/"/><Reauthenticate request={nativeConfirmation}/></main>;
+
   if(account===undefined)return <div className="xc-loading"><Logo href="/"/><p role="status">Opening your account…</p></div>;
   if(locked)return <main className="xc-setup"><Logo href="/"/><h1>Account locked</h1><SupportPage/>
     {nativeReturn.test(path==='native-session'?window.location.pathname+window.location.search:continuation??'')&&

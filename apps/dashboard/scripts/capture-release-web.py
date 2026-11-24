@@ -96,6 +96,15 @@ with sync_playwright() as browser_tools:
         constell = page.locator(".xc-auth-desktop-art")
         if kind == "desktop":
             expect(constell).to_be_visible()
+            distances = page.locator(".xc-constellation").evaluate("""(orbit) => {
+                const bounds = orbit.getBoundingClientRect();
+                return Array.from(orbit.querySelectorAll(".xc-service"), tile => {
+                    const icon = tile.getBoundingClientRect();
+                    return Math.hypot(icon.x + icon.width / 2 - bounds.x - bounds.width / 2,
+                        icon.y + icon.height / 2 - bounds.y - bounds.height / 2) / bounds.width;
+                });
+            }""")
+            assert len(distances) == 6 and all(abs(distance - .305) < .003 for distance in distances)
         else:
             expect(constell).to_be_hidden()
         assert page.locator(".xc-auth-night").evaluate("(e)=>getComputedStyle(e,'::after').animationName") == 'none'
@@ -132,6 +141,10 @@ with sync_playwright() as browser_tools:
                 expect(heading(page, title).first).to_be_visible()
             if feature in ("apps", "permissions"):
                 expect(page.get_by_text("Garden Journal", exact=True).first).to_be_visible()
+            if feature == "permissions":
+                link = page.locator(".xc-permission-link").bounding_box()
+                chevron = page.locator(".xc-permission-chevron").bounding_box()
+                assert 15 <= link["x"] + link["width"] - chevron["x"] - chevron["width"] <= 19
             page.evaluate("document.fonts.ready")
             name = f"{kind}-{feature}.png"
             page.screenshot(path=args.output / name, animations="disabled")
@@ -154,6 +167,8 @@ with sync_playwright() as browser_tools:
         expect(heading(page,"Greenhouse")).to_have_count(1)
         expect(page.get_by_role("switch",name="Read plants · Greenhouse")).to_have_attribute("aria-checked","true")
         expect(page.get_by_role("switch",name="Read notes · Greenhouse")).to_have_attribute("aria-checked","false")
+        for label in ("Read plants", "Read notes"):
+            expect(page.get_by_role("switch", name=f"{label} · Greenhouse").locator("span")).to_be_visible()
         expect(page.get_by_text("No outgoing data access.")).to_be_visible()
         page.evaluate("localStorage.setItem('authnjs.dashboard.lastRelease','0.11.0')")
         page.goto(origin+"/dashboard")
