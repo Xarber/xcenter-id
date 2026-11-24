@@ -230,7 +230,12 @@ test('parallel uploads reserve quota, retain encrypted chunk order, and move wit
     assert.equal(list.files[0].name,'Moved.bin');
     const download=await call('GET','/'+id);
     assert.deepEqual(Buffer.from(await download.arrayBuffer()),raw);
-    assert.equal((await call('DELETE','/'+id,{})).status,200);
+    const {id:pending}=await (await call('POST','/uploads',{name:'pending.bin',size:1,folder:child})).json();
+    assert.equal((await call('DELETE','/folders/'+folder+'?recursive=1',{},'other')).status,404);
+    assert.equal((await call('DELETE','/folders/'+folder+'?recursive=1',{})).status,200);
+    assert.equal((await call('GET','/'+id)).status,404);
+    assert.equal((await call('GET','?folder='+child)).status,404);
+    assert.equal((await call('POST','/uploads/'+pending,{})).status,404);
     assert.equal(handle.fileBytes('owner'),0);
   }finally{await new Promise(resolve=>server.close(resolve));}
 });

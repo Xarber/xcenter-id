@@ -64,4 +64,6 @@ Files uploads reserve account quota and transfer bounded encrypted segments. Up 
 
 The root opens sign-in for a signed-out visitor. A completed profile is required before the first tour. The sidebar holds the account switcher and active account sign-out button. Saved sessions are limited to three per switcher and remain separate from the reusable SDK. Browser sessions are kept in protected cookies and native sessions in device-only SecureStore. Changing accounts resets the dashboard view.
 
-Settings contains Developer Mode and account deletion. Each full changelog has Back. Developer Mode adds a Developer notes control to the full page with commit titles, summaries, and identifiers. Release-note screenshots are reviewed separately from user-account screenshots.
+The account deletion action is in Settings. Tap the app version three times to reveal the saved Developer Mode switch. With the switch enabled, open Developer Options as a separate panel. Leaving Settings or timing out hides its entry. Each full changelog has Back. Developer Mode adds a Developer notes control to the full page with commit titles, summaries, and identifiers. Release-note screenshots are reviewed separately from user-account screenshots.
+
+The desktop sign-in constellation runs over the fixed night backdrop. The star layer moves independently and respects Reduced Motion. Device-code fields accept ASCII letters and digits, including lowercase input, and the issuer validates the combined code against an issued transaction.

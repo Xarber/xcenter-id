@@ -241,6 +241,10 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     const saved=others.slice(0,activeValue?2:3).map(entry=>entry.value).join('.');
     setCookie(res,switcherCookie,saved,saved?sessionAge/1000:0);
   }
+  function allowNewSignIn(req,active,input){
+    requireCondition(!active||(input.addAccount===true&&!nativeRequest(req)&&req.headers.origin===origin&&
+      req.headers['x-authnjs-request']==='account-consent'),409,'Use Add another account while signed in.');
+  }
   function checkBrowserCapacity(req,owner){
     const entries=browserAccounts(req);
     requireCondition(entries.length<3||entries.some(entry=>entry.owner===owner),409,'Sign out of one account before adding another.');
@@ -432,15 +436,18 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     requireCondition(req.method === 'POST', 405, 'Method unavailable.');
     if (pathname === '/account/login/username' || pathname === '/account/login/code') {
       requireCondition(req.headers.origin===origin||nativeRequest(req),403,'Invalid origin.');
-      requireCondition(!active,409,'Sign out before signing in again.');
       limitChallenges();
       const input=await body(req);
-      const channel=nativeRequest(req)?'native':'web';
+      allowNewSignIn(req,active,input);
+      if(active)requireCondition(session(req),401,'Sign in first.');
+      const nativeChannel=nativeRequest(req);
+      const channel=nativeChannel?'native':active?'web-add:'+active.hash:'web';
       if(pathname.endsWith('/username')){
         const username=typeof input.username==='string'?input.username.trim().toLowerCase():'';
         requireCondition(/^[a-z][a-z0-9]{2,23}$/.test(username),422,'Enter a valid X-Center username.');
         const owner=usernameOwner.get(username)?.owner;
         requireCondition(owner&&(available(owner)||restriction.get(owner)?.status==='locked'),404,'No available X-Center ID uses this username.');
+        if(!nativeChannel)checkBrowserCapacity(req,owner);
         if(restriction.get(owner)?.status==='locked')return {method:'passkey'};
         const email=emails.all(owner)[0]?.address;
         if(!email||!emailSignIn.enabled)return {method:'passkey'};
@@ -451,8 +458,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       const owner=emailSignIn.finish(input.ticket,input.code,channel);
       requireCondition(owner,401,'The code is incorrect or expired.');
       const timestamp=now();
-      const value=login(req,res,owner,channel==='native'?{created:timestamp,expires:timestamp+sessionAge}:undefined);
-      return channel==='native'?{token:value}:{ok:true};
+      const value=login(req,res,owner,nativeChannel?{created:timestamp,expires:timestamp+sessionAge}:undefined);
+      return nativeChannel?{token:value}:{ok:true};
     }
     if (pathname === '/account/native/exchange') {
       requireCondition(nativeRequest(req),403,'Use the X-Center ID app.');
@@ -703,7 +710,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     requireCondition(['signup', 'login', 'add','reauth'].includes(action), 404, 'Account route unavailable.');
     if(action==='reauth')requireCondition(active,401,'Sign in first.');
     else if (action === 'add') recent(active);
-    else requireCondition(!active, 409, 'Sign out before starting a new account or sign-in.');
+    else allowNewSignIn(req,active,input);
     if (pathname.endsWith('/options')) {
       if(action==='signup')checkBrowserCapacity(req,undefined);
       limitChallenges();
@@ -719,13 +726,13 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
             WHERE c.code=? AND c.expires>? AND s.owner=? AND s.expires>?`).get(digest(input.request),now(),active.owner,now())?.hash;
           requireCondition(target,403,'Open confirmation from the signed-in app.');
         }
-        prepare(res, { action, username, expected: options.challenge,
-          ...(action==='reauth'?{sessionHash:active.hash,target,request:input.request}:{}) });
+        prepare(res, { action, username, expected: options.challenge, sessionHash:active?.hash,
+          ...(action==='reauth'?{target,request:input.request}:{}) });
         return options;
       }
       const name = passkeyLabel(input.name);
       requireCondition(input.name === undefined || name, 422, 'Enter a passkey name of up to 64 characters.');
-      const owner = active?.owner ?? randomUUID();
+      const owner = action==='signup'?randomUUID():active.owner;
       let signupUsername;
       if (action === 'signup') {
         const result = validateUsername(input.username,reservedNames);
@@ -788,7 +795,10 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     requireCondition(result?.verified && result.registrationInfo, 400, 'Could not register this passkey.');
     const { aaguid, credential } = result.registrationInfo;
     const label = challenge.name ?? await suggestLabel({ aaguid, transports: credential.transports });
-    if(action==='signup')checkBrowserCapacity(req,challenge.owner);
+    if(action==='signup'){
+      if(active)requireCondition(session(req),401,'Sign in first.');
+      checkBrowserCapacity(req,challenge.owner);
+    }
     db.exec('BEGIN IMMEDIATE');
     try {
       if(action==='add')requireCondition(session(req),401,'Sign in first.');

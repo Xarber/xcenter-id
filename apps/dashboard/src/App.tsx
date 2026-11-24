@@ -1,3 +1,4 @@
+import {developerModeKey,useDeveloperPanel} from './developer-panel';
 import { dashboardThemes } from './native-surfaces';
 import ReleaseNotes from './ReleaseNotes';
 import {currentRelease,onboardingKey,releaseAnnouncement,releaseByVersion,seenReleaseKey} from './release-info';
@@ -74,6 +75,16 @@ function NativeAccount() {
   const [entryBusy,setEntryBusy]=useState(false);
   const [introStep,setIntroStep]=useState(0);
   const [developer,setDeveloper]=useState(false);
+  const developerPanel=useDeveloperPanel();
+  useEffect(()=>{void AsyncStorage.getItem(developerModeKey).then(value=>setDeveloper(value==='on')).catch(()=>{});},[]);
+  useEffect(()=>{
+    if(tab[0]!=='settings'||!foreground)developerPanel.hide();
+  },[tab,foreground,developerPanel.hide]);
+  function toggleDeveloper(enabled:boolean){
+    setDeveloper(enabled);
+    if(!enabled)setSampleMode(false);
+    void AsyncStorage.setItem(developerModeKey,enabled?'on':'off').catch(()=>{});
+  }
   const [sampleMode,setSampleMode]=useState(false);
   const [error,setError]=useState('');
   const [releaseBack,setReleaseBack]=useState<string|null>(null);
@@ -133,7 +144,7 @@ function NativeAccount() {
   async function forget(value:string){
     if(activeRef.current!==value)return;
     await remember(null,storedRef.current.filter(entry=>entry.token!==value));
-    setAccount(null);setToken(null);setLocked(false);setTab(pages[0]);setDeveloper(false);setSampleMode(false);
+    setAccount(null);setToken(null);setLocked(false);setTab(pages[0]);developerPanel.hide();setSampleMode(false);
   }
   async function load(value:string,select=false){
     const result=await nativeRequest('me',value);
@@ -179,7 +190,7 @@ function NativeAccount() {
   },[token,pending]);
   async function useSession(value:string){
     await load(value,true);
-    setSidebar(false);setSwitching(false);setTab(pages[0]);setDeveloper(false);setSampleMode(false);
+    setSidebar(false);setSwitching(false);setTab(pages[0]);developerPanel.hide();setSampleMode(false);
   }
   async function selectAccount(value:string){
     if(pending)return;
@@ -338,12 +349,23 @@ function NativeAccount() {
           {action('Developer documentation','book-outline',()=>void openBrowserAsync(accountHost+'/docs'))}
           {action('View introduction' ,'information-circle-outline',()=>{setIntroStep(0);setIntro(true);})}
           {action('Version history','book-outline',()=>openRelease('history'))}
-          <Text style={{color:colors.muted}}>Version {currentRelease.version}</Text>
-          <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Text style={{color:colors.ink,flex:1}}>Developer Mode</Text>
-            <Switch accessibilityLabel="Developer Mode" value={developer} onValueChange={enabled=>{setDeveloper(enabled);if(!enabled)setSampleMode(false);}}/></View>
-          {developer&&action(sampleMode?'Exit sample dashboard':'Open sample dashboard','eye-outline',()=>setSampleMode(!sampleMode))}
-          {sampleMode&&<View style={styles.card}><Text style={{color:colors.ink,fontWeight:'700'}}>Sample data</Text>
-            {Object.values(sample).flat().map(item=><Text key={item.id} style={{color:colors.muted}}>{item.title}</Text>)}</View>}
+          {action('Version '+currentRelease.version,'information-circle-outline',developerPanel.tap)}
+          {developerPanel.revealed&&<View onTouchStart={developerPanel.refresh}>
+            <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Text style={{color:colors.ink,flex:1}}>Developer Mode</Text>
+              <Switch accessibilityLabel="Developer Mode" value={developer} onValueChange={toggleDeveloper}/></View>
+            {developer&&action('Developer Options','code-slash-outline',()=>{setSampleMode(false);developerPanel.show();})}
+          </View>}
+          <Modal visible={developer&&developerPanel.open} presentationStyle="pageSheet" onRequestClose={developerPanel.hide}>
+            <SafeAreaView style={{flex:1,backgroundColor:colors.panel}} onTouchStart={developerPanel.refresh}>
+              <ScrollView contentContainerStyle={[styles.content,{gap:16}]}>
+                {action('Back to Settings','arrow-back-outline',developerPanel.hide)}
+                <Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>Developer Options</Text>
+                {action(sampleMode?'Exit sample dashboard':'Open sample dashboard','eye-outline',()=>setSampleMode(!sampleMode))}
+                {sampleMode&&<View style={styles.card}><Text style={{color:colors.ink,fontWeight:'700'}}>Sample data</Text>
+                  {Object.values(sample).flat().map(item=><Text key={item.id} style={{color:colors.muted}}>{item.title}</Text>)}</View>}
+              </ScrollView>
+            </SafeAreaView>
+          </Modal>
           {account.profile&&action('Delete account','trash-outline',()=>setDeleteName(''))}
           {deleteName!==null&&<View style={{gap:10}}>
             <Text style={{color:colors.ink}}>Permanently remove your profile, account files, mail, and linked app data. Enter @{account.profile?.username} to confirm.</Text>

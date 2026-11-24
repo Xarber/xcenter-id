@@ -256,3 +256,42 @@ test('browser can switch only among its own saved sessions and self-deletion pre
     assert.deepEqual((await (await call('switcher',cookies)).json()).accounts.map(({username})=>username),['seconduser']);
   }finally{await new Promise(resolve=>server.close(resolve));db.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+test('explicit add-account intent permits passkey and email login while preserving the active session',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'authnjs-add-account-'));
+  const database=join(dir,'accounts.sqlite');
+  const origin='https://id.example.test';
+  const codes=[];
+  const service=createAccounts({database,origin,sendVerification:async({code})=>codes.push(code)});
+  const db=new DatabaseSync(database);
+  db.exec("INSERT INTO accounts VALUES ('one','First',0),('two','Second',0); INSERT INTO identity_profiles VALUES ('one','firstuser','First','User','adult'),('two','seconduser','Second','User','adult'); INSERT INTO verified_emails VALUES ('two','second@example.test',1);");
+  const now=Date.now(),first='x'.repeat(43),otherBrowser='y'.repeat(43);
+  const store=db.prepare('INSERT INTO account_sessions VALUES (?,?,?,?)');
+  for(const value of [first,otherBrowser])store.run(createHash('sha256').update(value).digest('hex'),'one',now,now+600_000);
+  const server=createServer((req,res)=>void service.handle(req,res,req.url)).listen(0,'127.0.0.1');
+  await once(server,'listening');
+  const base='http://127.0.0.1:'+server.address().port+'/account/';
+  const post=(path,data,session=first)=>fetch(base+path,{method:'POST',body:JSON.stringify(data),
+    headers:{cookie:'__Host-authnjs='+session,origin,'content-type':'application/json','x-authnjs-request':'account-consent'}});
+  try{
+    assert.equal((await post('login/options',{username:'seconduser'})).status,409);
+    assert.equal((await post('login/options',{username:'seconduser',addAccount:true})).status,200);
+    const enrollment=await post('signup/options',{username:'thirduser',addAccount:true});
+    assert.equal(enrollment.status,200);
+    const signup=await enrollment.json();
+    assert.equal(signup.user.name,'thirduser');
+    assert.notEqual(signup.user.id,Buffer.from('one').toString('base64url'));
+    assert.equal((await post('login/username',{username:'seconduser'})).status,409);
+    const started=await post('login/username',{username:'seconduser',addAccount:true});
+    assert.equal(started.status,200);
+    const {ticket}=await started.json();
+    assert.ok(codes[0]);
+    assert.equal((await post('login/code',{ticket,code:codes[0],addAccount:true},otherBrowser)).status,401);
+    const completed=await post('login/code',{ticket,code:codes[0],addAccount:true});
+    assert.equal(completed.status,200);
+    assert.ok(completed.headers.getSetCookie().some(value=>value.startsWith('__Host-authnjs-switcher='+first+';')));
+    const active=completed.headers.getSetCookie().find(value=>value.startsWith('__Host-authnjs=')).split(';')[0];
+    const me=await (await fetch(base+'me',{headers:{cookie:active}})).json();
+    assert.equal(me.account.profile.username,'seconduser');
+  }finally{await new Promise(resolve=>server.close(resolve));db.close();rmSync(dir,{recursive:true,force:true});}
+});

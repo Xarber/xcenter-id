@@ -474,8 +474,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
             </Pressable>}
           {icon('Rename '+item.name,'pencil-outline',()=>{setCreatingFolder(false);setRenameEntry(item);})}
           {icon('Move '+item.name,'folder-open-outline',()=>chooseMove(item,true))}
-          {icon('Remove folder '+item.name,'trash-outline',()=>confirm('Remove empty folder?','This action removes the folder.',
-            ()=>run(()=>mutate('files/folders/'+item.id,{},'DELETE'),'Folder removed.')))}
+          {icon('Remove folder '+item.name,'trash-outline',()=>confirm('Remove folder and contents?','This permanently removes the folder and everything inside it.',
+            ()=>run(()=>mutate('files/folders/'+item.id+'?recursive=1',{},'DELETE'),'Folder removed.')))}
         </View>)}
         {transfers.rows.filter(row=>row.folder===folder).map(row=>{
           const percent=row.size?Math.floor(row.sent/row.size*100):0;

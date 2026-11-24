@@ -1,3 +1,4 @@
+import {developerModeKey,useDeveloperPanel} from './developer-panel';
 import AccountSwitcher, {type BrowserAccount} from './AccountSwitcher.web';
 import {confirmIdentity} from './Reauthenticate.web';
 import ReleaseNotes, {DeveloperRelease, FullRelease, ReleaseArchive} from './ReleaseNotes.web';
@@ -19,7 +20,7 @@ import { accountGreeting, accountShortcuts, accountStatus } from './account-over
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import {
   Menu, ArrowDownRight, ArrowLeft, ArrowRight, ChevronRight, CircleHelp, Code2, Fingerprint, FolderOpen,
-  Grid2X2, HardDrive, IdCard, KeyRound, Laptop, LogOut, Mail, Settings, ShieldCheck, UserRound, X,
+  Grid2X2, HardDrive, IdCard, KeyRound, Laptop, LockKeyhole, LogOut, Mail, MapPin, Settings, ShieldCheck, UserRound, X,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import DeveloperPortal from './DeveloperPortal';
@@ -119,6 +120,21 @@ function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,cre
     <div className="xc-auth">
       <header><Logo href="/"/><a href="/docs" className="xc-text-link">Developer documentation <ArrowDownRight size={15}/></a></header>
       <div className="xc-auth-grid xc-auth-night-grid">
+      <div className="xc-auth-visual xc-auth-desktop-art" aria-hidden="true">
+        <div className="xc-constellation" aria-hidden="true">
+          <div className="xc-orbit xc-orbit-inner"/><div className="xc-orbit xc-orbit-outer"/>
+          <div className="xc-auth-mark"><img src="/authnjs-icon.svg" alt=""/></div>
+          <div className="xc-orbit-track">
+            <div className="xc-service xc-service-mail"><Mail/></div>
+            <div className="xc-service xc-service-files"><FolderOpen/></div>
+            <div className="xc-service xc-service-places"><MapPin/></div>
+            <div className="xc-service xc-service-apps"><Grid2X2/></div>
+            <div className="xc-service xc-service-device"><Laptop/></div>
+            <div className="xc-service xc-service-lock"><LockKeyhole/></div>
+          </div>
+        </div>
+        <div className="xc-auth-caption"><p>One account for X-Center</p><span>Profile, devices, and apps in one place.</span></div>
+      </div>
       <div className="xc-card xc-auth-card">
         <span className="xc-symbol xc-lavender">{signup?<IdCard size={24}/>:<Fingerprint size={24}/>}</span>
         {choose?<><h1>Select an account</h1><AccountSwitcher entries={previousAccounts} add={previousAccounts.length<3?'/signin?addAccount=1':undefined} onError={onError}/></>:<>
@@ -246,12 +262,29 @@ export default function WebApp(){
   const [showTechnical,setShowTechnical]=useState(false);
   const [renderScreenshots,setRenderScreenshots]=useState(false);
   const [sampleMode,setSampleMode]=useState(false);
-  const [dev,setDev]=useState(()=>{try{return sessionStorage.getItem('xcenter.developerMode')==='on';}catch{return false;}});
+  const [dev,setDev]=useState(()=>{try{return (localStorage.getItem(developerModeKey)??sessionStorage.getItem(developerModeKey))==='on';}catch{return false;}});
+  const developerPanel=useDeveloperPanel();
   function toggleDeveloper(enabled:boolean){
     setDev(enabled);
     if(!enabled){setShowTechnical(false);setSampleMode(false);setRenderScreenshots(false);}
-    try{sessionStorage.setItem('xcenter.developerMode',enabled?'on':'off');}catch{}
+    try{localStorage.setItem(developerModeKey,enabled?'on':'off');}catch{}
   }
+  useEffect(()=>{
+    if(!developerPanel.revealed){setSampleMode(false);setRenderScreenshots(false);return;}
+    const refresh=developerPanel.refresh;
+    const hide=developerPanel.hide;
+    const visibility=()=>{if(document.hidden)hide();};
+    window.addEventListener('pointerdown',refresh);
+    window.addEventListener('keydown',refresh);
+    window.addEventListener('popstate',hide);
+    document.addEventListener('visibilitychange',visibility);
+    return ()=>{
+      window.removeEventListener('pointerdown',refresh);
+      window.removeEventListener('keydown',refresh);
+      window.removeEventListener('popstate',hide);
+      document.removeEventListener('visibilitychange',visibility);
+    };
+  },[developerPanel.revealed,developerPanel.refresh,developerPanel.hide]);
   const didShow=useRef(false);
   const path=window.location.pathname.replace(/^\//,'');
   function acknowledge(){
@@ -294,9 +327,9 @@ export default function WebApp(){
   },[adding,account?.profile,continuation,path,authDestination]);
 
   async function passkey(mode:'signup'|'login'|'add',value?:string){
-    const optionsJSON=await api(mode+'/options',mode==='add'?{name:value}:{username:value});
+    const optionsJSON=await api(mode+'/options',mode==='add'?{name:value}:{username:value,addAccount:adding});
     const response=mode==='login'?await startAuthentication({optionsJSON}):await startRegistration({optionsJSON});
-    const result=await api(mode+'/finish',{response});
+    const result=await api(mode+'/finish',{response,addAccount:adding});
     await load();
     return result.passkey as NamedPasskey;
   }
@@ -310,13 +343,13 @@ export default function WebApp(){
   }
   async function beginUsername(username:string){
     setSignInAction('username');setNotice('');
-    try {return await api('login/username',{username});}
+    try {return await api('login/username',{username,addAccount:adding});}
     catch(error){setNotice(error instanceof Error?error.message:'Could not find this account.');}
     finally{setSignInAction(null);}
   }
   function submitCode(ticket:string,code:string){
     setSignInAction('code');setNotice('');
-    void api('login/code',{ticket,code}).then(()=>window.location.replace(authDestination))
+    void api('login/code',{ticket,code,addAccount:adding}).then(()=>window.location.replace(authDestination))
       .catch(error=>setNotice(error.message)).finally(()=>setSignInAction(null));
   }
   const startupPanels=<>{intro&&<Intro close={dismissIntro}/>}
@@ -327,8 +360,8 @@ export default function WebApp(){
     const release=releaseByVersion(path.slice('changelog/'.length));
     const from=new URLSearchParams(window.location.search).get('from');
     const back=from==='dashboard'?'/dashboard':from==='settings'?'/settings':release?'/changelog?from=settings':account?'/settings':'/';
-    return <main className="xc-setup"><Logo href="/"/>
-      <a className="xc-button xc-secondary" href={back}><ArrowLeft size={16}/> Back</a>
+    return <main className="xc-setup xc-changelog"><Logo href="/"/>
+      <div className="xc-changelog-back"><a className="xc-button xc-secondary" href={back}><ArrowLeft size={16}/> Back</a></div>
       {path==='changelog'?<ReleaseArchive/>:release?<FullRelease release={release}/>:<><h1>Version unavailable</h1><a href="/changelog">Version history</a></>}
       {!!account&&dev&&release&&<section className="xc-card xc-pad">
         <button className="xc-button xc-secondary" type="button" aria-expanded={showTechnical} onClick={()=>setShowTechnical(!showTechnical)}>Developer notes</button>
@@ -414,19 +447,26 @@ export default function WebApp(){
     <div className="xc-list-row"><div><strong>Integration guide</strong><p>Set up sign-in and use the API from any platform.</p></div><a className="xc-button xc-secondary" href="/docs#manual"><Code2 size={16}/> Developer docs</a></div>
     <div className="xc-list-row"><div><strong>Developer portal</strong><p>Register or review your applications.</p></div><a className="xc-button xc-secondary" href="/developer"><Code2 size={16}/> Developer apps</a></div>
   </section></>;
+  else if(page==='settings'&&dev&&developerPanel.open)content=<section className="xc-card xc-pad xc-stack">
+    <button className="xc-button xc-secondary xc-self-start" type="button" onClick={developerPanel.hide}><ArrowLeft size={16}/> Back to Settings</button>
+    <h2>Developer Options</h2>
+    <button className="xc-button xc-secondary xc-self-start" onClick={()=>setRenderScreenshots(true)}>Render screenshots</button>
+    <a href="/samples">Open sample integrations</a>
+    <button className="xc-button xc-secondary xc-self-start" onClick={()=>setSampleMode(!sampleMode)}>{sampleMode?'Exit sample dashboard':'Open sample dashboard'}</button>
+    {sampleMode&&<div className="xc-sample"><span className="xc-pill">Sample data</span><h2>Sample dashboard</h2>
+      {Object.entries(sample).map(([section,items])=><div key={section}><h3>{section}</h3>{items.map(item=><p key={item.id}>{item.title} · {item.detail}</p>)}</div>)}</div>}
+  </section>;
   else if(page==='settings')content=<><PreferenceControls value={preferences} change={changePreferences}/><section className="xc-card xc-pad">
     <div className="xc-list-row xc-first-setting"><span>Mail app access</span><a className="xc-button xc-secondary" href="/mail-clients">Manage mail clients</a></div>
     <div className="xc-list-row"><span>Feedback and support</span><a className="xc-button xc-secondary" href="/support">Contact support</a></div>
     <div className="xc-list-row"><div className="xc-row-head"><CircleHelp size={22}/><div><strong>Introduction</strong><p>See how your X-Center ID works.</p></div></div><button className="xc-button xc-secondary" onClick={()=>setIntro(true)}>View introduction</button></div>
     <div className="xc-list-row"><strong>Version history</strong><a className="xc-button xc-secondary" href="/changelog?from=settings">View changelog</a></div>
-    <div className="xc-list-row"><div><strong>App version</strong><p>X-Center ID for web</p></div><span>{currentRelease.version}</span></div>
-    <label className="xc-list-row"><span>Developer Mode</span><input type="checkbox" role="switch" checked={dev} onChange={event=>toggleDeveloper(event.target.checked)}/></label>
-    {dev&&<div className="xc-stack"><h2>Developer Options</h2>
-      <button className="xc-button xc-secondary" onClick={()=>setRenderScreenshots(true)}>Render screenshots</button><a href="/samples">Open sample integrations</a>
-      <button className="xc-button xc-secondary" onClick={()=>setSampleMode(!sampleMode)}>{sampleMode?'Exit sample dashboard':'Open sample dashboard'}</button>
-      {sampleMode&&<div className="xc-sample"><span className="xc-pill">Sample data</span><h2>Sample dashboard</h2>
-        {Object.entries(sample).map(([section,items])=><div key={section}><h3>{section}</h3>{items.map(item=><p key={item.id}>{item.title} · {item.detail}</p>)}</div>)}</div>}
-    </div>}
+    <div className="xc-list-row"><div><strong>App version</strong><p>X-Center ID for web</p></div>
+      <button type="button" className="xc-button xc-secondary" onClick={developerPanel.tap}>{currentRelease.version}</button></div>
+    {developerPanel.revealed&&<>
+      <label className="xc-list-row"><span>Developer Mode</span><input type="checkbox" role="switch" checked={dev} onChange={event=>toggleDeveloper(event.target.checked)}/></label>
+      {dev&&<div className="xc-list-row"><span>Developer Options</span><button type="button" className="xc-button xc-secondary" onClick={developerPanel.show}>Open Developer Options</button></div>}
+    </>}
     <div className="xc-list-row"><div><strong>Delete account</strong><p>Permanently remove your account and its data.</p></div>
       <button className="xc-button xc-secondary" type="button" onClick={()=>setDeleteText('')}>Delete account</button></div>
     {deleteText!==null&&<form className="xc-stack" onSubmit={event=>{
@@ -488,7 +528,7 @@ export default function WebApp(){
     <nav className="xc-bottom" aria-label="Main screens">{[
       ['dashboard','Account',UserRound],['apps','Apps',Grid2X2],['settings','Settings',Settings],...(account.admin?[['admin','Admin',ShieldCheck]]:[]),
     ].map(([id,label,Icon])=>{const ItemIcon=Icon as typeof UserRound;const selected=id==='dashboard'?!['apps','permissions','developer','settings','support','mail-clients','admin'].includes(page):id==='apps'?['apps','permissions','developer'].includes(page):id==='settings'?['settings','support','mail-clients'].includes(page):page==='admin';return <a key={String(id)} href={'/'+id} aria-current={selected?'page':undefined}><ItemIcon size={22}/><span>{String(label)}</span></a>;})}</nav>
-    {dev&&renderScreenshots&&<ScreenshotGallery close={()=>setRenderScreenshots(false)}/>}
+    {dev&&developerPanel.open&&renderScreenshots&&<ScreenshotGallery close={()=>setRenderScreenshots(false)}/>}
     {startupPanels}
   </div>;
 }

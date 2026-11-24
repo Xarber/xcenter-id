@@ -3,7 +3,7 @@ import { errors, interactionPolicy, Provider } from 'oidc-provider';
 import { openOidcStore } from './oidc-store.mjs';
 
 const deviceGrant = 'urn:ietf:params:oauth:grant-type:device_code';
-const deviceCodePattern = /^[BCDFGHJKLMNPQRSTVWXZ]{6}$/;
+const deviceCodePattern = /^[A-Z0-9]{6}$/;
 const refreshIdleSeconds = 14 * 24 * 60 * 60;
 const filePermissions = {
   files_read: ['Read account files','List folders and download your own files.'],
@@ -41,15 +41,16 @@ function page(content, consent = false) {
     :root{color-scheme:light dark;font:1rem/1.5 system-ui;--bg:#f4f7fc;--card:#fff;--text:#17223a;--muted:#526078;--border:#dbe3ef;--action:#214fbe;--soft:#edf2ff}
     *{box-sizing:border-box}body{margin:0;padding:clamp(1rem,5vw,3rem);background:var(--bg);color:var(--text)}
     main{max-width:34rem;margin:clamp(0rem,4vh,3rem) auto;padding:clamp(1.25rem,5vw,2.25rem);background:var(--card);border:1px solid var(--border);border-radius:1.45rem}
-    body.consent{background:#10182e}
+    body.consent{background:radial-gradient(ellipse at 75% 8%,#202e4d,transparent 68%) fixed,linear-gradient(145deg,#11192d,#0c1325) fixed}
     body.consent::before{content:'';position:fixed;inset:0;pointer-events:none;background:
       radial-gradient(circle at 13% 21%,#d6e4ff80 0 1px,transparent 4px),
       radial-gradient(circle at 84% 17%,#c4d6ff66 0 1px,transparent 4px),
       radial-gradient(circle at 8% 63%,#e1e8ff55 0 1px,transparent 3px),
       radial-gradient(circle at 74% 87%,#d7e4ff66 0 1px,transparent 4px),
       radial-gradient(circle at 94% 58%,#c5d6ff55 0 1px,transparent 3px),
-      radial-gradient(circle at 35% 76%,#cbdcff44 0 1px,transparent 3px),
-      radial-gradient(ellipse at 75% 8%,#202e4d,transparent 68%),linear-gradient(145deg,#11192d,#0c1325)}
+      radial-gradient(circle at 35% 76%,#cbdcff44 0 1px,transparent 3px);animation:star-shimmer 9s ease-in-out infinite alternate}
+    @keyframes star-shimmer{from{opacity:.55;transform:translate(0,0)}to{opacity:1;transform:translate(3px,-2px)}}
+    @media(prefers-reduced-motion:reduce){body.consent::before{animation:none}}
     body.consent main{position:relative;box-shadow:0 24px 70px #060b1766}
     .source-permissions{margin:1rem 0;border:1px solid var(--border);border-radius:.9rem;padding:.85rem}
     .source-heading{display:flex;align-items:center;gap:.65rem;margin:0;overflow-wrap:anywhere;font-size:1rem}
@@ -260,7 +261,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
                 group.hidden = false;
                 const update = () => { original.value = cells.map(cell => cell.value).join(''); };
                 const enter = (index, value) => {
-                  const text = value.toUpperCase().replace(/[^BCDFGHJKLMNPQRSTVWXZ]/g, '');
+                  const text = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
                   if (!text) { cells[index].value = ''; update(); return; }
                   const start = text.length >= 6 ? 0 : index;
                   const letters = text.slice(0, cells.length - start);

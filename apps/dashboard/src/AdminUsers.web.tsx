@@ -98,7 +98,7 @@ export function AdminAccounts(){
         </section>}
         <h3>Connected apps</h3>
         {!user.apps.length&&<p>No connected apps.</p>}
-        {user.apps.map(app=><div className="xc-list-row" key={app.client}><AppIcon icon={app.icon}/><span className="xc-identity-label">{app.label}<TrustBadges compact kind="app" verified={app.verified}/></span></div>)}
+        {user.apps.map(app=><div className="xc-list-row" key={app.client}><div className="xc-row-head"><AppIcon icon={app.icon}/><span className="xc-identity-label">{app.label}<TrustBadges compact kind="app" verified={app.verified}/></span></div></div>)}
         <section className="xc-stack"><div className="xc-row-head"><BadgeCheck size={21}/><h2>Registered apps</h2></div>
         {!registrations.length&&<p>No registered apps.</p>}
         {registrations.map(app=><div key={app.id} className="xc-list-row xc-permission-row">

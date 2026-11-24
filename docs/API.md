@@ -66,3 +66,7 @@ The first-party dashboard starts a transfer with `POST /account/files/uploads` a
 `GET /account/files/destinations` lists owned folders and their parents for the move picker. `PATCH /account/files/:id` and `PATCH /account/files/folders/:id` accept a destination `folder`, with `null` for the root. Folder moves reject cycles and paths deeper than the existing folder limit.
 
 `GET /account/switcher` lists browser sessions available in that browser, and `POST /account/switcher` selects one of the protected cookie’s slots. `POST /account/delete` requires a recent authentication and the active profile username as `confirmation`. It immediately revokes access and schedules durable cleanup across stores. The appliance operator identity cannot be removed until its role is transferred.
+
+For folder deletion, the current dashboard sends `DELETE /account/files/folders/:id?recursive=1` after confirmation. The transaction removes the owned subtree, shares, data chunks and unfinished reservations. The legacy request and delegated clients retain empty-folder deletion.
+
+The signed-in browser can start a second login or signup by including `addAccount: true` and the first-party request header in both phases. The passkey challenge and any emailed code are bound to the current browser session. Successful sign-in parks the previous session within the existing three-account cap.

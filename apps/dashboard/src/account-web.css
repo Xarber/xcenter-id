@@ -42,11 +42,8 @@ body{overflow-y:auto}
   .xc-orbit-track,.xc-service svg{animation:none}
 }
 .xc-auth-visual{position:relative}
-.xc-orbit-control{position:absolute;right:10px;top:10px;z-index:1;padding:6px 9px;border:1px solid #d4e5ff66;border-radius:9px;color:#fff;background:#172653;font-size:.72rem}
-.xc-constellation[data-paused=true] .xc-orbit-track,.xc-constellation[data-paused=true] .xc-service svg{animation-play-state:paused}
 .xc-actions{flex-wrap:wrap}
 @media(max-width:630px){.xc-auth-caption{padding-top:32px}}
-@media(prefers-reduced-motion:reduce){.xc-orbit-control{display:none}}
 .xc-file-path{margin:18px 0;overflow-wrap:anywhere}
 .xc-file-path a+a::before{content:'›';display:inline-block;margin-right:8px;color:var(--muted)}
 .xc-file-path [aria-current=page]{color:var(--ink);font-weight:700}
@@ -94,7 +91,6 @@ body{overflow-y:auto}
 
 @media(hover:hover) and (pointer:fine){.xc-primary:hover:not(:disabled){background:var(--blue-hover)}}
 
-.xc-orbit-control{min-height:44px}
 .xc-button,.xc-side nav a,.xc-icon-link{touch-action:manipulation}
 .xc-portal-toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
 .xc-portal-app{width:100%;text-align:start}
@@ -247,12 +243,6 @@ input:is([type=checkbox],[type=radio]){inline-size:1.2rem;block-size:1.2rem;min-
 .xc-transfer small{font-size:.7rem;color:var(--muted);white-space:normal}
 .xc-auth-night{min-height:100dvh;position:relative;isolation:isolate;background:#0c1325}
 .xc-auth-night::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:
-  radial-gradient(circle at 13% 21%,#d6e4ff80 0 1px,transparent 4px),
-  radial-gradient(circle at 84% 17%,#c4d6ff66 0 1px,transparent 4px),
-  radial-gradient(circle at 8% 63%,#e1e8ff55 0 1px,transparent 3px),
-  radial-gradient(circle at 74% 87%,#d7e4ff66 0 1px,transparent 4px),
-  radial-gradient(circle at 94% 58%,#c5d6ff55 0 1px,transparent 3px),
-  radial-gradient(circle at 35% 76%,#cbdcff44 0 1px,transparent 3px),
   radial-gradient(ellipse at 75% 8%,#202e4d,transparent 68%),linear-gradient(145deg,#11192d,#0c1325)}
 .xc-auth-night .xc-auth-grid.xc-auth-night-grid{grid-template-columns:minmax(0,440px);justify-content:center;padding-block:clamp(16px,6vh,68px)}
 .xc-auth-night .xc-brand,.xc-auth-night .xc-text-link{color:#e3edff}
@@ -266,3 +256,26 @@ input:is([type=checkbox],[type=radio]){inline-size:1.2rem;block-size:1.2rem;min-
 .xc-switcher-list>.xc-list-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;width:100%;text-align:left;color:var(--ink);background:var(--surface);border:0;padding:6px;border-radius:8px;cursor:pointer}
 .xc-switcher-list>.xc-list-row:hover{background:var(--soft)}
 .xc-switcher-list small{display:block;color:var(--muted)}
+.xc-auth-night::after{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:
+  radial-gradient(circle at 13% 21%,#d6e4ff80 0 1px,transparent 4px),
+  radial-gradient(circle at 84% 17%,#c4d6ff66 0 1px,transparent 4px),
+  radial-gradient(circle at 8% 63%,#e1e8ff55 0 1px,transparent 3px),
+  radial-gradient(circle at 74% 87%,#d7e4ff66 0 1px,transparent 4px),
+  radial-gradient(circle at 94% 58%,#c5d6ff55 0 1px,transparent 3px),
+  radial-gradient(circle at 35% 76%,#cbdcff44 0 1px,transparent 3px);
+  animation:xc-star-shimmer 9s ease-in-out infinite alternate;
+}
+@keyframes xc-star-shimmer{from{opacity:.55;transform:translate(0,0)}to{opacity:1;transform:translate(3px,-2px)}}
+.xc-auth-night .xc-auth-desktop-art{display:none;background:transparent;min-height:0}
+@media(min-width:900px){
+  .xc-auth-night .xc-auth-grid.xc-auth-night-grid{grid-template-columns:minmax(0,1fr) minmax(360px,440px)}
+  .xc-auth-night .xc-auth-desktop-art{display:flex}
+}
+@media(prefers-reduced-motion:reduce){
+  .xc-auth-night::after,.xc-auth-night .xc-service,.xc-auth-night .xc-service svg,.xc-auth-night .xc-orbit-track{animation:none}
+}
+.xc-sidebar-account>.xc-switcher-list{inset:auto 0 calc(100% + 4px);width:auto;max-width:100%;max-height:min(300px,48dvh);overflow:auto}
+.xc-switcher-list>.xc-button{justify-content:center;min-width:0;text-align:center;white-space:normal;overflow-wrap:anywhere}
+.xc-switcher-list>.xc-list-row>span:nth-child(2){min-width:0;overflow-wrap:anywhere}
+.xc-changelog-back{margin:16px 0 20px}
+.xc-permission-group{margin-block:12px;border:1px solid var(--line);border-radius:14px;padding:12px}

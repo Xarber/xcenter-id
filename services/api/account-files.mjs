@@ -53,6 +53,16 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     try{const status=statfsSync(dirname(database));return status.bavail*status.bsize>=256*1024**2;}
     catch{return false;}
   };
+  const subtree=db.prepare(`WITH RECURSIVE tree(id,depth) AS (
+    SELECT id,1 FROM user_folders WHERE owner=? AND id=? UNION ALL
+    SELECT f.id,t.depth+1 FROM user_folders f JOIN tree t ON f.parent=t.id WHERE f.owner=? AND t.depth<8
+  ) SELECT id FROM tree ORDER BY depth DESC`);
+  const subtreeTransfers=db.prepare(`DELETE FROM file_transfers WHERE owner=? AND (
+    (committed=0 AND folder IN (SELECT value FROM json_each(?))) OR
+    id IN (SELECT file FROM user_file_folders WHERE folder IN (SELECT value FROM json_each(?)))
+  )`);
+  const subtreeFiles=db.prepare(`DELETE FROM user_files WHERE owner=? AND id IN
+    (SELECT file FROM user_file_folders WHERE folder IN (SELECT value FROM json_each(?)))`);
   const folderHeight=db.prepare(`WITH RECURSIVE tree(id,depth) AS (
     SELECT id,1 FROM user_folders WHERE owner=? AND id=? UNION ALL
     SELECT f.id,t.depth+1 FROM user_folders f JOIN tree t ON f.parent=t.id WHERE f.owner=? AND t.depth<=8
@@ -296,15 +306,20 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     const uploadRoute=!delegated&&/^\/account\/files\/uploads(?:\/([0-9a-f-]{36}))?$/.exec(path);
     if(uploadRoute)return upload(req,res,owner,uploadRoute[1]);
     if(req.method==='DELETE'&&individual&&folderItem){
-      db.exec('BEGIN IMMEDIATE');
-      try {
-        const row=folderById.get(owner,id);
-        if(!row)return json(res,404,{error:'Folder unavailable.'});
-        if(children.get(owner,id)||fileTotal.get(id))return json(res,409,{error:'Empty the folder before removing it.'});
-        clearOrphans.run(id);
-        folderRemove.run(owner,id);
-        return json(res,200,{ok:true});
-      } finally { db.exec('COMMIT'); }
+      const recursive=!delegated&&new URL(req.url,origin).searchParams.get('recursive')==='1';
+      const result=transaction(()=>{
+        if(!folderById.get(owner,id))return 404;
+        if(!recursive&&(children.get(owner,id)||fileTotal.get(id)))return 409;
+        const folders=recursive?subtree.all(owner,id,owner).map(row=>row.id):[id];
+        if(recursive){
+          const selected=JSON.stringify(folders);
+          subtreeTransfers.run(owner,selected,selected);
+          subtreeFiles.run(owner,selected);
+        }
+        for(const selected of folders){clearOrphans.run(selected);folderRemove.run(owner,selected);}
+        return 200;
+      });
+      return json(res,result,result===200?{ok:true}:result===404?{error:'Folder unavailable.'}:{error:'Use the dashboard to remove the folder and its contents.'});
     }
     if(req.method==='DELETE'&&individual){
       const deleted=transaction(()=>{

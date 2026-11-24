@@ -495,3 +495,17 @@ Paused at the user’s explicit request. Only the queue was updated in this turn
 24 November authorization. The user resumed the saved batch and explicitly waived both usage thresholds for this batch only. Source validation and live test configuration proceed before the native build.
 
 0.15.0 rollout and [verification report](reports/FILES_AND_ACCOUNTS_2026-11-24.md). Web/API revision `ddee010` is live. Native preview [45338367140](https://github.com/Xarber/xcenter-id/actions/runs/45338367140) started from the same revision. Pending gates are live consent and installed native tests. This batch-only usage override ends at the checkpoint.
+
+### Sign-in, file deletion and dashboard follow-up
+
+| ID | Request | State | Acceptance criteria |
+| --- | --- | --- | --- |
+| AUTHN-135 | Restore the desktop sign-in animation and subtly animate web stars | In Progress | Restore the original desktop constellation over one fixed night background. Animate only star layers in the backdrop. Preserve Reduce Motion and keep the manual Pause button removed. |
+| AUTHN-136 | Fix account addition and keep the switcher inside the sidebar | In Progress | Support explicit add-account intent for username, email code, passkey and signup without replacing parked sessions. Preserve the three-account limit. Validate narrow layouts. |
+| AUTHN-137 | Delete a folder and its contents | In Progress | Confirm removal once, delete its owned subtree and transfers atomically, and protect delegated and older clients from an unexpected recursive delete. |
+| AUTHN-138 | Restore the triple-tap Developer Mode panel | In Progress | Triple tap reveals the persistent switch. Developer Options opens separately. Hide the entry after inactivity or navigation. Version-specific commit notes stay gated by the saved switch. |
+| AUTHN-139 | Accept all six-character alphanumeric device-code input | In Progress | Test E, I, 3, Y, U, O and lowercase a on the issuer and native input model. The issuer remains authoritative for issued codes. |
+| AUTHN-140 | Polish Administration, data permissions and changelog layout | In Progress | Keep connected app labels next to their icons, group permission rows by other app and reuse the standard toggle. Restore empty panels. Put Back on its own line below the changelog logo. |
+| AUTHN-141 | Verify the scope, deploy and start a new native build | Queued | Check the stable rollback target, run the affected tests and exercise narrow browser layouts before starting the four-format build. |
+
+The user explicitly waived the weekly and session thresholds for this batch only.
