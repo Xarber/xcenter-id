@@ -500,12 +500,14 @@ Paused at the user’s explicit request. Only the queue was updated in this turn
 
 | ID | Request | State | Acceptance criteria |
 | --- | --- | --- | --- |
-| AUTHN-135 | Restore the desktop sign-in animation and subtly animate web stars | Implemented | Browser verified desktop-only constellation, fixed backdrop, slow star animation and Reduced Motion. |
-| AUTHN-136 | Fix account addition and keep the switcher inside the sidebar | Implemented | Browser verified the popup stays inside the sidebar on desktop and mobile. API verified explicit account addition and a completed email-code sign-in without losing the original session. |
-| AUTHN-137 | Delete a folder and its contents | Implemented | API verified nested removal, cancellation of a pending upload, quota release and rejection from another account. Both dashboard views confirm the effect before submitting. |
+| AUTHN-135 | Restore the desktop sign-in animation and subtly animate web stars | Verified | Browser verified desktop-only constellation, fixed backdrop, star motion and Reduced Motion. |
+| AUTHN-136 | Fix account addition and keep the switcher inside the sidebar | Implemented | Popup fits both web widths. API confirms passkey and signup options with explicit add intent and completes email-code addition while preserving the previous session. User-account passkey addition remains to verify. |
+| AUTHN-137 | Delete a folder and its contents | Implemented | API and isolated browser verified recursive removal, including cancel preserving data and cleanup of a pending upload. Installed native runtime remains pending. |
 | AUTHN-138 | Restore the triple-tap Developer Mode panel | Implemented | Web browser verified triple tap, separate options panel, hiding the entry on exit and commit notes after navigation. Native source checked. |
-| AUTHN-139 | Accept all six-character alphanumeric device-code input | Implemented | The shared input tests cover E, I, 3, Y, U, O and lowercase input. Staged issuer browser verification remains. |
-| AUTHN-140 | Polish Administration, data permissions and changelog layout | Implemented | Grouped permissions, empty panels and changelog Back positioning passed browser checks. Administration’s connected app row aligns its icon and name together. |
-| AUTHN-141 | Verify the scope, deploy and start a new native build | Queued | Check the stable rollback target, run the affected tests and exercise narrow browser layouts before starting the four-format build. |
+| AUTHN-139 | Accept all six-character alphanumeric device-code input | Implemented | Staged browser and shared input tests accept the requested letters and numbers. Production serves the updated form. Installed native runtime remains pending. |
+| AUTHN-140 | Polish Administration, data permissions and changelog layout | Verified | Browser verified grouped permission toggles, empty panels, Back placement and Administration alignment on both widths. |
+| AUTHN-141 | Verify the scope, deploy and start a new native build | Verified | 0.15.1 web/API live as `2c931ed`. [Native preview 45342155437](https://github.com/Xarber/xcenter-id/actions/runs/45342155437) submitted from that revision. |
 
 The user explicitly waived the weekly and session thresholds for this batch only.
+
+The batch-only usage override ends here. See the [0.15.1 verification report](reports/SIGNIN_AND_DASHBOARD_2026-11-24.md).
