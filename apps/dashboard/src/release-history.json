@@ -1,5 +1,42 @@
 [
   {
+    "version": "0.15.0",
+    "date": "2026-11-24",
+    "revision": "21b643c7fee1070f1bf181b6159f38d409238453",
+    "title": "File transfers and account switching",
+    "status": "Development",
+    "features": [
+      [
+        "storage",
+        "Files upload in parallel",
+        "Upload as much as your account can hold. Track and cancel individual transfers, or move existing files between folders."
+      ],
+      [
+        "people",
+        "Switch between accounts",
+        "Keep up to three signed-in accounts in the website or app. Delete your own account from Settings."
+      ],
+      [
+        "shield",
+        "See requested app access",
+        "Review cross-app requests with the app name and icon. The Permissions directory lists your linked apps."
+      ],
+      [
+        "key",
+        "Start with sign-in",
+        "The night background now appears on the main website. Native sign-in uses a continuous sky with subtle motion."
+      ],
+      [
+        "history",
+        "Browse full version notes",
+        "Use Back from changelog pages and turn on Developer Mode to read commit notes inside a version."
+      ]
+    ],
+    "fixes": [
+      "Device sign-in uses six separate code inputs. Administration shows current app artwork. The first tour follows sign-in."
+    ]
+  },
+  {
     "version": "0.14.0",
     "date": "2026-11-23",
     "revision": "a65fc5c395ad11e47acccfbbc3076002d32e7b00",

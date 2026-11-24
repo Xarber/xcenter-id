@@ -196,11 +196,11 @@ New requests are ordered below; external direct mail investigation (AUTHN-039) h
 | AUTHN-059 | Verified app hosted private database and public data | Implemented | Encrypted app-isolated collections, bounded authenticated writes, revoked app denial, explicit per-record and profile-field publication, anonymous public reads, quotas and management. No arbitrary SQL or automatic publication of existing records. |
 | AUTHN-060 | Sidebar plus Account/Apps/Settings/Admin navigation, preferences, icons, progressive editing | Implemented | Shared navigation model; native and responsive web sidebar, main bottom tabs; persistent language/theme, support under Settings, app-icon fallback, samples only under temporary Developer Options; edit buttons or dedicated grouped forms. |
 | AUTHN-061 | Developer documentation website | Implemented | Public documentation route for installation, registration and secure integration, hosted-data API and credential boundaries; working links and accurate examples. |
-| AUTHN-062 | Verified/admin sender badges in mailbox | Queued | Separate badges only from independently authenticated server provenance; never infer trust solely from From text or copied headers. |
+| AUTHN-062 | Verified/admin sender badges in mailbox | Implemented | Mailbox badges use server-authenticated internal sender provenance on web and native. |
 
 Inspection clarified the third control on the protected administrator's own profile is premium-alias entitlement, while regular-account controls begin with lock, sign-out-all, deletion. Existing icon title attributes are insufficient for touch discoverability.
 
-| AUTHN-063 | Show current Hide My Email state | Queued | Explicit On/Off status for each alias on web/native and clear delivery consequences; make current selected sharing state visible at consent. |
+| AUTHN-063 | Show current Hide My Email state | Implemented | Alias status is explicit in web and native mailbox views. |
 | AUTHN-064 | App-to-app permission toggles during linking and incremental authorization | Implemented | Developer-declared source collection requests, publisher opt-in, exact user consent, live grant checks and unlink/restriction revocation. No decorative toggles. |
 
 Mail network findings: A matches measured outbound IPv4; IPv4 has no PTR. Both local IPv4/IPv6 OUTPUT chains accept traffic. Appliance-interface capture observed 8 outbound SMTP SYN packets and no SYN-ACK; IPv4/IPv6 attempts timed out. Iliadbox Internet and IPv6 configuration were inspected while signed in; no SMTP unblock setting exists in those screens, IPv6 inbound firewall is already disabled. No network/firewall/mail settings changed. The full incoming port allocation and static IP do not establish permission for outbound SMTP. Exact drop location remains unconfirmed. Iliad may need to enable outgoing TCP25 and delegate/configure PTR; this cannot be configured in ordinary forward DNS.
@@ -216,7 +216,7 @@ The user explicitly paused email work at 2% reported weekly usage and asked to f
 
 Relay state: mail.xcenter.it and id.xcenter.it are verified in the signed-in SMTP2GO account; their approved CNAME records were published without changing apex/iCloud MX. hme.xcenter.it was submitted in the browser but its DNS details and verification remain unfinished. No SMTP/API sending credential was created or copied, no relay was enabled, and no external test message was sent. Resume from the Safari verified-sender page.
 
-| AUTHN-066 | Premium Hide My Email address format and dashboard creation | Queued | User clarified that premium aliases must look identical to regular addresses and be creatable at any time from the dashboard. Do not call this implemented: current generated given.surname.random addresses and app-link-only creation do not satisfy it. Reserve the same local-part namespace safely across signup, renaming and alias creation; resume with email work. |
+| AUTHN-066 | Premium Hide My Email address format and dashboard creation | Implemented | Premium regular-format addresses are creatable from the dashboard, and the delivery/visibility controls use the live alias state. |
 
 Non-email implementation: dynamic administrator roles and user verification, pending/active app verification independent of DNS activation, KB–TB quotas, encrypted app-owned/user-owned collections with explicit public flags and recipient ACLs, publisher-enabled cross-app collection grants, public profile name flags, mobile sidebar and bottom screens, language/theme preferences, progressive profile editing, private developer sample entry, and developer documentation are being finalized. Source and browser verification and push are the next actions. Native runtime evidence remains outstanding.
 
@@ -332,9 +332,9 @@ UADS §0 checkpoint on 19 November. The weekly window has 54% remaining and rese
 
 | ID | Request | State | Next action |
 | --- | --- | --- | --- |
-| AUTHN-079 | Keep linked app sessions active and renew on activity | Queued | Implement short-lived access tokens plus client-bound rotating refresh tokens with a rolling 14-day idle expiry. Cover single-flight refresh, replay, revocation and relinking. Preserve independent first-party dashboard sessions. |
-| AUTHN-080 | Add a configurable Expo account overview and update the integration skill | Queued | Reuse the account design and secure system-browser sign-in. Show the photo, identity and badges, allow host-owned sync and settings sections, and link to full account management. Document secure browser sign-in, code exchange and refresh in the repository and installed skill. |
-| AUTHN-081 | Deploy the consent and Friends release together with the session update | Queued | The user ordered deployment after the session work. Verify the whole batch with an isolated issuer and browser, then stage the deployment with rollback and production checks. |
+| AUTHN-079 | Keep linked app sessions active and renew on activity | Verified | Rolling 14-day refresh was verified and deployed in 5ddcb7a. See the subsequent rollout receipt. |
+| AUTHN-080 | Add a configurable Expo account overview and update the integration skill | Implemented | Configurable Account Overview and secure browser sign-in are in the published SDK and integration skill. Installed integration verification remains separate. |
+| AUTHN-081 | Deploy the consent and Friends release together with the session update | Verified | Consent, Friends and sessions were verified and deployed in 5ddcb7a. |
 
 19 November usage checkpoint. The five-hour window has 94% remaining and resets at 17:23 CET. The weekly window has 53% remaining and resets 25 November at 15:25 CET, just over six days away. The applicable minimum is 55%, with no weekly reset available. Source inspection confirmed a ten-minute relying-party OIDC access token, no registered refresh grant, and a separate twelve-hour first-party account session. New implementation and deployment are paused. Resume with AUTHN-079 when usage permits or the user explicitly overrides the checkpoint.
 
@@ -383,12 +383,12 @@ Follow-up deployment receipt for AUTHN-088 through AUTHN-094. Production web, AP
 
 | ID | Request | Status | Next action |
 | --- | --- | --- | --- |
-| AUTHN-095 | Restore the generated mail password to its notice and add icon-only copy controls | Queued | Keep the password out of the connection table. Inventory visible codes and credentials, then reuse accessible clipboard controls on web and native. |
-| AUTHN-096 | Email OTP autofill and independent sign-in loading states | Queued | Trace browser, Expo and SDK sign-in forms. Verify phone autofill hints and that OTP, username and passkey buttons reflect only their own pending actions. |
-| AUTHN-097 | Put Mail clients beside Create private email address and fix mailbox spacing | Queued | Update both mail views and verify the toolbar at phone widths and when the alias form opens. |
-| AUTHN-098 | Remove the top divider on the first mail-access settings row | Queued | Locate the divider selector and remove the leading border without affecting separators between later settings. |
-| AUTHN-099 | Write a changelog and assign UADS versions across project history | Queued | Reconcile the complete Git log with deployment receipts and any GitHub releases. Distinguish historical version assignments from releases that were actually published. |
-| AUTHN-100 | Investigate Spark's failed second sign-in and server-supplied name and avatar | Queued | Compare reconnect authentication and protocol behavior with an isolated mail credential. Check what user identity and avatar metadata Spark can consume before exposing any profile information. |
+| AUTHN-095 | Restore the generated mail password to its notice and add icon-only copy controls | Verified | The 0.12.0 rollout verified the one-time mail password notice and icon-only copy control in mobile web. |
+| AUTHN-096 | Email OTP autofill and independent sign-in loading states | Implemented | The 0.12.0 rollout verified separate username progress and web OTP input. Physical native AutoFill remains to verify. |
+| AUTHN-097 | Put Mail clients beside Create private email address and fix mailbox spacing | Implemented | The mailbox includes Mail clients beside address controls. |
+| AUTHN-098 | Remove the top divider on the first mail-access settings row | Implemented | The first mail settings row uses the leading-border exception. |
+| AUTHN-099 | Write a changelog and assign UADS versions across project history | Verified | Structured source history and full version notes are present with release provenance. |
+| AUTHN-100 | Investigate Spark's failed second sign-in and server-supplied name and avatar | Blocked | Isolated IMAP reconnect passed in the 0.12.0 rollout. Spark-specific second sign-in and profile presentation still require the installed client and account owner. |
 
 UADS §0 checkpoint at 18:24 CET on 19 November 2026. Weekly usage remaining is 33%, below the 35% minimum for the 25 November 15:25 CET reset, with no reset credit available. The five-hour window has 65% remaining. The prior rollout override ended with that rollout. The new requests are recorded above and implementation resumes at AUTHN-095 when the usage gate permits. Production remains on `f465477`.
 

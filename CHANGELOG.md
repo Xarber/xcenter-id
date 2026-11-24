@@ -3,6 +3,22 @@
 This archive covers the original AuthNJS source and the X-Center ID rewrite. Earlier entries reconstruct source milestones. Development entries identify unreleased work. There are no published GitHub releases in this history.
 Deployment and native build evidence are recorded in [release documentation](docs/RELEASES.md).
 
+## 0.15.0 · 2026-11-24
+
+Development
+
+### File transfers and account switching
+
+- **Files upload in parallel**. Upload as much as your account can hold. Track and cancel individual transfers, or move existing files between folders.
+- **Switch between accounts**. Keep up to three signed-in accounts in the website or app. Delete your own account from Settings.
+- **See requested app access**. Review cross-app requests with the app name and icon. The Permissions directory lists your linked apps.
+- **Start with sign-in**. The night background now appears on the main website. Native sign-in uses a continuous sky with subtle motion.
+- **Browse full version notes**. Use Back from changelog pages and turn on Developer Mode to read commit notes inside a version.
+
+### Fixes & Improvements
+
+- Device sign-in uses six separate code inputs. Administration shows current app artwork. The first tour follows sign-in.
+
 ## 0.14.0 · 2026-11-23
 
 Development

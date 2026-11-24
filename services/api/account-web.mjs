@@ -1,4 +1,4 @@
-import {createConsentTest} from './consent-test.mjs';
+import {createConsentTest} from './velunivo-consent-preview.mjs';
 import {localAccountMessage} from './account-mail.mjs';
 import {parseStorageVolumes,storageVolumeStatus} from './storage-volumes.mjs';
 import {createSupportMailer} from './service-mail.mjs';
@@ -200,7 +200,9 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   const path = target.pathname;
   const forwardedOrigin='https://'+req.headers['x-forwarded-host'];
   if(consentTest&&forwardedOrigin==='https://consent-test.xcenter.it'&&req.headers['x-forwarded-proto']==='https'){
-    void consentTest(req,res,new URL(path+target.search,forwardedOrigin)).catch(()=>{
+    const testUrl=new URL(forwardedOrigin);
+    testUrl.pathname=path;testUrl.search=target.search;
+    void consentTest(req,res,testUrl).catch(()=>{
       if(!res.headersSent)res.writeHead(502,{'Cache-Control':'no-store','Content-Type':'text/plain'});
       res.end('The consent test could not complete sign-in. Return to the app and try again.');
     });

@@ -1,4 +1,49 @@
 {
+  "0.15.0": {
+    "revision": "21b643c7fee1070f1bf181b6159f38d409238453",
+    "commits": [
+      {
+        "id": "fcea370037e7d4c962c921fcf1a4f07bee075a30",
+        "title": "docs(release): document historical notes and onboarding validation",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/DASHBOARD.md, docs/RELEASES.md."
+      },
+      {
+        "id": "78780b5784ce3233660bc12af8e7f9a9701f72e4",
+        "title": "docs(ops): record dashboard deployment and native preview",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations, docs/reports."
+      },
+      {
+        "id": "01090af9e9b2f2f56887e633a9807bff0e416a5d",
+        "title": "fix(auth): use six editable fields for device codes",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/DASHBOARD.md, services/api."
+      },
+      {
+        "id": "d979b49627d14506005e1414a0c34eb3ca48d657",
+        "title": "docs(queue): save account and consent follow-ups",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "85455b32d3941c1c606a2cbc997439e656999415",
+        "title": "docs(queue): record web sign-in background follow-up",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "1145bd6c51ecbf4c50df1766661dcd5f3acb67a6",
+        "title": "docs(queue): record native background and controls polish",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "3a79577fd10a5158ffbcbe7a2293b260c379fc69",
+        "title": "docs(queue): record weekly usage checkpoint",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "21b643c7fee1070f1bf181b6159f38d409238453",
+        "title": "feat(dashboard): add multi-account controls and quota-based file transfers",
+        "detail": "Changed areas: apps/dashboard, deploy/xcenter, docs/ACTIVE_TASKS.md, docs/API.md, docs/DASHBOARD.md, docs/HOSTED_DATA.md and 2 more."
+      }
+    ]
+  },
   "0.14.0": {
     "revision": "a65fc5c395ad11e47acccfbbc3076002d32e7b00",
     "commits": [
