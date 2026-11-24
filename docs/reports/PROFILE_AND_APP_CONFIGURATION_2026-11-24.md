@@ -13,3 +13,5 @@ X-Center ID dashboard 0.16.0 development preview. Scope covers username and mail
 | Platform and production boundaries | Physical camera, library and file-picker checks, native dialog interaction and external mailbox routing remain unverified. Production is still 0.15.2. The preview uses the existing release and signing configuration. |
 
 Relevant UADS requirements include UADS-PLAT-001, UADS-UI-001, UADS-SEC-001, UADS-DATA-001, UADS-QA-001 and UADS-REL-001. The Chromium regression and screenshot script is `apps/dashboard/scripts/capture-release-web.py`. Current configuration and import format are documented in [Hosted data](../HOSTED_DATA.md#developer-permissions-and-configuration).
+
+The [four-platform native preview](https://github.com/Xarber/xcenter-id/actions/runs/45378307774) was submitted for commit `308747cd8ed9d4649955bf6bd66125966ca1ae25`. The iOS device and simulator jobs and Android AAB job started. The Android APK job was queued at the first observed check. Dashboard and API dependency audits each reported zero vulnerabilities. Build completion, install and native interaction evidence remain open at this checkpoint.
