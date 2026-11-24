@@ -3,6 +3,22 @@
 This archive covers the original AuthNJS source and the X-Center ID rewrite. Earlier entries reconstruct source milestones. Development entries identify unreleased work. There are no published GitHub releases in this history.
 Deployment and native build evidence are recorded in [release documentation](docs/RELEASES.md).
 
+## 0.15.1 · 2026-11-24
+
+Development
+
+### Sign-in and dashboard fixes
+
+
+### Fixes & Improvements
+
+- The desktop constellation is back, with gently moving stars on the fixed web backdrop.
+- Add another account now preserves your sign-ins, and the switcher fits inside the sidebar.
+- Files can remove a folder and its contents after confirmation.
+- The version triple-tap reveals Developer Mode, and Developer Options opens separately.
+- Device-code fields accept letters and digits.
+- Connected apps align left, permissions group by app, and the changelog Back button has its own row.
+
 ## 0.15.0 · 2026-11-24
 
 Development

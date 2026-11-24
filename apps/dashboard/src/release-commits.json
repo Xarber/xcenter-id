@@ -1,4 +1,29 @@
 {
+  "0.15.1": {
+    "revision": "1acba82a180d04cd3a4d52c15338710cd9e780bb",
+    "commits": [
+      {
+        "id": "ddee0106834dc3ecc6b8360f6166a9932489e5e9",
+        "title": "chore(release): prepare dashboard 0.15.0 preview",
+        "detail": "Changed areas: CHANGELOG.md, apps/dashboard, docs/ACTIVE_TASKS.md, docs/RELEASES.md, services/api."
+      },
+      {
+        "id": "2c08328534225ef090d7a6bee1148509aff5b372",
+        "title": "docs(ops): record dashboard 0.15.0 deployment and preview",
+        "detail": "Changed areas: config/release-metadata.json, docs/ACTIVE_TASKS.md, docs/operations, docs/reports."
+      },
+      {
+        "id": "29c8b045d64a9779c5a756f3de18f13fc43c236a",
+        "title": "docs(ops): clarify rollback for chunked file storage",
+        "detail": "Changed areas: docs/operations."
+      },
+      {
+        "id": "1acba82a180d04cd3a4d52c15338710cd9e780bb",
+        "title": "fix(dashboard): restore sign-in motion and repair account addition",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/API.md, docs/DASHBOARD.md, docs/RELEASES.md, services/api."
+      }
+    ]
+  },
   "0.15.0": {
     "revision": "21b643c7fee1070f1bf181b6159f38d409238453",
     "commits": [

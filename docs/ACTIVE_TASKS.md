@@ -500,12 +500,12 @@ Paused at the user’s explicit request. Only the queue was updated in this turn
 
 | ID | Request | State | Acceptance criteria |
 | --- | --- | --- | --- |
-| AUTHN-135 | Restore the desktop sign-in animation and subtly animate web stars | In Progress | Restore the original desktop constellation over one fixed night background. Animate only star layers in the backdrop. Preserve Reduce Motion and keep the manual Pause button removed. |
-| AUTHN-136 | Fix account addition and keep the switcher inside the sidebar | In Progress | Support explicit add-account intent for username, email code, passkey and signup without replacing parked sessions. Preserve the three-account limit. Validate narrow layouts. |
-| AUTHN-137 | Delete a folder and its contents | In Progress | Confirm removal once, delete its owned subtree and transfers atomically, and protect delegated and older clients from an unexpected recursive delete. |
-| AUTHN-138 | Restore the triple-tap Developer Mode panel | In Progress | Triple tap reveals the persistent switch. Developer Options opens separately. Hide the entry after inactivity or navigation. Version-specific commit notes stay gated by the saved switch. |
-| AUTHN-139 | Accept all six-character alphanumeric device-code input | In Progress | Test E, I, 3, Y, U, O and lowercase a on the issuer and native input model. The issuer remains authoritative for issued codes. |
-| AUTHN-140 | Polish Administration, data permissions and changelog layout | In Progress | Keep connected app labels next to their icons, group permission rows by other app and reuse the standard toggle. Restore empty panels. Put Back on its own line below the changelog logo. |
+| AUTHN-135 | Restore the desktop sign-in animation and subtly animate web stars | Implemented | Browser verified desktop-only constellation, fixed backdrop, slow star animation and Reduced Motion. |
+| AUTHN-136 | Fix account addition and keep the switcher inside the sidebar | Implemented | Browser verified the popup stays inside the sidebar on desktop and mobile. API verified explicit account addition and a completed email-code sign-in without losing the original session. |
+| AUTHN-137 | Delete a folder and its contents | Implemented | API verified nested removal, cancellation of a pending upload, quota release and rejection from another account. Both dashboard views confirm the effect before submitting. |
+| AUTHN-138 | Restore the triple-tap Developer Mode panel | Implemented | Web browser verified triple tap, separate options panel, hiding the entry on exit and commit notes after navigation. Native source checked. |
+| AUTHN-139 | Accept all six-character alphanumeric device-code input | Implemented | The shared input tests cover E, I, 3, Y, U, O and lowercase input. Staged issuer browser verification remains. |
+| AUTHN-140 | Polish Administration, data permissions and changelog layout | Implemented | Grouped permissions, empty panels and changelog Back positioning passed browser checks. Administration’s connected app row aligns its icon and name together. |
 | AUTHN-141 | Verify the scope, deploy and start a new native build | Queued | Check the stable rollback target, run the affected tests and exercise narrow browser layouts before starting the four-format build. |
 
 The user explicitly waived the weekly and session thresholds for this batch only.

@@ -26,9 +26,18 @@ fixtures = {
         "profile": {"username": "robingreen", "givenName": "Robin", "surname": "Green", "hasPicture": False},
         "passkeys": [{"id": "sample", "label": "Laptop", "created": 1750000000000}], "emails": []}},
     "/account/apps": {"apps": [app]},
+    "/account/switcher": {"accounts": [
+        {"slot": 0, "current": True, "username": "robingreen", "givenName": "Robin", "surname": "Green", "hasPicture": False},
+        {"slot": 1, "current": False, "username": "rowanavery", "givenName": "Rowan", "surname": "Avery-Montgomery-Wellington",
+         "hasPicture": False},
+    ]},
     "/account/connected-apps": {"apps": [app]},
     "/account/data-grants": {"grants": []},
-    "/account/app-data-permissions": {"permissions": []},
+    "/account/app-data-permissions": {"permissions": [
+        {"source": "greenhouse", "destination": app["client"], "collection": collection, "label": label,
+         "sourceName": "Greenhouse", "destinationName": app["name"], "enabled": enabled}
+        for collection, label, enabled in (("plants", "Read plants", True), ("notes", "Read notes", False))
+    ]},
 }
 
 
@@ -42,7 +51,7 @@ class Preview(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps(fixtures.get(path, {})).encode())
         else:
-            if path in ("/", "/dashboard", "/apps", "/permissions", "/docs", "/settings", "/changelog") or path.startswith("/changelog/"):
+            if path in ("/", "/dashboard", "/apps", "/permissions", "/docs", "/settings", "/changelog") or path.startswith(("/changelog/", "/permissions/")) or path == "/signin":
                 self.path = "/index.html" if path != "/" else "/"
             super().do_GET()
 
@@ -73,6 +82,8 @@ with sync_playwright() as browser_tools:
                 route.abort()
             elif route.request.url == origin+"/account/me" and not signed_in:
                 route.fulfill(json={"account": None})
+            elif route.request.url == origin+"/account/switcher" and not signed_in:
+                route.fulfill(json={"accounts": []})
             else:
                 route.continue_()
         context.route("**/*", route_fixture)
@@ -82,6 +93,16 @@ with sync_playwright() as browser_tools:
         expect(heading(page, "Sign in to X-Center ID")).to_be_visible()
         expect(page.get_by_role("dialog")).to_have_count(0)
         expect(button(page, "Pause animation")).to_have_count(0)
+        constell = page.locator(".xc-auth-desktop-art")
+        if kind == "desktop":
+            expect(constell).to_be_visible()
+        else:
+            expect(constell).to_be_hidden()
+        assert page.locator(".xc-auth-night").evaluate("(e)=>getComputedStyle(e,'::after').animationName") == 'none'
+        page.emulate_media(reduced_motion="no-preference")
+        assert page.locator(".xc-auth-night").evaluate("(e)=>getComputedStyle(e,'::after').animationName") == 'xc-star-shimmer'
+        assert page.locator(".xc-auth-night").evaluate("(e)=>getComputedStyle(e,'::before').position") == 'fixed'
+        page.emulate_media(reduced_motion="reduce")
         signed_in = True
         page.reload()
         expect(heading(page, "Your X-Center ID")).to_be_visible()
@@ -118,6 +139,22 @@ with sync_playwright() as browser_tools:
                           "feature": feature, "width": width, "height": height,
                           "environment": "Chromium with isolated fixture"})
 
+        page.goto(origin+"/dashboard")
+        if kind == "mobile":
+            button(page, "Open page sidebar").click()
+        button(page, "@robingreen").click()
+        switcher=page.locator(".xc-sidebar-account>.xc-switcher-list")
+        expect(switcher).to_be_visible()
+        sidebar=page.locator(".xc-side").bounding_box()
+        popup=switcher.bounding_box()
+        assert popup["x"] >= sidebar["x"] and popup["x"] + popup["width"] <= sidebar["x"] + sidebar["width"] + 1
+        page.get_by_role("link",name="Add another account").click()
+        expect(heading(page,"Sign in to X-Center ID")).to_be_visible()
+        page.goto(origin+"/permissions/"+app["client"])
+        expect(heading(page,"Greenhouse")).to_have_count(1)
+        expect(page.get_by_role("switch",name="Read plants · Greenhouse")).to_have_attribute("aria-checked","true")
+        expect(page.get_by_role("switch",name="Read notes · Greenhouse")).to_have_attribute("aria-checked","false")
+        expect(page.get_by_text("No outgoing data access.")).to_be_visible()
         page.evaluate("localStorage.setItem('authnjs.dashboard.lastRelease','0.11.0')")
         page.goto(origin+"/dashboard")
         expect(heading(page, f"What’s new in {version}")).to_be_visible()
@@ -148,6 +185,9 @@ with sync_playwright() as browser_tools:
         expect(page.get_by_role("button",name="Copy source revision")).to_be_visible()
         page.get_by_role("link", name="Back", exact=True).click()
         expect(heading(page, "Version history")).to_be_visible()
+        brand=page.locator(".xc-changelog .xc-brand").bounding_box()
+        back=page.get_by_role("link", name="Back", exact=True).bounding_box()
+        assert back["y"] >= brand["y"] + brand["height"] + 10
         page.get_by_role("link", name="Back", exact=True).click()
         expect(heading(page, "Settings")).to_be_visible()
         page.get_by_role("link", name="View changelog").click()
