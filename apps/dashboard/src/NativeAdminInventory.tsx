@@ -1,3 +1,4 @@
+import AppIcon from './AppIcon';
 import { useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import ApplicationStorage from './ApplicationStorage';
@@ -7,7 +8,7 @@ import { Surface, SurfaceTitle, type DashboardTheme } from './native-surfaces';
 import { formatBytes } from './storage-summary';
 
 type Developer = { owner: string; name: string; status: string; githubProfile?: string };
-type Registration = { id: string; name: string; status: string; callback: string; developerName?: string; repository?: string; verified: boolean };
+type Registration = { icon?:string|null; id: string; name: string; status: string; callback: string; developerName?: string; repository?: string; verified: boolean };
 type Volume = { id: string; label: string; status: 'available' | 'unavailable' | 'read-only' | 'full'; free?: number; total?: number; freeFiles?: number };
 const volumeStatus = { available: 'Available', unavailable: 'Temporarily unavailable', 'read-only': 'Read-only', full: 'Full' };
 
@@ -102,7 +103,10 @@ export default function NativeAdminInventory({ token, colors, onDetail }: {
       <SurfaceTitle colors={colors} title="Registered apps" icon="apps-outline" />
       {registered?.length === 0 && <Text style={{ color: colors.muted }}>No registered developer apps.</Text>}
       {registered?.map(app => <View key={app.id} style={line}>
-        <Text style={{ color: colors.ink, fontWeight: '700' }}>{app.name}</Text>
+        <View style={{flexDirection:'row',alignItems:'center',gap:10}}>
+          <AppIcon icon={app.icon} color={colors.accent}/>
+          <Text style={{ color: colors.ink, fontWeight: '700',flex:1 }}>{app.name}</Text>
+        </View>
         <Text style={{ color: colors.muted }}>{app.developerName ?? 'Developer'} · {app.status}</Text>
         <TrustBadges verified={app.verified} kind="app" color={colors.accent} />
         <View style={styles.actions}>

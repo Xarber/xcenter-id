@@ -36,6 +36,15 @@ export function openFriends(database,available=()=>true) {
   const remove = db.prepare('DELETE FROM friendships WHERE id=? AND (first=? OR second=?)');
 
   return {
+    removeAccount(owner){
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        db.prepare('DELETE FROM friend_invites WHERE owner=?').run(owner);
+        db.prepare('DELETE FROM friendships WHERE first=? OR second=?').run(owner,owner);
+        db.prepare('DELETE FROM friend_requests WHERE sender=? OR recipient=?').run(owner,owner);
+        db.exec('COMMIT');
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    },
     invite(owner) {
       const code=Array.from(randomBytes(10),byte=>alphabet[byte%32]).join('');
       const expires = Date.now()+inviteLifetime;

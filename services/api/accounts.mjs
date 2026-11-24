@@ -34,7 +34,9 @@ function cookie(req, name) {
 }
 
 function setCookie(res, name, value, maxAge) {
-  res.setHeader('Set-Cookie', `${name}=${value}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${maxAge}`);
+  const header=`${name}=${value}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${maxAge}`;
+  const previous=res.getHeader('Set-Cookie');
+  res.setHeader('Set-Cookie',previous?[...Array.isArray(previous)?previous:[previous],header]:header);
 }
 
 async function body(req, limit=65536) {
@@ -56,7 +58,7 @@ async function body(req, limit=65536) {
   throw new AccountError(400, 'Invalid request.');
 }
 
-export function createAccounts({ database, origin, sendVerification, profileKey, outboundMail, canReceiveMail = false, externalMail = false, inboundVerification=false,appBrand=()=>null }) {
+export function createAccounts({ database, origin, sendVerification, profileKey, outboundMail, canReceiveMail = false, externalMail = false, inboundVerification=false,appBrand=()=>null,purgeAccount=()=>{} }) {
   const url = new URL(origin);
   if (url.origin !== origin || url.protocol !== 'https:') throw new Error('Set the exact HTTPS account origin');
   const rpID = url.hostname;
@@ -105,6 +107,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     CREATE TABLE IF NOT EXISTS account_flags(owner TEXT PRIMARY KEY REFERENCES accounts(id),
       verified INTEGER NOT NULL DEFAULT 0, admin INTEGER NOT NULL DEFAULT 0, public_fields TEXT NOT NULL DEFAULT '[]') STRICT;
     CREATE TABLE IF NOT EXISTS retired_usernames(username TEXT PRIMARY KEY) STRICT;
+    CREATE TABLE IF NOT EXISTS account_deletion_jobs(owner TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS account_admin_events(id TEXT PRIMARY KEY, actor TEXT NOT NULL,
       target TEXT NOT NULL, action TEXT NOT NULL, created INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS username_change_requests(owner TEXT PRIMARY KEY REFERENCES accounts(id),
@@ -128,7 +131,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   const badges=owner=>({verified:q('SELECT verified FROM account_flags WHERE owner=?').get(owner)?.verified===1,admin:isAdmin({owner})});
   const linkedAppBrand=app=>{
     const brand=appBrand(app.client);
-    return {...app,label:brand?.name??app.label,icon:brand?.icon??null,verified:!!brand?.verified,description:brand?.description??''};
+    return {...app,label:brand?.name??app.label,icon:brand?.iconUrl??brand?.icon??null,verified:!!brand?.verified,description:brand?.description??''};
   };
   const storageCapacity=owner=>q('SELECT bytes FROM account_storage_caps WHERE owner=?').get(owner)?.bytes??standardStorage;
   const account = q('SELECT name FROM accounts WHERE id=?');
@@ -221,8 +224,51 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     const browser=/Edg\//.test(header)?'Edge':/Chrome|CriOS/.test(header)?'Chrome':/Firefox/.test(header)?'Firefox':/Safari/.test(header)?'Safari':'Browser';
     return browser+' on '+os;
   }
+  const browserCookie='__Host-authnjs';
+  const switcherCookie='__Host-authnjs-switcher';
+  function browserAccounts(req){
+    const values=[cookie(req,browserCookie),...cookie(req,switcherCookie).split('.')];
+    const seen=new Set();
+    return values.slice(0,3).flatMap(value=>{
+      const current=/^[A-Za-z0-9_-]{43}$/.test(value)&&lookupPreservedSession.get(digest(value),now());
+      if(!current||seen.has(current.owner))return [];
+      seen.add(current.owner);
+      return [{...current,value}];
+    });
+  }
+  function setBrowserAccounts(res,activeValue,others){
+    setCookie(res,browserCookie,activeValue,activeValue?sessionAge/1000:0);
+    const saved=others.slice(0,activeValue?2:3).map(entry=>entry.value).join('.');
+    setCookie(res,switcherCookie,saved,saved?sessionAge/1000:0);
+  }
+  function checkBrowserCapacity(req,owner){
+    const entries=browserAccounts(req);
+    requireCondition(entries.length<3||entries.some(entry=>entry.owner===owner),409,'Sign out of one account before adding another.');
+    return entries;
+  }
+
+  function deleteIdentity(owner,username){
+    q(`INSERT INTO account_restrictions VALUES(?,'deleted') ON CONFLICT(owner) DO UPDATE SET status='deleted'`).run(owner);
+    q('INSERT OR IGNORE INTO retired_usernames VALUES(?)').run(username);
+    for(const table of ['passkeys','account_sessions','email_signins','connected_apps','app_link_grants','app_disconnects','account_entitlements',
+      'account_storage_caps','mail_credentials','account_email_addresses','inbound_verification_results','account_flags','identity_profiles',
+      'signup_usernames','verified_emails','email_verifications','username_change_requests','inbound_verifications','inbound_verification_rates']){
+      q('DELETE FROM '+table+' WHERE owner=?').run(owner);
+    }
+    q('UPDATE mailbox_aliases SET active=0 WHERE owner=?').run(owner);
+    q("UPDATE accounts SET name='Deleted account' WHERE id=?").run(owner);
+    q('INSERT OR IGNORE INTO account_deletion_jobs VALUES(?)').run(owner);
+  }
+  function finishDeletion(owner){
+    try{
+      purgeAccount(owner);
+      q('DELETE FROM account_deletion_jobs WHERE owner=?').run(owner);
+    }catch(error){console.error('account_deletion_cleanup_pending',error?.constructor?.name);}
+  }
+
   function login(req,res, owner, nativeSource,allowLocked=false) {
     requireCondition(available(owner)||allowLocked&&restriction.get(owner)?.status==='locked',401,'Sign-in is unavailable.');
+    const previous=nativeSource?[]:checkBrowserCapacity(req,owner);
     const value = token();
     q('DELETE FROM account_sessions WHERE expires<=?').run(now());
     const hash=digest(value);
@@ -233,7 +279,10 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     const label = nativeSource ? (nativePlatform==='ios'?'X-Center ID on iPhone or iPad'
       :nativePlatform==='android'?'X-Center ID on Android':'X-Center ID app') : deviceLabel(req);
     q('INSERT INTO account_devices VALUES (?,?,?)').run(randomUUID(),hash,label);
-    if(!nativeSource) setCookie(res, '__Host-authnjs', value, sessionAge / 1000);
+    if(!nativeSource){
+      for(const entry of previous)if(entry.owner===owner)removeSession.run(entry.hash);
+      setBrowserAccounts(res,value,previous.filter(entry=>entry.owner!==owner));
+    }
     return value;
   }
 
@@ -278,6 +327,22 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       requireCondition(isAdmin(active),403,'Administrator access is required.');
       recent(active);
     }
+    if(req.method==='GET'&&pathname==='/account/switcher'){
+      requireCondition(!nativeRequest(req),403,'Use the device account switcher.');
+      const current=session(req,true);
+      return {accounts:browserAccounts(req).flatMap((entry,slot)=>{
+        const person=profile(entry.owner);
+        return person?[{slot,current:entry.hash===current?.hash,username:person.username,givenName:person.givenName,
+          surname:person.surname,hasPicture:!!person.picture}]:[];
+      })};
+    }
+    const switcherPhoto=/^\/account\/switcher\/avatar\/([012])$/.exec(pathname)?.[1];
+    if(req.method==='GET'&&switcherPhoto){
+      const entry=browserAccounts(req)[Number(switcherPhoto)];
+      const picture=entry&&profile(entry.owner)?.picture;
+      requireCondition(picture,404,'Profile photo unavailable.');
+      return Buffer.from(picture,'base64');
+    }
     if (req.method === 'GET' && pathname === '/account/me') {
       if (!active) {
         const preserved=session(req,true);
@@ -286,6 +351,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       const saved = profile(active.owner);
       const { picture, ...details } = saved ?? {};
       return { account: {
+        id:active.owner,
         name: account.get(active.owner).name,
         profile: saved ? { ...details, hasPicture:!!picture } : null,
         pendingUsername: saved ? undefined : reservedUsername.get(active.owner,now())?.username,
@@ -401,6 +467,27 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     if (pathname === '/account/mail/send') requireCondition(active,401,'Sign in first.');
     const input = await body(req,pathname==='/account/mail/send'?512*1024:undefined);
     if(active)requireCondition(session(req),401,'Sign in first.');
+    if(pathname==='/account/switcher'){
+      requireCondition(!nativeRequest(req)&&req.headers['x-authnjs-request']==='account-consent',403,'Switch accounts from the dashboard.');
+      const entries=browserAccounts(req);
+      const selected=Number.isInteger(input.slot)&&entries[input.slot];
+      requireCondition(selected,404,'This sign-in is unavailable.');
+      setBrowserAccounts(res,selected.value,entries.filter(entry=>entry!==selected));
+      return {ok:true};
+    }
+    if(pathname==='/account/delete'){
+      recent(active);
+      requireCondition(req.headers['x-authnjs-request']==='account-consent',403,'Delete your account from Settings.');
+      const person=profile(active.owner);
+      requireCondition(person&&input.confirmation===person.username,422,'Enter your username to confirm deletion.');
+      requireCondition(!adminIds.has(active.owner),409,'Transfer appliance administration before deleting this account.');
+      db.exec('BEGIN IMMEDIATE');
+      try{deleteIdentity(active.owner,person.username);db.exec('COMMIT');}
+      catch(error){db.exec('ROLLBACK');throw error;}
+      finishDeletion(active.owner);
+      if(!nativeRequest(req))setBrowserAccounts(res,'',browserAccounts(req));
+      return {ok:true};
+    }
     if(pathname==='/account/reauth/native'){
       requireCondition(active&&nativeRequest(req),401,'Use the signed-in account manager.');
       q('DELETE FROM native_confirmations WHERE expires<=? OR hash=?').run(now(),active.hash);
@@ -428,18 +515,11 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
           q('DELETE FROM account_sessions WHERE owner=?').run(target);
           q('DELETE FROM email_signins WHERE owner=?').run(target);
         }
-        if(action==='delete'){
-          q('INSERT INTO retired_usernames VALUES(?)').run(username);
-          for(const table of ['passkeys','connected_apps','app_disconnects','account_entitlements','account_storage_caps',
-            'mail_credentials','account_email_addresses','inbound_verification_results','account_flags','identity_profiles','signup_usernames','verified_emails','email_verifications','username_change_requests',
-            'inbound_verifications','inbound_verification_rates']){
-            q('DELETE FROM '+table+' WHERE owner=?').run(target);
-          }
-          q("UPDATE accounts SET name='Deleted account' WHERE id=?").run(target);
-        }
+        if(action==='delete')deleteIdentity(target,username);
         q('INSERT INTO account_admin_events VALUES(?,?,?,?,?)').run(randomUUID(),active.owner,target,action,now());
         db.exec('COMMIT');
       } catch(error){db.exec('ROLLBACK');throw error;}
+      if(action==='delete')finishDeletion(target);
       return {ok:true};
     }
     if(pathname==='/account/username-change'||pathname==='/account/admin/username-changes'){
@@ -497,7 +577,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     if (pathname === '/account/logout') {
       const signedIn = active??session(req,true);
       if (signedIn) removeSession.run(signedIn.hash);
-      if(!nativeRequest(req)) setCookie(res, '__Host-authnjs', '', 0);
+      if(!nativeRequest(req))setBrowserAccounts(res,'',browserAccounts(req));
       return { ok: true };
     }
     if (pathname === '/account/devices/revoke') {
@@ -625,6 +705,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     else if (action === 'add') recent(active);
     else requireCondition(!active, 409, 'Sign out before starting a new account or sign-in.');
     if (pathname.endsWith('/options')) {
+      if(action==='signup')checkBrowserCapacity(req,undefined);
       limitChallenges();
       if (action === 'login'||action==='reauth') {
         const options = await generateAuthenticationOptions({ rpID, userVerification: 'required',
@@ -707,6 +788,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     requireCondition(result?.verified && result.registrationInfo, 400, 'Could not register this passkey.');
     const { aaguid, credential } = result.registrationInfo;
     const label = challenge.name ?? await suggestLabel({ aaguid, transports: credential.transports });
+    if(action==='signup')checkBrowserCapacity(req,challenge.owner);
     db.exec('BEGIN IMMEDIATE');
     try {
       if(action==='add')requireCondition(session(req),401,'Sign in first.');
@@ -749,6 +831,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   }
   return {
     handle,
+    retryDeletions:()=>{for(const {owner} of q('SELECT owner FROM account_deletion_jobs LIMIT 20').all())finishDeletion(owner);},
     current: (req) => session(req),
     supportCurrent: req=>session(req,true),
     allowsSupportMutation: req=>req.headers.origin===origin||(nativeRequest(req)&&!!session(req,true)),

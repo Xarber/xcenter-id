@@ -1,9 +1,9 @@
 export type Identity = { username:string; givenName:string; surname:string; birthday?:string; ageRange?:string; hasPicture:boolean };
-export type Account = {verified?:boolean;externalMailLimits?:{daily:number|null;monthly:number|null;usedToday:number;usedMonth:number}; name:string; profile:Identity|null; pendingUsername?:string; passkeys:{id:string;label:string;created:number}[];
+export type Account = {id?:string;verified?:boolean;externalMailLimits?:{daily:number|null;monthly:number|null;usedToday:number;usedMonth:number}; name:string; profile:Identity|null; pendingUsername?:string; passkeys:{id:string;label:string;created:number}[];
   emails:{address:string;verified:number}[]; canSendMail?:boolean; canReceiveMail?:boolean; externalMail?:boolean; externalMailSubmission?:boolean; mailbox?:string; admin?:boolean };
 
-export async function api(path:string, payload?:object, method = payload ? 'POST' : 'GET') {
-  const response = await fetch('/account/'+path,{ method, cache:'no-store', ...(payload ? {
+export async function api(path:string, payload?:object, method = payload ? 'POST' : 'GET', signal?:AbortSignal) {
+  const response = await fetch('/account/'+path,{ method, signal, cache:'no-store', ...(payload ? {
     headers:{'Content-Type':'application/json','X-AuthNJS-Request':'account-consent'},body:JSON.stringify(payload),
   } : {}) });
   const result = await response.json().catch(() => null);

@@ -9,15 +9,16 @@ import technicalNotes from './release-commits.json';
 const icons={mail:'mail-outline',people:'people-outline',history:'book-outline',shield:'shield-checkmark-outline',key:'key-outline',storage:'server-outline'} as const;
 const notes=technicalNotes as Record<string,{revision:string;commits:{id:string;title:string;detail:string}[]}>;
 
-export default function ReleaseNotes({mode,rows,colors,developer,close,open}:{
+export default function ReleaseNotes({mode,rows,colors,developer,close,open,back}:{
   mode:string|null;rows:string[][];colors:{panel:string;ink:string;muted:string;accent:string;line:string};
-  developer:boolean;close:()=>void;open:(mode:string)=>void;
+  developer:boolean;close:()=>void;back:()=>void;open:(mode:string)=>void;
 }){
   const [copyStatus,setCopyStatus]=useState('');
+  const [technicalVersion,setTechnicalVersion]=useState<string|null>(null);
   const latest=mode==='latest';
   const archive=mode==='history';
-  const technical=mode?.startsWith('developer:');
-  const version=technical?mode!.slice(10):mode;
+  const version=mode;
+  const technical=developer&&mode===technicalVersion&&!archive&&!latest;
   const release=latest?currentRelease:releaseByVersion(version??'');
   const details=technical&&developer&&version?notes[version]:null;
   function button(label:string,press:()=>void){
@@ -40,9 +41,9 @@ export default function ReleaseNotes({mode,rows,colors,developer,close,open}:{
       }} style={{padding:12}}><Ionicons name="copy-outline" size={20} color={colors.accent}/></Pressable>
     </View>;
   }
-  const title=latest?'What’s new in '+currentRelease.version:archive?'Version history':technical?'Developer notes':release?.version+' · '+release?.title;
+  const title=latest?'What’s new in '+currentRelease.version:archive?'Version history':release?.version+' · '+release?.title;
   if(!mode||(!archive&&!release)||(technical&&!details))return null;
-  return <Modal visible onRequestClose={close} presentationStyle={latest?'pageSheet':'fullScreen'}>
+  return <Modal visible onRequestClose={latest||archive?close:back} presentationStyle={latest?'pageSheet':'fullScreen'}>
     <SafeAreaView style={{flex:1,backgroundColor:colors.panel}}>
       <ScrollView contentContainerStyle={{padding:22,gap:16}}>
         <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
@@ -52,24 +53,28 @@ export default function ReleaseNotes({mode,rows,colors,developer,close,open}:{
           </Pressable>
         </View>
         {latest?<>{entries(rows)}{button('Full changelog',()=>open(currentRelease.version))}{button('Done',close)}</>:
-          archive?releaseHistory.map(item=><View key={item.version} style={{gap:10,paddingTop:16,borderTopWidth:1,borderColor:colors.line}}>
+          archive?<>{button('Back',back)}{releaseHistory.map(item=><View key={item.version} style={{gap:10,paddingTop:16,borderTopWidth:1,borderColor:colors.line}}>
             <Text accessibilityRole="header" style={{color:colors.ink,fontSize:18,fontWeight:'700'}}>{item.version} · {item.title}</Text>
             <Text style={{color:colors.muted}}>{releaseStatus(item)} · {item.date}</Text>
             {entries(releaseOverview(item))}
             {button('Full changelog for '+item.version,()=>open(item.version))}
-            {developer&&button('Developer notes for '+item.version,()=>open('developer:'+item.version))}
-          </View>):
-          details?<>{button('Version history',()=>open('history'))}{copyId(details.revision)}
-            <Text accessibilityLiveRegion="polite" style={{color:colors.muted}}>{copyStatus}</Text>
-            {details.commits.map(commit=><View key={commit.id} style={{gap:6,paddingTop:12,borderTopWidth:1,borderColor:colors.line}}>
-              <Text style={{color:colors.ink,fontWeight:'700'}}>{commit.title}</Text>
-              <Text style={{color:colors.muted}}>{commit.detail}</Text>{copyId(commit.id)}
-            </View>)}</>:
-          release&&<>{button('Version history',()=>open('history'))}
+          </View>)}</>:
+          release&&<>{button('Back',back)}
             <Text style={{color:colors.muted}}>{releaseStatus(release)} · {release.date}</Text>
             {entries(release.features)}
             {release.fixes.length>0&&<><Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Fixes &amp; Improvements</Text>
-              {release.fixes.map(fix=><Text key={fix} style={{color:colors.muted}}>{fix}</Text>)}</>}</>}
+              {release.fixes.map(fix=><Text key={fix} style={{color:colors.muted}}>{fix}</Text>)}</>}
+            {developer&&button('Developer notes',()=>setTechnicalVersion(technical?null:release.version))}
+            {details&&<>
+              <Text style={{color:colors.muted}}>Source commits, summaries and identifiers for this version.</Text>
+              {copyId(details.revision)}
+              <Text accessibilityLiveRegion="polite" style={{color:colors.muted}}>{copyStatus}</Text>
+              {details.commits.map(commit=><View key={commit.id} style={{gap:6,paddingTop:12,borderTopWidth:1,borderColor:colors.line}}>
+                <Text style={{color:colors.ink,fontWeight:'700'}}>{commit.title}</Text>
+                <Text style={{color:colors.muted}}>{commit.detail}</Text>{copyId(commit.id)}
+              </View>)}
+            </>}
+          </>}
       </ScrollView>
     </SafeAreaView>
   </Modal>;

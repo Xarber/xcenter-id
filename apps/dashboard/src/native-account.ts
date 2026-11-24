@@ -11,9 +11,9 @@ export class AccountRequestError extends Error {
   constructor(readonly status:number,message:string) { super(message); }
 }
 
-export async function nativeRequest(path:string, token?:string, data?:object, method=data?'POST':'GET') {
+export async function nativeRequest(path:string, token?:string, data?:object, method=data?'POST':'GET',signal?:AbortSignal) {
   const response=await fetch(accountHost+'/account/'+path,{
-    method, credentials:'omit',
+    method, signal, credentials:'omit',
     headers:{
       'X-AuthNJS-Native':'account-manager','X-AuthNJS-Request':'account-consent',
       'X-AuthNJS-Device-Platform':Platform.OS,
@@ -28,14 +28,14 @@ export async function nativeRequest(path:string, token?:string, data?:object, me
 }
 
 const randomSecret=()=>btoa(String.fromCharCode(...Crypto.getRandomBytes(32))).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
-export async function nativePasskeySession(signUp=false) {
+export async function nativePasskeySession(signUp=false,adding=false) {
   const verifier=randomSecret();
   const state=randomSecret();
   const base64=await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256,verifier,{encoding:Crypto.CryptoEncoding.BASE64});
   const challenge=base64.replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
   const params=new URLSearchParams({challenge,state});
   const next='/native-session?'+params;
-  const result=await openAuthSessionAsync(accountHost+(signUp?'/signup':'/signin')+'?continue='+encodeURIComponent(next),returnTo);
+  const result=await openAuthSessionAsync(accountHost+(signUp?'/signup':'/signin')+'?continue='+encodeURIComponent(next)+(adding?'&addAccount=1':''),returnTo);
   if(result.type!=='success')return null;
   const callback=new URL(result.url);
   const code=callback.searchParams.get('code');
@@ -58,4 +58,26 @@ export async function nativeReauthenticate(token:string) {
   if(callback.protocol!=='authnjs-dashboard:'||callback.host!=='reauth'||callback.pathname||
     callback.searchParams.get('state')!==request.state)throw new Error('Invalid confirmation return.');
   return true;
+}
+
+export type StoredAccount = {token:string;id:string;username:string;name:string;hasPicture:boolean};
+const switcherKey='authnjs.dashboard.accounts.v1';
+type StoredAccounts={active:string|null;entries:StoredAccount[]};
+
+export async function readStoredAccounts():Promise<StoredAccounts>{
+  const saved=await SecureStore.getItemAsync(switcherKey);
+  if(saved){
+    try{
+      const value=JSON.parse(saved);
+      if(Array.isArray(value.entries)&&value.entries.every((entry:StoredAccount)=>typeof entry.token==='string'&&typeof entry.id==='string')){
+        return {active:typeof value.active==='string'?value.active:null,entries:value.entries.slice(0,3)};
+      }
+    }catch{}
+  }
+  return {active:await readSession(),entries:[]};
+}
+
+export async function saveStoredAccounts(value:StoredAccounts){
+  await SecureStore.setItemAsync(switcherKey,JSON.stringify(value),{keychainAccessible:SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY});
+  await clearSession();
 }

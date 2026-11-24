@@ -1,5 +1,7 @@
+import AccountSwitcher, {type BrowserAccount} from './AccountSwitcher.web';
+import {confirmIdentity} from './Reauthenticate.web';
 import ReleaseNotes, {DeveloperRelease, FullRelease, ReleaseArchive} from './ReleaseNotes.web';
-import {currentRelease,enteredKey,onboardingKey,releaseAnnouncement,releaseByVersion,seenReleaseKey} from './release-info';
+import {currentRelease,onboardingKey,releaseAnnouncement,releaseByVersion,seenReleaseKey} from './release-info';
 import TrustBadges from './TrustBadges.web';
 import {introduction} from './introduction';
 import screenshots from '../public/assets/onboarding/manifest.json';
@@ -17,7 +19,7 @@ import { accountGreeting, accountShortcuts, accountStatus } from './account-over
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import {
   Menu, ArrowDownRight, ArrowLeft, ArrowRight, ChevronRight, CircleHelp, Code2, Fingerprint, FolderOpen,
-  Grid2X2, HardDrive, IdCard, KeyRound, Laptop, LockKeyhole, LogOut, Mail, MapPin, Settings, ShieldCheck, UserRound, X,
+  Grid2X2, HardDrive, IdCard, KeyRound, Laptop, LogOut, Mail, Settings, ShieldCheck, UserRound, X,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import DeveloperPortal from './DeveloperPortal';
@@ -98,39 +100,28 @@ function Intro({close}:{close:()=>void}){
 
 type SignInAction='signup'|'passkey'|'username-passkey'|'username'|'code';
 
-function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,create,continuation}:{
+function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,create,continuation,adding,previousAccounts,onError}:{
   signup:boolean;pending:SignInAction|null;notice:string;authenticate:(username?:string)=>void;
   beginUsername:(username:string)=>Promise<{method:string;ticket?:string}|undefined>;
-  submitCode:(ticket:string,code:string)=>void;create:(username:string)=>void;continuation:string|null;
+  submitCode:(ticket:string,code:string)=>void;create:(username:string)=>void;continuation:string|null;adding:boolean;previousAccounts:BrowserAccount[];onError:(message:string)=>void;
 }){
   const [username,setUsername]=useState('');
   const [ticket,setTicket]=useState('');
   const [code,setCode]=useState('');
   const [offerPasskey,setOfferPasskey]=useState(false);
-  const [motionPaused,setMotionPaused]=useState(false);
   const busy=pending!==null;
-  const suffix=continuation?'?continue='+encodeURIComponent(continuation):'';
-  return <div className="xc-auth">
-    <header><Logo href="/"/><a href="/docs" className="xc-text-link">Developer documentation <ArrowDownRight size={15}/></a></header>
-    <div className="xc-auth-grid">
-      <div className="xc-auth-visual">
-        <div className="xc-constellation" aria-hidden="true" data-paused={motionPaused}>
-          <div className="xc-orbit xc-orbit-inner"/><div className="xc-orbit xc-orbit-outer"/>
-          <div className="xc-auth-mark"><img src="/authnjs-icon.svg" alt=""/></div>
-          <div className="xc-orbit-track">
-            <div className="xc-service xc-service-mail"><Mail/></div>
-            <div className="xc-service xc-service-files"><FolderOpen/></div>
-            <div className="xc-service xc-service-places"><MapPin/></div>
-            <div className="xc-service xc-service-apps"><Grid2X2/></div>
-            <div className="xc-service xc-service-device"><Laptop/></div>
-            <div className="xc-service xc-service-lock"><LockKeyhole/></div>
-          </div>
-        </div>
-        <button className="xc-orbit-control" type="button" onClick={()=>setMotionPaused(value=>!value)}>{motionPaused?'Resume animation':'Pause animation'}</button>
-        <div className="xc-auth-caption"><p>One account for X-Center</p><span>Profile, devices, and apps in one place.</span></div>
-      </div>
+  const query=new URLSearchParams();
+  if(continuation)query.set('continue',continuation);
+  if(adding)query.set('addAccount','1');
+  const suffix=query.size?'?'+query:'';
+  const choose=previousAccounts.length>0&&!adding&&!signup&&!continuation;
+  return <div className="xc-auth-night">
+    <div className="xc-auth">
+      <header><Logo href="/"/><a href="/docs" className="xc-text-link">Developer documentation <ArrowDownRight size={15}/></a></header>
+      <div className="xc-auth-grid xc-auth-night-grid">
       <div className="xc-card xc-auth-card">
         <span className="xc-symbol xc-lavender">{signup?<IdCard size={24}/>:<Fingerprint size={24}/>}</span>
+        {choose?<><h1>Select an account</h1><AccountSwitcher entries={previousAccounts} add={previousAccounts.length<3?'/signin?addAccount=1':undefined} onError={onError}/></>:<>
         <h1>{signup?'Create your X-Center ID':'Sign in to X-Center ID'}</h1>
         <p>{signup?'Choose your username, then save a passkey for it.':'Use your username or sign in directly with a passkey.'}</p>
         {signup ? <form onSubmit={event=>{event.preventDefault();create(username);}}>
@@ -168,7 +159,9 @@ function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,cre
         {notice && <p className="xc-notice" role="alert">{notice}</p>}
         <div className="xc-auth-footer">{signup?'Already have an account?':'New to X-Center?'}{' '}
           <a href={(signup?'/signin':'/signup')+suffix}>{signup?'Sign in':'Create an account'}</a></div>
+        </>}
       </div>
+    </div>
     </div>
   </div>;
 }
@@ -240,29 +233,27 @@ export default function WebApp(){
   useEffect(()=>{document.documentElement.dataset.theme=preferences.theme;document.documentElement.lang=preferences.language==='system'?navigator.language:preferences.language;},[preferences]);
   function changePreferences(value:Preferences){setAccountLanguage(value.language);setPreferences(value);try{localStorage.setItem(preferencesKey,JSON.stringify(value));}catch{}}
   const [account,setAccount]=useState<Account|null|undefined>(undefined);
+  const [browserAccounts,setBrowserAccounts]=useState<BrowserAccount[]>([]);
+  const [switching,setSwitching]=useState(false);
+  const [deleteText,setDeleteText]=useState<string|null>(null);
+  const adding=new URLSearchParams(window.location.search).get('addAccount')==='1';
   const [locked,setLocked]=useState(false);
   const [notice,setNotice]=useState('');
   const [busy,setBusy]=useState(false);
   const [signInAction,setSignInAction]=useState<SignInAction|null>(null);
   const [intro,setIntro]=useState(false);
   const [releaseRows,setReleaseRows]=useState<string[][]>([]);
-  const [developerRelease,setDeveloperRelease]=useState('');
+  const [showTechnical,setShowTechnical]=useState(false);
   const [renderScreenshots,setRenderScreenshots]=useState(false);
   const [sampleMode,setSampleMode]=useState(false);
-  const [dev,setDev]=useState(false);
-  const taps=useRef(0);
-  const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const [dev,setDev]=useState(()=>{try{return sessionStorage.getItem('xcenter.developerMode')==='on';}catch{return false;}});
+  function toggleDeveloper(enabled:boolean){
+    setDev(enabled);
+    if(!enabled){setShowTechnical(false);setSampleMode(false);setRenderScreenshots(false);}
+    try{sessionStorage.setItem('xcenter.developerMode',enabled?'on':'off');}catch{}
+  }
   const didShow=useRef(false);
   const path=window.location.pathname.replace(/^\//,'');
-  const landing=path==='' && (window.location.search==='?about' || !hasEntered());
-  function hasEntered(){
-    try{return !!(localStorage.getItem(enteredKey)||localStorage.getItem(onboardingKey));}
-    catch{return false;}
-  }
-  function enter(){
-    try{localStorage.setItem(enteredKey,'true');}catch{}
-    window.location.assign('/dashboard');
-  }
   function acknowledge(){
     setReleaseRows([]);
     try{localStorage.setItem(seenReleaseKey,currentRelease.version);}catch{}
@@ -272,12 +263,6 @@ export default function WebApp(){
     try{localStorage.setItem(onboardingKey,'complete');}catch{}
     acknowledge();
   }
-  useEffect(()=>{
-    const read=()=>setDeveloperRelease(new URLSearchParams(window.location.hash.slice(1)).get('release-notes')??'');
-    read();
-    window.addEventListener('hashchange',read);
-    return ()=>window.removeEventListener('hashchange',read);
-  },[]);
   const permissionRoute=/^permissions\/([A-Za-z0-9_-]{1,100})$/.exec(path);
   const profileSection=/^profile\/(visibility|username|developer)$/.exec(path)?.[1];
   const invite=new URLSearchParams(window.location.hash.slice(1)).get('invite');
@@ -291,22 +276,22 @@ export default function WebApp(){
   const authDestination=emailToken?'/profile'+window.location.hash:continuation??'/dashboard';
   async function load(){const result=await api('me');setAccount(result.account);setLocked(!!result.locked);}
   useEffect(()=>{
+    void api('switcher').then(result=>setBrowserAccounts(result.accounts)).catch(()=>{});
     void load().catch(()=>{setNotice('The account service is temporarily unavailable.');setAccount(null);});
-    return ()=>{if(timer.current)clearTimeout(timer.current);};
   },[]);
   useEffect(()=>{
-    if(account===undefined||locked||(account&&!account.profile)||landing||
+    if(!account?.profile||locked||
       !['','dashboard'].includes(path)||didShow.current||continuation||emailToken||signInAction)return;
     didShow.current=true;
     try{
       if(!localStorage.getItem(onboardingKey))setIntro(true);
       else setReleaseRows(releaseAnnouncement(localStorage.getItem(seenReleaseKey)));
     }catch{setIntro(true);}
-  },[account,locked,landing,path,continuation,emailToken,signInAction]);
+  },[account,locked,path,continuation,emailToken,signInAction]);
 
   useEffect(()=>{
-    if(account?.profile&&continuation&&['','signin','signup','dashboard'].includes(path)) window.location.replace(authDestination);
-  },[account?.profile,continuation,path,authDestination]);
+    if(!adding&&account?.profile&&continuation&&['','signin','signup','dashboard'].includes(path)) window.location.replace(authDestination);
+  },[adding,account?.profile,continuation,path,authDestination]);
 
   async function passkey(mode:'signup'|'login'|'add',value?:string){
     const optionsJSON=await api(mode+'/options',mode==='add'?{name:value}:{username:value});
@@ -336,21 +321,19 @@ export default function WebApp(){
   }
   const startupPanels=<>{intro&&<Intro close={dismissIntro}/>}
     {!intro&&!signInAction&&releaseRows.length>0&&<ReleaseNotes rows={releaseRows} close={acknowledge} openFull={()=>{
-      acknowledge();window.location.assign('/changelog/'+currentRelease.version);
+      acknowledge();window.location.assign('/changelog/'+currentRelease.version+'?from=dashboard');
     }}/>}</>;
-  if(landing)return <main className="xc-setup xc-landing"><Logo href="/?about"/>
-    <section className="xc-card xc-pad xc-stack"><h1>One account for your apps</h1>
-      <p>Sign in with passkeys, review what connected apps can access, and manage your files and mailbox.</p>
-      <button className="xc-button xc-primary" onClick={enter}>Open web app <ArrowRight size={17}/></button>
-      <div className="xc-actions"><a href="/docs">Developer documentation</a><a href="/changelog">Version history</a>
-        <a href="https://github.com/Xarber/xcenter-id">GitHub</a></div>
-    </section>
-  </main>;
   if(path==='changelog'||path.startsWith('changelog/')){
     const release=releaseByVersion(path.slice('changelog/'.length));
-    return <main className="xc-setup"><Logo href="/?about"/>
+    const from=new URLSearchParams(window.location.search).get('from');
+    const back=from==='dashboard'?'/dashboard':from==='settings'?'/settings':release?'/changelog?from=settings':account?'/settings':'/';
+    return <main className="xc-setup"><Logo href="/"/>
+      <a className="xc-button xc-secondary" href={back}><ArrowLeft size={16}/> Back</a>
       {path==='changelog'?<ReleaseArchive/>:release?<FullRelease release={release}/>:<><h1>Version unavailable</h1><a href="/changelog">Version history</a></>}
-      <a href="/dashboard">Open dashboard</a>
+      {!!account&&dev&&release&&<section className="xc-card xc-pad">
+        <button className="xc-button xc-secondary" type="button" aria-expanded={showTechnical} onClick={()=>setShowTechnical(!showTechnical)}>Developer notes</button>
+        {showTechnical&&<DeveloperRelease version={release.version}/>}
+      </section>}
     </main>;
   }
   if(path==='docs')return <DeveloperDocumentation/>;
@@ -366,7 +349,7 @@ export default function WebApp(){
     <button className="xc-button xc-secondary" onClick={()=>window.location.reload()}>Check again</button>
     <button className="xc-button xc-secondary" onClick={()=>void api('logout',{}).then(()=>window.location.assign('/signin')).catch(error=>setNotice(error.message))}>Sign out</button>
     {notice&&<p role="alert">{notice}</p>}</main>;
-  if(!account)return <><SignIn signup={path==='signup'} continuation={continuation} pending={signInAction} notice={notice} authenticate={username=>login('login',username)} beginUsername={beginUsername} submitCode={submitCode} create={username=>login('signup',username)}/>{startupPanels}</>;
+  if(!account||adding)return <><SignIn signup={path==='signup'} continuation={continuation} pending={signInAction} notice={notice} authenticate={username=>login('login',username)} beginUsername={beginUsername} submitCode={submitCode} create={username=>login('signup',username)} adding={adding} previousAccounts={browserAccounts} onError={setNotice}/>{startupPanels}</>;
 
   if(path==='native-session'&&account.profile){
     const params=new URLSearchParams(window.location.search);
@@ -435,21 +418,27 @@ export default function WebApp(){
     <div className="xc-list-row xc-first-setting"><span>Mail app access</span><a className="xc-button xc-secondary" href="/mail-clients">Manage mail clients</a></div>
     <div className="xc-list-row"><span>Feedback and support</span><a className="xc-button xc-secondary" href="/support">Contact support</a></div>
     <div className="xc-list-row"><div className="xc-row-head"><CircleHelp size={22}/><div><strong>Introduction</strong><p>See how your X-Center ID works.</p></div></div><button className="xc-button xc-secondary" onClick={()=>setIntro(true)}>View introduction</button></div>
-    <div className="xc-list-row"><strong>Version history</strong><a className="xc-button xc-secondary" href="/changelog">View changelog</a></div>
-    <div className="xc-list-row"><div><strong>App version</strong><p>X-Center ID for web</p></div><button className="xc-button xc-secondary" onClick={()=>{
-      taps.current+=1;
-      if(timer.current) clearTimeout(timer.current);
-      if(taps.current>=3){taps.current=0;setDev(true);}
-      timer.current=setTimeout(()=>{setDev(false);setSampleMode(false);taps.current=0;},30000);
-    }}>{currentRelease.version}</button></div>
+    <div className="xc-list-row"><strong>Version history</strong><a className="xc-button xc-secondary" href="/changelog?from=settings">View changelog</a></div>
+    <div className="xc-list-row"><div><strong>App version</strong><p>X-Center ID for web</p></div><span>{currentRelease.version}</span></div>
+    <label className="xc-list-row"><span>Developer Mode</span><input type="checkbox" role="switch" checked={dev} onChange={event=>toggleDeveloper(event.target.checked)}/></label>
     {dev&&<div className="xc-stack"><h2>Developer Options</h2>
-      <details><summary>Developer changelog</summary><ReleaseArchive developer/></details>
-      {releaseByVersion(developerRelease)&&<DeveloperRelease version={developerRelease}/>}
       <button className="xc-button xc-secondary" onClick={()=>setRenderScreenshots(true)}>Render screenshots</button><a href="/samples">Open sample integrations</a>
       <button className="xc-button xc-secondary" onClick={()=>setSampleMode(!sampleMode)}>{sampleMode?'Exit sample dashboard':'Open sample dashboard'}</button>
       {sampleMode&&<div className="xc-sample"><span className="xc-pill">Sample data</span><h2>Sample dashboard</h2>
         {Object.entries(sample).map(([section,items])=><div key={section}><h3>{section}</h3>{items.map(item=><p key={item.id}>{item.title} · {item.detail}</p>)}</div>)}</div>}
     </div>}
+    <div className="xc-list-row"><div><strong>Delete account</strong><p>Permanently remove your account and its data.</p></div>
+      <button className="xc-button xc-secondary" type="button" onClick={()=>setDeleteText('')}>Delete account</button></div>
+    {deleteText!==null&&<form className="xc-stack" onSubmit={event=>{
+      event.preventDefault();setBusy(true);setNotice('');
+      void (async()=>{await confirmIdentity();await api('delete',{confirmation:deleteText});window.location.replace('/signin');})()
+        .catch(error=>setNotice(error.message)).finally(()=>setBusy(false));
+    }}>
+      <p>This revokes your sessions and removes your profile, account files, mail, and linked app data.</p>
+      <label>Enter @{profile.username} to confirm <input value={deleteText} onChange={event=>setDeleteText(event.target.value)} autoComplete="off"/></label>
+      <div className="xc-actions"><button type="button" className="xc-button xc-secondary" onClick={()=>setDeleteText(null)}>Cancel</button>
+        <button className="xc-button xc-primary" type="submit" disabled={busy||deleteText!==profile.username}>Permanently delete account</button></div>
+    </form>}
   </section></>;
   else content=<>
     <section className="xc-hero">
@@ -471,7 +460,7 @@ export default function WebApp(){
   </>;
 
   return <div className="xc-shell">
-    <header className="xc-topbar"><button className="xc-icon-link xc-menu-toggle" aria-label={sidebar?'Close page sidebar':'Open page sidebar'} aria-expanded={sidebar} onClick={()=>setSidebar(!sidebar)}><Menu size={23}/></button><Logo href="/?about"/><div className="xc-top-actions">
+    <header className="xc-topbar"><button className="xc-icon-link xc-menu-toggle" aria-label={sidebar?'Close page sidebar':'Open page sidebar'} aria-expanded={sidebar} onClick={()=>setSidebar(!sidebar)}><Menu size={23}/></button><Logo href="/dashboard"/><div className="xc-top-actions">
       <a href="/settings" className="xc-icon-link" aria-label="Open settings"><Settings size={20}/></a>
       <a href="/profile" className="xc-avatar" aria-label="Open profile">{picture?<img src={picture} alt=""/>:<UserRound size={19}/>}</a>
     </div></header>
@@ -480,7 +469,16 @@ export default function WebApp(){
       <nav aria-label="Account sections">{sections.map(([id,label,Icon])=><a key={id} href={'/'+id} aria-current={page===id?'page':undefined}><Icon size={19}/><span>{accountMessage(id,label)}</span></a>)}
         {account.admin&&<a href="/admin" aria-current={page==='admin'?'page':undefined}><ShieldCheck size={19}/><span>Administration</span></a>}
       </nav>
-      <button type="button" className="xc-signout" onClick={()=>void api('logout',{}).then(()=>window.location.assign('/signin')).catch(error=>setNotice(error.message))}><LogOut size={18}/> Sign out</button>
+      <div className="xc-sidebar-account">
+        {switching&&<AccountSwitcher entries={browserAccounts.filter(entry=>!entry.current)} add={browserAccounts.length<3?'/signin?addAccount=1':undefined} onError={setNotice}/>}
+        <div className="xc-sidebar-account-row">
+          <button type="button" className="xc-sidebar-profile" aria-expanded={switching} onClick={()=>setSwitching(!switching)}>
+            <span className="xc-avatar">{picture?<img src={picture} alt=""/>:<UserRound size={18}/>}</span><span>@{profile.username}</span>
+          </button>
+          <button type="button" className="xc-icon-link" aria-label="Sign out" title="Sign out"
+            onClick={()=>void api('logout',{}).then(()=>window.location.assign('/signin')).catch(error=>setNotice(error.message))}><LogOut size={18}/></button>
+        </div>
+      </div>
     </aside>
     <main className="xc-main">
       <div className="xc-page-title"><h1>{title}</h1><p>{summary}</p></div>

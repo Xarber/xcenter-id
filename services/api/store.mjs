@@ -100,6 +100,14 @@ export function openStore(path, key) {
     grant: (...parameters) => grant.run(...parameters),
     revoke: (...parameters) => revoke.run(...parameters),
     listGrants: (owner) => listGrants.all(owner, Date.now()),
+    removeAccount(owner){
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        db.prepare('DELETE FROM grants WHERE owner=?').run(owner);
+        db.prepare('DELETE FROM records WHERE owner=?').run(owner);
+        db.exec('COMMIT');
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    },
     revokeApp(owner,client){
       db.exec('BEGIN IMMEDIATE');
       try{

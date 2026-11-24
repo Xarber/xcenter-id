@@ -195,3 +195,42 @@ test('delegated file read, write and shared read permissions are independently e
   assert.equal((await call(sharePath,'share')).status,401);
   assert.equal((await call(start+'/'+id,'write','DELETE')).status,200);
 });
+
+test('parallel uploads reserve quota, retain encrypted chunk order, and move without changing contents',async()=>{
+  const handle=createAccountFiles({database:':memory:',key:randomBytes(32),accounts:{...accounts,storageCapacity:()=>3*1024*1024},origin});
+  const server=createServer((req,res)=>{void handle(req,res,new URL(req.url,origin).pathname);}).listen(0,'127.0.0.1');
+  await once(server,'listening');
+  const endpoint='http://127.0.0.1:'+server.address().port+'/account/files';
+  const call=(method,path,body,owner='owner')=>fetch(endpoint+path,{method,
+    body:body&&JSON.stringify(body),headers:{authorization:owner,'content-type':'application/json','x-authnjs-request':'account-consent',origin}});
+  try{
+    const begin=await call('POST','/uploads',{name:'parallel.bin',size:2*1024*1024+29});
+    assert.equal(begin.status,201);
+    const {id,chunkSize}=await begin.json();
+    const other=await call('POST','/uploads',{name:'cancel.bin',size:512*1024});
+    const {id:cancelled}=await other.json();
+    assert.equal((await call('POST','/uploads',{name:'too-big.bin',size:512*1024})).status,409);
+    await call('DELETE','/uploads/'+cancelled,{});
+    assert.equal((await call('POST','/uploads/'+cancelled,{})).status,404);
+    assert.equal((await call('POST','/uploads/'+id,{})).status,409);
+    const raw=randomBytes(2*1024*1024+29);
+    for(let position=0;position<raw.length;position+=chunkSize){
+      const content=raw.subarray(position,position+chunkSize).toString('base64');
+      assert.equal((await call('PUT','/uploads/'+id,{position,content},'other')).status,404);
+      assert.equal((await call('PUT','/uploads/'+id,{position,content})).status,200);
+      if(position===0)assert.equal((await call('PUT','/uploads/'+id,{position,content})).status,200);
+    }
+    assert.equal((await call('POST','/uploads/'+id,{})).status,201);
+    assert.equal((await call('POST','/uploads/'+id,{})).status,200);
+    const {id:folder}=await (await call('POST','/folders',{name:'Folder'})).json();
+    const {id:child}=await (await call('POST','/folders',{name:'Child',folder})).json();
+    assert.equal((await call('PATCH','/folders/'+folder,{folder:child})).status,409);
+    assert.equal((await call('PATCH','/'+id,{folder,name:'Moved.bin'})).status,200);
+    const list=await (await call('GET','?folder='+folder)).json();
+    assert.equal(list.files[0].name,'Moved.bin');
+    const download=await call('GET','/'+id);
+    assert.deepEqual(Buffer.from(await download.arrayBuffer()),raw);
+    assert.equal((await call('DELETE','/'+id,{})).status,200);
+    assert.equal(handle.fileBytes('owner'),0);
+  }finally{await new Promise(resolve=>server.close(resolve));}
+});

@@ -13,12 +13,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { openBrowserAsync } from 'expo-web-browser';
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
-import { AccessibilityInfo, ActivityIndicator, AppState, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, Alert, AppState, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AccountEntry } from '@authnjs/expo';
 import { sample } from './sample';
 import NativeSections, { type NativeSection } from './NativeSections';
-import { AccountRequestError, accountHost, clearSession, nativePasskeySession, nativeRequest, readSession, saveSession } from './native-account';
+import { AccountRequestError, accountHost, nativePasskeySession, nativeRequest, nativeReauthenticate, readStoredAccounts, saveStoredAccounts, type StoredAccount } from './native-account';
 import type {Account} from './web-account';
 
 type Icon = ComponentProps<typeof Ionicons>['name'];
@@ -46,6 +46,13 @@ function NativeAccount() {
   const systemTheme=useColorScheme();
   const [preferences,setPreferences]=useState(()=>parsePreferences(null));
   const [sidebar,setSidebar]=useState(false);
+  const [switching,setSwitching]=useState(false);
+  const [picker,setPicker]=useState<'theme'|'language'|null>(null);
+  const [deleteName,setDeleteName]=useState<string|null>(null);
+  const [stored,setStored]=useState<StoredAccount[]>([]);
+  const storedRef=useRef<StoredAccount[]>([]);
+  const activeRef=useRef<string|null>(null);
+  const setStoredAccounts=(value:StoredAccount[])=>{storedRef.current=value;setStored(value);};
   setAccountLanguage(preferences.language);
   useEffect(()=>{void AsyncStorage.getItem(preferencesKey).then(raw=>{const value=parsePreferences(raw);setAccountLanguage(value.language);setPreferences(value);});},[]);
   function preference(value:typeof preferences){setAccountLanguage(value.language);setPreferences(value);void AsyncStorage.setItem(preferencesKey,JSON.stringify(value));}
@@ -69,15 +76,14 @@ function NativeAccount() {
   const [developer,setDeveloper]=useState(false);
   const [sampleMode,setSampleMode]=useState(false);
   const [error,setError]=useState('');
-  const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
-  const taps=useRef(0);
+  const [releaseBack,setReleaseBack]=useState<string|null>(null);
 
   useEffect(()=>{
     let live=true;
     void Promise.all([AsyncStorage.getItem(onboardingKey),AsyncStorage.getItem(seenReleaseKey)]).then(([onboarded,seen])=>{
       if(live)setStartup({onboarded,seen});
     }).catch(()=>{if(live)setStartup({onboarded:null,seen:null});});
-    return ()=>{live=false;if(timer.current)clearTimeout(timer.current);};
+    return ()=>{live=false;};
   },[]);
   useEffect(()=>{
     const update=(url:string)=>{
@@ -94,13 +100,14 @@ function NativeAccount() {
     if(incomingVersion){
       setReleaseNotes(incomingVersion);setIncomingVersion(null);setStartup(null);return;
     }
+    if(!account?.profile)return;
     if(!startup.onboarded)setIntro(true);
     else{
       const rows=releaseAnnouncement(startup.seen);
       if(rows.length){setReleaseRows(rows);setReleaseNotes('latest');}
     }
     setStartup(null);
-  },[loading,pending,entryBusy,locked,foreground,startup,incomingVersion]);
+  },[loading,pending,entryBusy,locked,foreground,startup,incomingVersion,account?.profile]);
   useEffect(()=>{
     if(!loading&&!pending&&foreground&&incomingVersion&&!startup){
       setReleaseNotes(incomingVersion);setIncomingVersion(null);
@@ -115,41 +122,77 @@ function NativeAccount() {
   }
   function openRelease(mode:string|null){
     if(releaseNotes==='latest')acknowledge();
+    setReleaseBack(releaseNotes==='history'&&mode!=='history'?releaseNotes:null);
     setReleaseNotes(mode);
   }
-  function expired(){
-    setAccount(null);setToken(null);setLocked(false);setTab(pages[0]);
-    void clearSession().catch(()=>{});
+  async function remember(value:string|null,entries:StoredAccount[]){
+    await saveStoredAccounts({active:value,entries});
+    activeRef.current=value;
+    setStoredAccounts(entries);
   }
-  const load=async (value:string)=>{
+  async function forget(value:string){
+    if(activeRef.current!==value)return;
+    await remember(null,storedRef.current.filter(entry=>entry.token!==value));
+    setAccount(null);setToken(null);setLocked(false);setTab(pages[0]);setDeveloper(false);setSampleMode(false);
+  }
+  async function load(value:string,select=false){
     const result=await nativeRequest('me',value);
-    if(result.locked){setToken(value);setAccount(null);setLocked(true);return;}
-    if(!result.account){expired();return;}
+    if(!select&&activeRef.current!==value)return;
+    if(result.locked){
+      if(select)await remember(value,storedRef.current);
+      setToken(value);setAccount(null);setLocked(true);return;
+    }
+    if(!result.account){
+      if(select&&activeRef.current!==value){
+        await remember(activeRef.current,storedRef.current.filter(entry=>entry.token!==value));
+        throw new Error('This sign-in expired. Sign in again.');
+      }
+      await forget(value);return;
+    }
+    const person=result.account.profile;
+    const id=result.account.id??person?.username??value;
+    const entry={id,token:value,name:person?[person.givenName,person.surname].join(' '):result.account.name,
+      username:person?.username??'',hasPicture:!!person?.hasPicture};
+    const existing=storedRef.current.find(item=>item.id===id||item.token===value);
+    if(!existing&&storedRef.current.length>=3){
+      if(select)void nativeRequest('logout',value,{}).catch(()=>{});
+      throw new Error('Sign out of one account before adding another.');
+    }
+    const next=existing?storedRef.current.map(item=>item===existing?entry:item):[...storedRef.current,entry];
+    if(select||JSON.stringify(next)!==JSON.stringify(storedRef.current))await remember(value,next);
+    if(existing&&existing.token!==value)void nativeRequest('logout',existing.token,{}).catch(()=>{});
     setLocked(false);setToken(value);setAccount(result.account);
-  };
+  }
   useEffect(()=>{
-    void readSession().then(value=>value?load(value):undefined)
-      .catch(()=>setError('Could not restore your session. Sign in to try again.'))
+    void readStoredAccounts().then(async saved=>{
+      setStoredAccounts(saved.entries);activeRef.current=saved.active;
+      if(saved.active)await load(saved.active);
+    }).catch(()=>setError('Could not restore your session. Sign in to try again.'))
       .finally(()=>setLoading(false));
   },[]);
   useEffect(()=>{
     if(!token)return;
     const listener=AppState.addEventListener('change',state=>{
-      if(state==='active')void load(token).catch(()=>{});
+      if(state==='active'&&!pending)void load(token).catch(()=>{});
     });
     return ()=>listener.remove();
-  },[token]);
+  },[token,pending]);
   async function useSession(value:string){
-    await saveSession(value);
-    await load(value);
-    setTab(pages[0]);
-    if(token&&token!==value)void nativeRequest('logout',token,{}).catch(()=>{});
+    await load(value,true);
+    setSidebar(false);setSwitching(false);setTab(pages[0]);setDeveloper(false);setSampleMode(false);
   }
-  async function signIn(signUp=false){
+  async function selectAccount(value:string){
     if(pending)return;
     setPending(true);setError('');
+    try{await useSession(value);}
+    catch(error){setError(error instanceof Error?error.message:'Could not switch accounts.');}
+    finally{setPending(false);}
+  }
+  async function signIn(signUp=false,adding=false){
+    if(pending||storedRef.current.length>=3)return;
+    setPending(true);setError('');
     try {
-      const value=await nativePasskeySession(signUp);
+      const value=await nativePasskeySession(signUp,adding);
       if(value)await useSession(value);
     } catch(failure){
       setError(failure instanceof Error?failure.message:'Could not sign in.');
@@ -158,11 +201,21 @@ function NativeAccount() {
   async function signOut(){
     if(!token||pending)return;
     setPending(true);setError('');
-    try {await nativeRequest('logout',token,{});expired();}
+    try {await nativeRequest('logout',token,{});await forget(token);setSidebar(false);}
     catch(failure){
-      if(failure instanceof AccountRequestError&&failure.status===403)expired();
+      if(failure instanceof AccountRequestError&&failure.status===403)await forget(token);
       else setError('Could not sign out. Try again when you are online.');
     } finally {setPending(false);}
+  }
+  async function deleteAccount(){
+    if(!token||!account?.profile||deleteName!==account.profile.username)return;
+    setPending(true);setError('');
+    try{
+      if(!await nativeReauthenticate(token))return;
+      await nativeRequest('delete',token,{confirmation:deleteName});
+      await forget(token);setDeleteName(null);
+    }catch(failure){setError(failure instanceof Error?failure.message:'Could not delete the account.');}
+    finally{setPending(false);}
   }
   async function openPasskeyEnrollment(){
     try {await openBrowserAsync(accountHost+'/security');if(token)await load(token);}
@@ -173,6 +226,19 @@ function NativeAccount() {
       styles.button,{backgroundColor:colors.soft,opacity:pressed || pending ? 0.65 : 1},
     ]}><Ionicons name={icon} size={18} color={colors.accent}/>
       <Text style={{color:colors.accent,fontWeight:'700'}}>{label}</Text></Pressable>;
+  }
+  function accountRows(entries:StoredAccount[]){
+    return <View style={{gap:8}}>
+      {entries.map(entry=><Pressable key={entry.id} accessibilityRole="button" onPress={()=>void selectAccount(entry.token)}
+        style={{minHeight:48,flexDirection:'row',alignItems:'center',gap:10}}>
+        {entry.hasPicture?<Image source={{uri:accountHost+'/account/avatar',headers:{Authorization:'Bearer '+entry.token,'X-AuthNJS-Native':'account-manager'}}}
+          style={{width:36,height:36,borderRadius:18}}/>:<Ionicons name="person-circle-outline" size={36} color={colors.accent}/>}
+        <View style={{flex:1}}><Text style={{fontWeight:'700',color:colors.ink}}>{entry.name}</Text>
+          {!!entry.username&&<Text style={{color:colors.muted}}>@{entry.username}</Text>}</View>
+        <Ionicons name="chevron-forward" size={18} color={colors.muted}/>
+      </Pressable>)}
+      {stored.length<3&&action('Add another account','add-outline',()=>void signIn(false,true))}
+    </View>;
   }
   const signedOut=!loading&&!locked&&(!token||!account);
   if(intro)return <SafeAreaView style={[styles.screen,{backgroundColor:colors.background}]}>
@@ -206,14 +272,27 @@ function NativeAccount() {
         <View style={{width:280,maxWidth:'85%',backgroundColor:colors.panel,padding:14}}>
           {action('Close sidebar','close-outline',()=>setSidebar(false))}
           <ScrollView>{pages.filter(page=>page[0]!=='admin'||account.admin).map(page=><Pressable key={page[0]} accessibilityRole="button"
-            onPress={()=>{setTab(page);setSidebar(false);setDeveloper(false);setSampleMode(false);}}
+            onPress={()=>{setTab(page);setSidebar(false);setSampleMode(false);}}
             style={{minHeight:48,flexDirection:'row',gap:12,alignItems:'center',paddingHorizontal:12,borderRadius:10,backgroundColor:tab[0]===page[0]?colors.soft:colors.panel}}>
             <Ionicons name={page[2]} size={21} color={colors.accent}/><Text style={{color:colors.ink}}>{accountMessage(page[0],page[1])}</Text>
           </Pressable>)}</ScrollView>
+          {switching&&<View style={[styles.card,{backgroundColor:colors.soft}]}>{accountRows(stored.filter(entry=>entry.token!==token))}</View>}
+          <View style={{flexDirection:'row',alignItems:'center',gap:8,borderTopWidth:1,borderColor:colors.line}}>
+            <Pressable accessibilityRole="button" accessibilityState={{expanded:switching}} onPress={()=>setSwitching(!switching)}
+              style={{minHeight:48,flex:1,flexDirection:'row',alignItems:'center',gap:8}}>
+              {account.profile?.hasPicture?<Image source={{uri:accountHost+'/account/avatar',headers:{Authorization:'Bearer '+token,'X-AuthNJS-Native':'account-manager'}}}
+                style={{width:30,height:30,borderRadius:15}}/>:<Ionicons name="person-circle-outline" size={30} color={colors.accent}/>}
+              <Text numberOfLines={1} style={{color:colors.ink,flex:1}}>@{account.profile?.username??'Account'}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Sign out" onPress={()=>void signOut()} style={{padding:12}}>
+              <Ionicons name="log-out-outline" size={22} color={colors.accent}/>
+            </Pressable>
+          </View>
         </View><Pressable style={{flex:1}} accessibilityLabel="Close sidebar" onPress={()=>setSidebar(false)}/>
       </SafeAreaView>
     </Modal>}
-    <ReleaseNotes mode={releaseNotes} rows={releaseRows} colors={colors} developer={developer} close={()=>openRelease(null)} open={openRelease}/>
+    <ReleaseNotes mode={releaseNotes} rows={releaseRows} colors={colors} developer={developer}
+      close={()=>openRelease(null)} open={openRelease} back={releaseBack?()=>{setReleaseNotes(releaseBack);setReleaseBack(null);}:()=>openRelease(null)}/>
     <ScrollView contentContainerStyle={[styles.content,signedOut&&styles.signInContent]} keyboardShouldPersistTaps="handled">
         {loading?<ActivityIndicator accessibilityLabel="Opening account"/>:locked&&token?
           <View style={[styles.card,{backgroundColor:colors.panel,borderColor:colors.line,borderWidth:1}]}>
@@ -223,34 +302,59 @@ function NativeAccount() {
             {action('Sign out','log-out-outline',()=>void signOut())}
           </View>:!token||!account?
           <View style={styles.signInGroup}>
+          {stored.length>0?<View style={[styles.card,{backgroundColor:colors.panel}]}>
+            <Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>Select an account</Text>
+            {accountRows(stored)}
+            {!!error&&<Text accessibilityRole="alert" style={{color:colors.danger}}>{error}</Text>}
+          </View>:<>
           <Image source={require('../public/authnjs-192.png')} style={styles.signInLogo} accessibilityLabel="X-Center ID"/>
           <AccountEntry transparent={false} onSignIn={()=>{setPendingAction('passkey');void signIn();}} onCreateAccount={()=>{setPendingAction('signup');void signIn(true);}} pending={pending} pendingAction={pendingAction} error={error}
             onUsernameSubmit={async username=>{setEntryBusy(true);try{return await nativeRequest('login/username',undefined,{username});}finally{setEntryBusy(false);}}}
             onCodeSubmit={async(ticket,code)=>{setEntryBusy(true);try{const session=await nativeRequest('login/code',undefined,{ticket,code});await useSession(session.token);}finally{setEntryBusy(false);}}}/>
+          </>}
           </View>:
           <><Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>{accountMessage(tab[0],tab[1])}</Text>
           <Text style={{color:colors.muted}}>{tab[0]==='dashboard'?accountMessage('overviewSummary',copy.dashboard):copy[tab[0]]}</Text>
           {tab[0]==='settings'?<View style={[styles.card,{backgroundColor:colors.panel,borderColor:colors.line,borderWidth:1}]}>
-          <Text style={{color:colors.ink,fontWeight:'700'}}>Theme</Text>
-          <View style={styles.preferenceChoices}>{(['system','light','dark'] as const).map(value=><Pressable key={value} accessibilityRole="radio" accessibilityState={{checked:preferences.theme===value}} onPress={()=>preference({...preferences,theme:value})} style={[styles.button,{backgroundColor:preferences.theme===value?colors.soft:colors.panel}]}><Text style={{color:colors.ink}}>{value}</Text></Pressable>)}</View>
-          <Text style={{color:colors.ink,fontWeight:'700'}}>Language</Text>
-          <View style={styles.preferenceChoices}>{languages.map(([id,label])=><Pressable key={id} accessibilityRole="radio" accessibilityState={{checked:preferences.language===id}} onPress={()=>preference({...preferences,language:id})} style={[styles.button,{backgroundColor:preferences.language===id?colors.soft:colors.panel}]}><Text style={{color:colors.ink}}>{label}</Text></Pressable>)}</View>
+          <Modal visible={!!picker} transparent animationType={reducedMotion?'none':'fade'} onRequestClose={()=>setPicker(null)}>
+            <View style={{flex:1,justifyContent:'center',padding:22,backgroundColor:'#0007'}}>
+              <View style={[styles.card,{backgroundColor:colors.panel}]}>
+                <Text accessibilityRole="header" style={{color:colors.ink,fontSize:20,fontWeight:'700'}}>{picker==='theme'?'Theme':'Language'}</Text>
+                {(picker==='theme'?[['system','System theme'],['light','Light'],['dark','Dark']]:languages).map(([id,label])=>
+                  <Pressable key={id} accessibilityRole="radio" accessibilityState={{checked:picker==='theme'?preferences.theme===id:preferences.language===id}}
+                    style={{minHeight:44,justifyContent:'center'}} onPress={()=>{
+                      if(picker==='theme')preference({...preferences,theme:id as typeof preferences.theme});
+                      else preference({...preferences,language:id});
+                      setPicker(null);
+                    }}><Text style={{color:colors.ink}}>{label}</Text></Pressable>)}
+                {action('Done','checkmark-outline',()=>setPicker(null))}
+              </View>
+            </View>
+          </Modal>
+          {action('Theme · '+preferences.theme,'contrast-outline',()=>setPicker('theme'))}
+          {action('Language · '+(languages.find(([id])=>id===preferences.language)?.[1]??'System language'),'language-outline',()=>setPicker('language'))}
           {action('Mail app access','mail-open-outline',()=>setTab(pages.find(page=>page[0]==='mail-clients')!))}
           {action('Support','help-circle-outline',()=>setTab(pages.find(page=>page[0]==='support')!))}
           {action('Developer documentation','book-outline',()=>void openBrowserAsync(accountHost+'/docs'))}
           {action('View introduction' ,'information-circle-outline',()=>{setIntroStep(0);setIntro(true);})}
           {action('Version history','book-outline',()=>openRelease('history'))}
-          {developer&&action('Developer changelog','code-slash-outline',()=>openRelease('history'))}
-          {action('Version '+currentRelease.version,'code-slash-outline',()=>{
-            if(++taps.current===3){setDeveloper(true);taps.current=0;}
-            if(timer.current)clearTimeout(timer.current);
-            timer.current=setTimeout(()=>{setDeveloper(false);setSampleMode(false);taps.current=0;},30_000);
-          })}
+          <Text style={{color:colors.muted}}>Version {currentRelease.version}</Text>
+          <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Text style={{color:colors.ink,flex:1}}>Developer Mode</Text>
+            <Switch accessibilityLabel="Developer Mode" value={developer} onValueChange={enabled=>{setDeveloper(enabled);if(!enabled)setSampleMode(false);}}/></View>
           {developer&&action(sampleMode?'Exit sample dashboard':'Open sample dashboard','eye-outline',()=>setSampleMode(!sampleMode))}
           {sampleMode&&<View style={styles.card}><Text style={{color:colors.ink,fontWeight:'700'}}>Sample data</Text>
             {Object.values(sample).flat().map(item=><Text key={item.id} style={{color:colors.muted}}>{item.title}</Text>)}</View>}
-          {action('Sign out','log-out-outline',()=>void signOut())}
-        </View>:<NativeSections key={tab[0]} section={tab[0] as NativeSection} account={account} token={token} colors={colors}
+          {account.profile&&action('Delete account','trash-outline',()=>setDeleteName(''))}
+          {deleteName!==null&&<View style={{gap:10}}>
+            <Text style={{color:colors.ink}}>Permanently remove your profile, account files, mail, and linked app data. Enter @{account.profile?.username} to confirm.</Text>
+            <TextInput accessibilityLabel="Enter your username to confirm deletion" value={deleteName} onChangeText={setDeleteName}
+              autoCapitalize="none" autoCorrect={false} style={{minHeight:44,color:colors.ink,borderWidth:1,borderColor:colors.line,padding:8}}/>
+            {action('Cancel','close-outline',()=>setDeleteName(null))}
+            {deleteName===account.profile?.username&&action('Permanently delete account','trash-outline',()=>Alert.alert('Delete your account?','This cannot be undone.',[
+              {text:'Cancel',style:'cancel'},{text:'Delete',style:'destructive',onPress:()=>void deleteAccount()},
+            ]))}
+          </View>}
+        </View>:<NativeSections key={(account.id??token)+':'+tab[0]} section={tab[0] as NativeSection} account={account} token={token} colors={colors}
           expired={()=>void load(token).catch(()=>setError('Could not check your account.'))} reload={()=>load(token)} passkeys={()=>void openPasskeyEnrollment()}
           navigate={id=>{const next=pages.find(page=>page[0]===id);if(next)setTab(next);}}/>}
         {error&&!signedOut&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{error}</Text>}</>}
@@ -258,7 +362,7 @@ function NativeAccount() {
     {token&&account&&<View accessibilityRole="tablist" style={{flexDirection:'row',borderTopWidth:1,borderColor:colors.line,backgroundColor:colors.panel,paddingVertical:8}}>
       {(['dashboard','apps','settings',...(account.admin?['admin']:[])]).map(id=>{const page=pages.find(page=>page[0]===id)!;
         const selected=id==='dashboard'?!['apps','permissions','developer','settings','support','mail-clients','admin'].includes(tab[0]):id==='apps'?['apps','permissions','developer'].includes(tab[0]):id==='settings'?['settings','support','mail-clients'].includes(tab[0]):tab[0]==='admin';
-        return <Pressable key={id} accessibilityRole="tab" accessibilityState={{selected}} onPress={()=>{setTab(page);setDeveloper(false);setSampleMode(false);taps.current=0;}}
+        return <Pressable key={id} accessibilityRole="tab" accessibilityState={{selected}} onPress={()=>{setTab(page);setSampleMode(false);}}
           style={{flex:1,alignItems:'center',justifyContent:'center',minHeight:52,gap:3,backgroundColor:selected?colors.soft:colors.panel,borderRadius:12}}>
           <Ionicons name={page[2]} size={23} color={selected?colors.accent:colors.muted}/><Text style={{color:selected?colors.accent:colors.muted,fontSize:12}}>{id==='dashboard'?'Account':accountMessage(id,page[1])}</Text>
         </Pressable>;})}

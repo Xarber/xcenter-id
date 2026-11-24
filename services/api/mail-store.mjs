@@ -111,6 +111,19 @@ export function openMailStore({ accountsPath, mailPath, configuration,accountSer
   }
 
   return {
+    removeAccount(owner){
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        db.prepare('DELETE FROM mail_items WHERE id IN (SELECT id FROM inbox WHERE owner=?)').run(owner);
+        db.prepare('DELETE FROM inbox_trust WHERE id IN (SELECT id FROM inbox WHERE owner=?)').run(owner);
+        db.prepare('DELETE FROM support_replies WHERE request IN (SELECT id FROM support_requests WHERE owner=?)').run(owner);
+        db.prepare('DELETE FROM support_requests WHERE owner=?').run(owner);
+        db.prepare('DELETE FROM inbox WHERE owner=?').run(owner);
+        db.prepare('UPDATE aliases SET active=0 WHERE owner=?').run(owner);
+        db.prepare('INSERT OR IGNORE INTO revoked_premium_aliases SELECT id FROM premium_aliases WHERE owner=?').run(owner);
+        db.exec('COMMIT');
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    },
     resolveRecipient,
     maskedAvailable: domains.has('hme.xcenter.it'),
     premiumAvailable: domains.has('mail.xcenter.it'),

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash,randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
 export function openRegistry(path) {
@@ -38,7 +38,8 @@ export function openRegistry(path) {
     developer_name=excluded.developer_name,icon=excluded.icon`);
   const readRequirements=db.prepare("SELECT email,age_range FROM app_requirements WHERE id=?");
   const isLocal=db.prepare("SELECT 1 FROM app_local_registrations WHERE id=?");
-  const appView=row=>row?{...row,description:row.description??'',repository:row.repository??'',
+  const iconPath=(id,icon)=>'/public/app-icons/'+id+'?v='+createHash('sha256').update(icon).digest('hex').slice(0,16);
+  const appView=row=>row?{...row,...(row.status==='active'&&row.icon?{iconUrl:iconPath(row.id,row.icon)}:{}),description:row.description??'',repository:row.repository??'',
     callbacks:row.callbacks?JSON.parse(row.callbacks):[row.callback],verified:!!row.verified,...(row.id?{requirements:requirements(row.id),local:!!isLocal.get(row.id)}:{})}:undefined;
   const requirements=id=>{const row=readRequirements.get(id);return {email:!!row?.email,age_range:!!row?.age_range};};
   const detailByClient=db.prepare(`SELECT c.id,c.name,c.callback,p.callbacks FROM clients c LEFT JOIN app_profiles p ON p.id=c.id
@@ -61,6 +62,15 @@ export function openRegistry(path) {
     return {allowed,canRequest:!allowed&&!!policy.requests,pending:!allowed&&membership.get(policy.id,owner)?.approved===0};
   };
   return {
+    removeAccount(owner){
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        db.prepare("UPDATE clients SET status='revoked' WHERE developer=?").run(owner);
+        for(const table of ['developer_profiles','developer_github_profiles'])db.prepare('DELETE FROM '+table+' WHERE owner=?').run(owner);
+        db.prepare('DELETE FROM app_access_members WHERE account=? OR id IN (SELECT id FROM clients WHERE developer=?)').run(owner,owner);
+        db.exec('COMMIT');
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    },
     access,
     readerTrust(id){return db.prepare('SELECT mode FROM app_reader_trust WHERE id=?').get(id)?.mode??'secure';},
     setReaderTrust(owner,id,mode){
@@ -104,10 +114,12 @@ export function openRegistry(path) {
     },
     registration:id=>db.prepare('SELECT c.id,c.client,c.developer,c.status,p.verified FROM clients c LEFT JOIN app_profiles p ON p.id=c.id WHERE c.id=?').get(id),
     clientForId:id=>db.prepare('SELECT client FROM clients WHERE id=?').get(id)?.client,
-    brand: (client) => db.prepare(`SELECT c.developer AS owner,c.name,coalesce(nullif(d.name,''),b.developer_name) AS developerName,
+    icon:id=>db.prepare(`SELECT b.icon FROM client_brand b JOIN clients c USING(id) WHERE c.id=? AND c.status='active' AND c.id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)`).get(id)?.icon,
+    brand: (client) => db.prepare(`SELECT c.id,c.developer AS owner,c.name,coalesce(nullif(d.name,''),b.developer_name) AS developerName,
       b.icon,p.description,p.repository,p.verified,EXISTS(SELECT 1 FROM app_local_registrations l WHERE l.id=c.id) AS local,d.status AS developerStatus,r.email AS requiresEmail,r.age_range AS requiresAgeRange
       FROM clients c LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN app_profiles p ON p.id=c.id
-      LEFT JOIN developer_profiles d ON d.owner=c.developer LEFT JOIN app_requirements r ON r.id=c.id WHERE c.client=? AND c.status='active' AND c.id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)`).get(client),
+      LEFT JOIN developer_profiles d ON d.owner=c.developer LEFT JOIN app_requirements r ON r.id=c.id WHERE c.client=? AND c.status='active' AND c.id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)`).all(client)
+      .map(row=>({...row,iconUrl:row.icon?iconPath(row.id,row.icon):null}))[0],
     publicDetails: client=>appView(detailByClient.get(client)),
     developer: developerView, hasDeveloper,
     saveRequirements(owner,id,input){
@@ -147,9 +159,9 @@ export function openRegistry(path) {
       }catch(error){db.exec('ROLLBACK');throw error;}
     },
     administration:()=>({
-      apps:db.prepare(`SELECT c.id,c.name,c.callback,c.status,p.description,p.repository,p.verified,d.name AS developerName
-        FROM clients c LEFT JOIN app_profiles p ON p.id=c.id LEFT JOIN developer_profiles d ON d.owner=c.developer
-        ORDER BY c.status,c.name LIMIT 300`).all().map(app=>({...app,verified:!!app.verified})),
+      apps:db.prepare(`SELECT c.id,c.name,c.callback,c.status,p.description,p.repository,p.verified,b.icon,d.name AS developerName
+        FROM clients c LEFT JOIN app_profiles p ON p.id=c.id LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN developer_profiles d ON d.owner=c.developer
+        ORDER BY c.status,c.name LIMIT 300`).all().map(app=>({...app,icon:app.status==='active'&&app.icon?iconPath(app.id,app.icon):app.icon,verified:!!app.verified})),
       developers:db.prepare(`WITH developer_owners(owner) AS (
           SELECT owner FROM developer_profiles UNION SELECT developer FROM clients WHERE status<>'revoked'
         )

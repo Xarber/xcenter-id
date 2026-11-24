@@ -1,4 +1,5 @@
-import { uploadFileBatch } from './file-upload-batch';
+import {useFileTransfers} from './file-transfers';
+import {destinationLabels,type FolderDestination} from './file-destinations';
 import AppFileContainer from './AppFileContainer.web';
 import type { AppFileContainer as Container } from './account-file-containers';
 import TrustBadges from './TrustBadges.web';
@@ -12,8 +13,8 @@ import { accountMessage } from './account-locale';
 import type { Friend } from './friends-model';
 import type { MailMessage, PrivateAddress } from './mail-message';
 import { formatBytes, storageCategories } from './storage-summary';
-import { Database, Bold, Italic, Paperclip, UserRound, Grid2X2, BadgeCheck, Download, File, FileUp, Folder, FolderPlus, Pencil, Check, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
-import { Fragment as FileTableRows, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { Database, Bold, Italic, Paperclip, UserRound, Grid2X2, BadgeCheck, File, FileUp, Folder, FolderInput, FolderPlus, Pencil, Check, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
+import { Fragment as FileTableRows, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { api, fileAsBase64, type Account } from './web-account';
 
 function notice(error:unknown) { return error instanceof Error ? error.message : 'Could not complete this action.'; }
@@ -55,29 +56,84 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
   const [renaming,setRenaming]=useState<{id:string;name:string}|null>(null);
   const [sharing,setSharing]=useState('');
   const [friends,setFriends]=useState<Friend[]>([]);
-  const query=new URLSearchParams(window.location.search);
+  const [query,setQuery]=useState(()=>new URLSearchParams(window.location.search));
   const container=summary?null:query.get('app');
   const folder=summary||container?null:query.get('folder');
+  const currentFolder=useRef(folder);
+  currentFolder.current=folder;
+  const transfers=useFileTransfers();
+  const [moving,setMoving]=useState<{id:string;name:string;folder:boolean}|null>(null);
+  const [destinations,setDestinations]=useState<FolderDestination[]>([]);
+  const [dragging,setDragging]=useState(false);
+  const [dropTarget,setDropTarget]=useState<string|null>(null);
+  const dragged=useRef<typeof moving>(null);
+  const moveDialog=useRef<HTMLDialogElement>(null);
   const folderPath=(id:string|null)=>id?'/files?folder='+encodeURIComponent(id):'/files';
-  async function load(){setState(await api('files'+(folder?'?folder='+encodeURIComponent(folder):'')));}
+  async function load(){
+    const target=currentFolder.current;
+    const next=await api('files'+(target?'?folder='+encodeURIComponent(target):''));
+    if(currentFolder.current===target)setState(next);
+  }
+  function goTo(target:string|null){
+    history.pushState(null,'',folderPath(target));
+    setQuery(new URLSearchParams(window.location.search));
+  }
   function change(operation:()=>Promise<unknown>, message:string){
     setBusy(true);
     setStatus('');
     void operation().then(load).then(()=>{setConfirm('');setCreating(false);setRenaming(null);setStatus(message);})
       .catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
   }
-  useEffect(()=>{void load().catch(error=>setStatus(notice(error)));},[]);
+  useEffect(()=>{
+    const sync=()=>setQuery(new URLSearchParams(window.location.search));
+    window.addEventListener('popstate',sync);
+    return ()=>window.removeEventListener('popstate',sync);
+  },[]);
+  useEffect(()=>{void load().catch(error=>setStatus(notice(error)));},[folder]);
+  useEffect(()=>{if(moving)moveDialog.current?.showModal();},[moving]);
+  function add(files:FileList|File[]){
+    if(!files.length)return;
+    setStatus('');
+    transfers.add(Array.from(files,file=>({name:file.name,size:file.size,read:(offset,size)=>fileAsBase64(file.slice(offset,offset+size))})),
+      folder,api,()=>void load().catch(error=>setStatus(notice(error))),error=>setStatus(notice(error)));
+  }
   function upload(event:ChangeEvent<HTMLInputElement>){
-    const files=Array.from(event.target.files??[]);
+    if(event.target.files)add(event.target.files);
     event.target.value='';
-    if(!files.length||busy)return;
-    setBusy(true);
-    setStatus('Uploading files…');
-    void uploadFileBatch(files.map(file=>({name:file.name,read:()=>{
-      if(file.size<1||file.size>2*1024*1024)throw new Error('File size is outside the allowed range.');
-      return fileAsBase64(file);
-    }})),(name,content)=>api('files',{name,content,folder}))
-      .then(async message=>{await load();setStatus(message);}).catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
+  }
+  function move(entry:NonNullable<typeof moving>,target:string|null){
+    if(target===folder)return;
+    change(()=>api('files/'+(entry.folder?'folders/':'')+entry.id,{folder:target},'PATCH'),entry.name+' moved.');
+  }
+  function chooseMove(entry:NonNullable<typeof moving>){
+    void api('files/destinations').then(result=>{setDestinations(result.folders);setMoving(entry);}).catch(error=>setStatus(notice(error)));
+  }
+  function startDrag(event:DragEvent,entry:NonNullable<typeof moving>){
+    if(busy){event.preventDefault();return;}
+    dragged.current=entry;
+    event.dataTransfer.effectAllowed='move';
+    event.dataTransfer.setData('application/x-xcenter-file',entry.id);
+  }
+  function drop(event:DragEvent,target=folder){
+    event.preventDefault();
+    event.stopPropagation();
+    setDragging(false);
+    setDropTarget(null);
+    if(event.dataTransfer.files.length){
+      if(target===folder)add(event.dataTransfer.files);
+      else transfers.add(Array.from(event.dataTransfer.files,file=>({name:file.name,size:file.size,read:(offset,size)=>fileAsBase64(file.slice(offset,offset+size))})),
+        target,api,()=>void load().catch(error=>setStatus(notice(error))),error=>setStatus(notice(error)));
+    }else if(dragged.current&&!busy&&dragged.current.id!==target&&event.dataTransfer.getData('application/x-xcenter-file')===dragged.current.id){
+      move(dragged.current,target);
+    }
+    dragged.current=null;
+  }
+  function folderTarget(target:string|null){
+    return {
+      onDragOver:(event:DragEvent)=>{event.preventDefault();event.stopPropagation();setDropTarget(target??'root');},
+      onDragLeave:()=>setDropTarget(null),
+      onDrop:(event:DragEvent)=>drop(event,target),
+    };
   }
   function nameField(label:string,value:string,submit:(name:string)=>void,cancel:()=>void){
     return <form className="xc-file-name-form" onSubmit={event=>{
@@ -95,7 +151,12 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
     if(app)return <AppFileContainer app={app}/>;
     return <section className="xc-card xc-pad"><a href="/files">Back to your files</a><p role="status">{status||(state?'App folder unavailable.':'Loading folder…')}</p></section>;
   }
-  return <section className="xc-card xc-pad">
+  return <section className="xc-card xc-pad" data-file-drop={dragging||undefined}
+    onDragOver={summary?undefined:event=>{
+      if(event.dataTransfer.types.includes('Files')){event.preventDefault();setDragging(true);}
+    }}
+    onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node|null))setDragging(false);}}
+    onDrop={summary?undefined:event=>drop(event)}>
     <div className="xc-row-head"><span className="xc-symbol xc-lavender">{summary?<HardDrive size={21}/>:<File size={21}/>}</span>
       <div><h2>{summary?'Account storage':'Your private files'}</h2><p>{summary?'Files, app containers and other data in this account.':'Uploads are available only in your X-Center ID account.'}</p></div></div>
     {state && summary && <><div className="xc-storage"><strong>{formatBytes(state.used)}</strong><span> of {formatBytes(state.limit)} used</span></div>
@@ -111,8 +172,8 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
     {!summary && <>
       <div className="xc-file-toolbar">
         <nav className="xc-actions xc-file-path" aria-label="Current folder">
-          <a href={folderPath(null)} aria-current={folder?undefined:'page'}>Your files</a>
-          {state?.breadcrumbs.map(item=><a key={item.id} href={folderPath(item.id)} aria-current={item.id===folder?'page':undefined}>{item.name}</a>)}
+          <a href={folderPath(null)} {...folderTarget(null)} data-file-target={dropTarget==='root'||undefined} onClick={event=>{event.preventDefault();goTo(null);}} aria-current={folder?undefined:'page'}>Your files</a>
+          {state?.breadcrumbs.map(item=><a key={item.id} href={folderPath(item.id)} {...folderTarget(item.id)} data-file-target={dropTarget===item.id||undefined} onClick={event=>{event.preventDefault();goTo(item.id);}} aria-current={item.id===folder?'page':undefined}>{item.name}</a>)}
         </nav>
         <label className="xc-file-icon" title="Upload files"><FileUp size={19} aria-hidden="true"/>
           <input className="xc-sr" type="file" multiple aria-label="Upload files" disabled={busy} onChange={upload}/>
@@ -125,24 +186,34 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
           {nameField('New folder name','',name=>change(()=>api('files/folders',{name,folder}),'Folder created.'),()=>setCreating(false))}
           </div>:<button type="button" className="xc-file-new" onClick={()=>{setCreating(true);setRenaming(null);}} disabled={busy}><FolderPlus size={18}/> New folder</button>}</td></tr>
         {!folder&&state?.appContainers?.filter(app=>app.showInFiles).map(app=><tr key={app.client}>
-          <td>{app.canManage?<a className="xc-file-name" href={'/files?app='+encodeURIComponent(app.client)}><AppIcon icon={app.icon}/><strong>{app.name}</strong></a>
-            :<div className="xc-file-name"><AppIcon icon={app.icon}/><strong>{app.name}</strong></div>}</td>
+          <td>{app.canManage?<a className="xc-file-name" href={'/files?app='+encodeURIComponent(app.client)}><AppIcon icon={app.icon} compact/><strong>{app.name}</strong></a>
+            :<div className="xc-file-name"><AppIcon icon={app.icon} compact/><strong>{app.name}</strong></div>}</td>
           <td>{formatBytes(app.bytes)}</td><td className="xc-file-date">—</td><td/>
         </tr>)}
-        {state?.folders.map(item=><tr key={item.id}>
+        {state?.folders.map(item=><tr key={item.id} draggable={!renaming&&!busy} {...folderTarget(item.id)}
+          data-file-target={dropTarget===item.id||undefined} onDragStart={event=>startDrag(event,{...item,folder:true})} onDragEnd={()=>{dragged.current=null;setDropTarget(null);}}>
           <td>{renaming?.id===item.id?<div className="xc-file-name"><Folder size={18}/>
             {nameField('Folder name',renaming.name,name=>change(()=>api('files/folders/'+item.id,{name},'PATCH'),'Folder renamed.'),()=>setRenaming(null))}
-          </div>:<a className="xc-file-name" href={folderPath(item.id)}><Folder size={18}/><strong>{item.name}</strong></a>}</td>
+          </div>:<a className="xc-file-name" href={folderPath(item.id)} onClick={event=>{event.preventDefault();goTo(item.id);}}><Folder size={18}/><strong>{item.name}</strong></a>}</td>
           <td>—</td><td className="xc-file-date">—</td><td><div className="xc-file-actions">
             <button className="xc-file-icon" aria-label={'Rename '+item.name} onClick={()=>{setCreating(false);setRenaming(item);}} disabled={busy}><Pencil size={16}/></button>
+            <button type="button" className="xc-file-icon" aria-label={'Move '+item.name} disabled={busy} onClick={()=>chooseMove({...item,folder:true})}><FolderInput size={16}/></button>
             <button type="button" className="xc-file-icon" disabled={busy} onClick={()=>{
               if(confirm!==item.id){setConfirm(item.id);return;}
               change(()=>api('files/folders/'+item.id,{},'DELETE'),'Folder removed.');
             }} aria-label={confirm===item.id?'Confirm permanently removing '+item.name:'Remove folder '+item.name}>{confirm===item.id?<Check size={16}/>:<Trash2 size={16}/>}</button>
           </div></td>
         </tr>)}
+        {transfers.rows.filter(row=>row.folder===folder).map(row=><tr key={'upload-'+row.key}>
+          <td><div className="xc-file-name"><File size={18}/><strong>{row.name}</strong></div></td><td>{formatBytes(row.size)}</td>
+          <td className="xc-file-date">—</td><td><div className="xc-file-actions xc-transfer">
+            <div><progress aria-label={'Upload progress for '+row.name} max={Math.max(row.size,1)} value={row.sent}/>
+              <small>{row.size?Math.floor(row.sent/row.size*100):0}% ({formatBytes(row.sent)} / {formatBytes(row.size)})</small></div>
+            <button type="button" className="xc-file-icon" disabled={row.finishing} aria-label={'Cancel upload of '+row.name} onClick={()=>transfers.cancel(row.key)}><X size={16}/></button>
+          </div></td>
+        </tr>)}
         {state?.files.map(file=><FileTableRows key={file.id}>
-          <tr>
+          <tr draggable={!renaming&&!busy} onDragStart={event=>startDrag(event,{...file,folder:false})} onDragEnd={()=>{dragged.current=null;setDropTarget(null);}}>
             <td>{renaming?.id===file.id?<div className="xc-file-name"><File size={18}/>
               {nameField('File name',renaming.name,name=>change(()=>api('files/'+file.id,{name},'PATCH'),'File renamed.'),()=>setRenaming(null))}
             </div>:<a className="xc-file-name" href={'/account/files/'+file.id}><File size={18}/><strong>{file.name}</strong></a>}</td>
@@ -154,7 +225,7 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
                 setSharing(file.id);setFriends([]);
                 void api('friends').then(result=>setFriends(result.friends)).catch(error=>setStatus(notice(error)));
               }}><UserRound size={16}/></button>
-              <a className="xc-file-icon" href={'/account/files/'+file.id} aria-label={'Download '+file.name}><Download size={16}/></a>
+              <button type="button" className="xc-file-icon" aria-label={'Move '+file.name} disabled={busy} onClick={()=>chooseMove({...file,folder:false})}><FolderInput size={16}/></button>
               <button type="button" className="xc-file-icon" disabled={busy} onClick={()=>{
                 if(confirm!==file.id){setConfirm(file.id);return;}
                 change(()=>api('files/'+file.id,{},'DELETE'),'File removed.');
@@ -169,8 +240,20 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
         </FileTableRows>)}
         </tbody>
       </table>
-      {state?.files.length===0 && state.folders.length===0 && (folder||!state.appContainers?.some(app=>app.showInFiles)) && <div className="xc-empty">This folder is empty.</div>}
+      {transfers.rows.every(row=>row.folder!==folder)&&state?.files.length===0 && state.folders.length===0 && (folder||!state.appContainers?.some(app=>app.showInFiles)) && <div className="xc-empty">This folder is empty.</div>}
     </>}
+    {moving&&<dialog className="xc-intro xc-release-dialog" ref={moveDialog} aria-labelledby="move-heading" onCancel={event=>{event.preventDefault();setMoving(null);}}>
+      <h2 id="move-heading">Move {moving.name}</h2>
+      <form className="xc-stack" onSubmit={event=>{
+        event.preventDefault();
+        const target=String(new FormData(event.currentTarget).get('destination')??'');
+        move(moving,target||null);setMoving(null);
+      }}><label>Destination <select name="destination" defaultValue={folder??''}>
+        <option value="">Your files</option>
+        {destinationLabels(destinations,moving.folder?moving.id:undefined).map(item=><option key={item.id} value={item.id}>{item.label}</option>)}
+      </select></label><div className="xc-actions"><button type="button" className="xc-button xc-secondary" onClick={()=>setMoving(null)}>Cancel</button>
+        <button className="xc-button xc-primary" type="submit">Move</button></div></form>
+    </dialog>}
     {status && <p role="status">{status}</p>}
   </section>;
 }
@@ -359,7 +442,7 @@ export function MailPage({ account }:{account:Account}) {
   </section>;
 }
 
-type AdminApp={id:string;name:string;status:string;callback:string;developerName?:string;repository?:string;verified:boolean};
+type AdminApp={icon?:string|null;id:string;name:string;status:string;callback:string;developerName?:string;repository?:string;verified:boolean};
 type AdminDeveloper={owner:string;name:string;status:string;githubProfile?:string};
 function AdminContent() {
   const [apps,setApps]=useState<AdminApp[]>([]);
@@ -392,8 +475,8 @@ function AdminContent() {
     <section className="xc-card xc-pad"><div className="xc-row-head"><BadgeCheck size={21}/><h2>Registered apps</h2></div>
       {apps.length===0&&<p className="xc-empty">No registered developer apps.</p>}
       {apps.filter(app=>app.status!=='revoked').map(app=><div className="xc-list-row xc-permission-row" key={app.id}>
-        <div><strong className="xc-identity-label">{app.name}<TrustBadges compact kind="app" verified={app.verified}/></strong><p>{app.developerName??'Developer'} · {app.status}</p>
-          <p>{new URL(app.callback).hostname}</p>{app.repository&&<a href={app.repository} rel="noreferrer" target="_blank">Review repository</a>}</div>
+        <div className="xc-row-head"><AppIcon icon={app.icon}/><div><strong className="xc-identity-label">{app.name}<TrustBadges compact kind="app" verified={app.verified}/></strong><p>{app.developerName??'Developer'} · {app.status}</p>
+          <p>{new URL(app.callback).hostname}</p>{app.repository&&<a href={app.repository} rel="noreferrer" target="_blank">Review repository</a>}</div></div>
         <div className="xc-actions xc-registration-actions">{app.status==='active'&&app.verified&&<a className="xc-button xc-secondary" href={'/developer/storage/'+app.id+'?from=admin'}><Database size={17}/> Manage app storage</a>}
         {app.status!=='revoked'&&<IconAction label={app.verified?'Remove verification':'Verify app'} disabled={busy}
           onClick={()=>save('admin/apps',{type:'app',id:app.id,verified:!app.verified},'App verification updated.')}><BadgeCheck size={20}/></IconAction>}</div>

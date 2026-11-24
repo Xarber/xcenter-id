@@ -221,3 +221,38 @@ test('live admin delegation, user verification and public profile flags enforce 
   assert.deepEqual(accounts.publicProfile('fixture'),{username:'fixture',givenName:'Test'});
  }finally{await new Promise(resolve=>server.close(resolve));db.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+test('browser can switch only among its own saved sessions and self-deletion preserves other accounts',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'authnjs-switcher-'));
+  const database=join(dir,'accounts.sqlite');
+  const origin='https://id.example.test';
+  const purged=[];
+  const service=createAccounts({database,origin,purgeAccount:owner=>purged.push(owner)});
+  const db=new DatabaseSync(database);
+  const timestamp=Date.now();
+  const first='a'.repeat(43),second='b'.repeat(43),old='c'.repeat(43);
+  db.exec("INSERT INTO accounts VALUES ('one','First user',0),('two','Second user',0); INSERT INTO identity_profiles VALUES ('one','firstuser','First','User','adult'),('two','seconduser','Second','User','adult');");
+  const insert=db.prepare('INSERT INTO account_sessions VALUES (?,?,?,?)');
+  for(const [value,owner,age] of [[first,'one',0],[second,'two',0],[old,'two',400_000]])insert.run(createHash('sha256').update(value).digest('hex'),owner,timestamp-age,timestamp+600_000);
+  const server=createServer((req,res)=>void service.handle(req,res,req.url)).listen(0,'127.0.0.1');
+  await once(server,'listening');
+  const base='http://127.0.0.1:'+server.address().port+'/account/';
+  const call=(path,cookie,data)=>fetch(base+path,{method:data?'POST':'GET',body:data&&JSON.stringify(data),
+    headers:{cookie,origin,'content-type':'application/json','x-authnjs-request':'account-consent'}});
+  const cookies='__Host-authnjs='+first+'; __Host-authnjs-switcher='+second;
+  try{
+    const list=await (await call('switcher',cookies)).json();
+    assert.deepEqual(list.accounts.map(({username,current})=>[username,current]),[['firstuser',true],['seconduser',false]]);
+    assert.equal((await call('switcher','__Host-authnjs='+first,{slot:1})).status,404);
+    const select=await call('switcher',cookies,{slot:1});
+    assert.equal(select.status,200);
+    assert.ok(select.headers.getSetCookie().some(item=>item.startsWith('__Host-authnjs='+second+';')));
+    assert.equal((await call('delete','__Host-authnjs='+old,{confirmation:'seconduser'})).status,403);
+    assert.equal((await call('delete',cookies,{confirmation:'seconduser'})).status,422);
+    assert.equal((await call('delete',cookies,{confirmation:'firstuser'})).status,200);
+    assert.deepEqual(purged,['one']);
+    assert.equal((await (await call('me',cookies)).json()).account,null);
+    assert.equal((await (await call('me','__Host-authnjs='+second)).json()).account.profile.username,'seconduser');
+    assert.deepEqual((await (await call('switcher',cookies)).json()).accounts.map(({username})=>username),['seconduser']);
+  }finally{await new Promise(resolve=>server.close(resolve));db.close();rmSync(dir,{recursive:true,force:true});}
+});

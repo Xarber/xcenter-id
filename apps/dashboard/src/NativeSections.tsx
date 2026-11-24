@@ -1,4 +1,5 @@
-import { uploadFileBatch } from './file-upload-batch';
+import {useFileTransfers} from './file-transfers';
+import {destinationLabels,type FolderDestination} from './file-destinations';
 import AppFileContainer from './AppFileContainer';
 import type { AppFileContainer as Container } from './account-file-containers';
 import NativeAdminInventory from './NativeAdminInventory';
@@ -23,7 +24,7 @@ import BirthdayPicker from './BirthdayPicker';
 import type { MailMessage, PrivateAddress } from './mail-message';
 import { pickDocumentAsync, pickDocumentsAsync, pickProfilePhoto, shareDownload } from './native-files';
 import { Alert, AppState, Image, KeyboardAvoidingView, Modal, Platform, Pressable, Share, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AccountRequestError, accountHost, nativeRequest, nativeReauthenticate } from './native-account';
@@ -119,9 +120,20 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [sharing,setSharing]=useState('');
   const [files,setFiles]=useState<Files|null>(null);
   const [folder,setFolder]=useState<string|null>(null);
+  const visibleFolder=useRef(folder);
+  visibleFolder.current=folder;
+  async function refreshFiles(){
+    const target=visibleFolder.current;
+    const next=await api('files'+(target?'?folder='+encodeURIComponent(target):''));
+    if(visibleFolder.current===target)setFiles(next);
+  }
   const [folderName,setFolderName]=useState('');
   const [creatingFolder,setCreatingFolder]=useState(false);
   const [renameEntry,setRenameEntry]=useState<{id:string;name:string}|null>(null);
+  const transfers=useFileTransfers();
+  const [movingFile,setMovingFile]=useState<{id:string;name:string;folder:boolean}|null>(null);
+  const [fileDestinations,setFileDestinations]=useState<FolderDestination[]>([]);
+  const [moveTarget,setMoveTarget]=useState<string|null>(null);
   const [picture,setPicture]=useState<string|null|undefined>(undefined);
   const [givenName,setGiven]=useState(account.profile?.givenName??'');
   const [surname,setSurname]=useState(account.profile?.surname??'');
@@ -138,7 +150,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [attachment,setAttachment]=useState<{name:string;content:string}|undefined>();
   const [busy,setBusy]=useState(false);
   const [status,setStatus]=useState('');
-  const api=(path:string,data?:object,method?:string)=>nativeRequest(path,token,data,method);
+  const api=(path:string,data?:object,method?:string,signal?:AbortSignal)=>nativeRequest(path,token,data,method,signal);
   const filesPath='files'+(folder?'?folder='+encodeURIComponent(folder):'');
 
   function report(error:unknown) {
@@ -340,40 +352,28 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       content=<DeveloperPortal back={()=>navigate('apps')} token={token} colors={colors}/>;
       break;
     case 'permissions': {
-      const appName=(id:string)=>apps.find(app=>app.client===id)?.label??published.find(app=>app.client===id)?.name??id;
-      const grantText=(expires:number)=>expires===Number.MAX_SAFE_INTEGER?'Until revoked':'Expires '+date(expires);
-      const change=(route:string,grant:Pick<Grant,'source'|'destination'>,method:string,persistent=false)=>
-        run(()=>mutate(route,{...grant,persistent,expires:Date.now()+86_400_000},method),method==='DELETE'?'Access revoked.':'Access allowed.');
       const selected=apps.find(app=>app.client===permissionClient);
       if(selected){
-        content=<>{button('All apps',()=>setPermissionClient(''))}
-          <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>{selected.label}</Text>
+        content=<>{button('All linked apps',()=>setPermissionClient(''))}
+          <View style={styles.actions}><AppIcon icon={selected.icon} color={colors.accent}/>
+            <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>{selected.label}</Text></View>
           <LinkedAppPermissions key={selected.client} client={selected.client} token={token} colors={colors}/>
-          <HostedDataPermissions token={token} colors={colors} client={selected.client}/></>;
+          <HostedDataPermissions token={token} colors={colors} client={selected.client}/>
+          {grants.filter(grant=>grant.source===selected.client||grant.destination===selected.client).map(grant=>{
+            const other=grant.source===selected.client?grant.destination:grant.source;
+            return row(grant.source+grant.destination,apps.find(app=>app.client===other)?.label??'Another app',
+              'Previously shared data',button('Revoke access',()=>run(()=>mutate('data-grants',grant,'DELETE'),'Access revoked.')));
+          })}</>;
         break;
       }
-      content=<>{apps.map(app=><View key={app.client} style={{gap:12}}>
-        <AppIcon key={app.icon} icon={app.icon} color={colors.accent}/>
-        <View style={{flexShrink:1,gap:4}}><Text style={{color:colors.ink,fontWeight:'700'}}>{app.label}</Text>
-          <TrustBadges kind="app" verified={app.verified} color={colors.ink}/>
-          {!!app.description&&paragraph(app.description)}</View>
-        {button('Manage permissions for '+app.label,()=>setPermissionClient(app.client))}
-      </View>)}<HostedDataPermissions token={token} colors={colors}/>{grants.map(grant=>row(grant.source+grant.destination,appName(grant.source)+' → '+appName(grant.destination),
-        'Saved places · '+grantText(grant.expires),button('Revoke access',()=>change('data-grants',grant,'DELETE'))))}
-        {published.length>1&&<>{paragraph('Choose the app that owns the records')}{published.map(app=><View key={app.client}>
-          {button((source===app.client?'✓ ':'')+app.name,()=>{setSource(app.client);setDestination('');})}</View>)}
-          {source&&<>{paragraph('Choose which app can read them')}{published.filter(app=>app.client!==source).map(app=><View key={app.client}>
-            {button((destination===app.client?'✓ ':'')+app.name,()=>setDestination(app.client))}</View>)}</>}
-          {destination&&<View style={styles.actions}>
-            {button('Allow for one day',()=>change('data-grants',{source,destination},'PUT'))}
-            {button('Allow until revoked',()=>change('data-grants',{source,destination},'PUT',true))}
-          </View>}</>}
-        {sampleGrants.map(grant=>row(grant.source+grant.destination,grant.app+' · '+grant.sourceName,
-          (grant.shared?'Read and write':'Read only')+(grant.expires?' · '+grantText(grant.expires):''),grant.expires
-            ?button('Revoke access',()=>change('sample-grants',grant,'DELETE'))
-            :<View style={styles.actions}>{button('Allow for one hour',()=>change('sample-grants',grant,'PUT'))}
-              {button('Allow until revoked',()=>change('sample-grants',grant,'PUT',true))}</View>))}
-      </>;
+      content=<>{!apps.length&&paragraph('No linked apps.')}
+        {apps.map(app=><Pressable key={app.client} accessibilityRole="button" onPress={()=>setPermissionClient(app.client)}
+          style={{paddingVertical:12,gap:12,flexDirection:'row',alignItems:'center',borderBottomWidth:1,borderColor:colors.line}}>
+          <AppIcon icon={app.icon} color={colors.accent}/>
+          <View style={{flex:1,gap:4}}><Text style={{color:colors.ink,fontWeight:'700'}}>{app.label}</Text>
+            <TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View>
+          <Ionicons name="chevron-forward" size={18} color={colors.muted}/>
+        </Pressable>)}</>;
       break;
     }
     case 'storage':
@@ -416,18 +416,38 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         if(!folderName.trim())return;
         run(async()=>{await mutate('files/folders',{name:folderName.trim(),folder});setFolderName('');setCreatingFolder(false);},'Folder created.');
       }
+      function chooseMove(item:{id:string;name:string},isFolder:boolean){
+        void api('files/destinations').then(result=>{
+          setFileDestinations(result.folders);setMoveTarget(folder);setMovingFile({...item,folder:isFolder});
+        }).catch(report);
+      }
       content=<>
+        <Modal visible={!!movingFile} onRequestClose={()=>setMovingFile(null)} presentationStyle="pageSheet">
+          <SafeAreaView style={{flex:1,backgroundColor:colors.panel}}>
+            <ScrollView contentContainerStyle={{padding:20,gap:10}}>
+              {movingFile&&<>
+                <Text accessibilityRole="header" style={{fontSize:21,fontWeight:'700',color:colors.ink}}>Move {movingFile.name}</Text>
+                {[{id:null,label:'Your files'},...destinationLabels(fileDestinations,movingFile.folder?movingFile.id:undefined)].map(item=>
+                  <Pressable key={item.id??'root'} accessibilityRole="radio" accessibilityState={{checked:moveTarget===item.id}} onPress={()=>setMoveTarget(item.id)}
+                    style={{minHeight:46,justifyContent:'center',paddingHorizontal:10,backgroundColor:moveTarget===item.id?colors.soft:colors.panel}}>
+                    <Text style={{color:colors.ink}}>{item.label}</Text>
+                  </Pressable>)}
+                <View style={styles.actions}>{button('Cancel',()=>setMovingFile(null))}
+                  {button('Move',()=>run(async()=>{
+                    await mutate('files/'+(movingFile.folder?'folders/':'')+movingFile.id,{folder:moveTarget},'PATCH');
+                    setMovingFile(null);
+                  },'Item moved.'),busy||folder===moveTarget)}</View>
+              </>}
+            </ScrollView>
+          </SafeAreaView>
+        </Modal>
         <View style={styles.finderToolbar}><View style={[styles.actions,{flex:1}]}>
           {button('Your files',()=>openFolder(null))}
           {files?.breadcrumbs.map(item=><View key={item.id}>{button(item.name,()=>openFolder(item.id))}</View>)}
         </View>
-        {icon('Upload files','cloud-upload-outline',()=>{if(busy)return;setBusy(true);setStatus('');void (async()=>{
-          const selected=await pickDocumentsAsync();
-          if(!selected.length)return;
-          const report=await uploadFileBatch(selected,(name,content)=>api('files',{name,content,folder}));
-          await load();
-          setStatus(report);
-        })().catch(report).finally(()=>setBusy(false));})}
+        {icon('Upload files','cloud-upload-outline',()=>{setStatus('');void pickDocumentsAsync().then(selected=>{
+          transfers.add(selected,folder,api,()=>void refreshFiles().catch(report),report);
+        }).catch(report);})}
         </View>
         <View style={fileLine}><Text accessibilityRole="header" style={[styles.finderName,{color:colors.muted}]}>Name</Text>
           <Text accessibilityRole="header" style={{color:colors.muted}}>Size</Text></View>
@@ -441,7 +461,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         </View>
         {!folder&&files?.appContainers?.filter(app=>app.showInFiles).map(app=>
           <Pressable accessibilityRole={app.canManage?"button":undefined} disabled={!app.canManage} key={app.client} onPress={()=>setFileContainer(app)} style={fileLine}>
-            <AppIcon icon={app.icon} color={colors.accent}/>
+            <AppIcon icon={app.icon} color={colors.accent} compact/>
             <Text style={[styles.finderName,{color:colors.ink,fontWeight:'700'}]}>{app.name}</Text>
             {paragraph(formatBytes(app.bytes))}
             {app.canManage&&<Ionicons accessible={false} name="chevron-forward" size={18} color={colors.muted}/>}
@@ -453,18 +473,31 @@ export default function NativeSections({ section,token,account,colors,reload,exp
               <Text style={{color:colors.ink,fontWeight:'700'}}>{item.name}</Text>
             </Pressable>}
           {icon('Rename '+item.name,'pencil-outline',()=>{setCreatingFolder(false);setRenameEntry(item);})}
+          {icon('Move '+item.name,'folder-open-outline',()=>chooseMove(item,true))}
           {icon('Remove folder '+item.name,'trash-outline',()=>confirm('Remove empty folder?','This action removes the folder.',
             ()=>run(()=>mutate('files/folders/'+item.id,{},'DELETE'),'Folder removed.')))}
         </View>)}
+        {transfers.rows.filter(row=>row.folder===folder).map(row=>{
+          const percent=row.size?Math.floor(row.sent/row.size*100):0;
+          return <View key={'upload-'+row.key} style={fileLine}>
+            <Ionicons name="document-outline" size={20} color={colors.accent}/>
+            <Text numberOfLines={2} style={[styles.finderName,{color:colors.ink,fontWeight:'700'}]}>{row.name}</Text>
+            <View style={{minWidth:94,gap:4}} accessibilityRole="progressbar" accessibilityLabel={'Upload '+row.name} accessibilityValue={{min:0,max:100,now:percent}}>
+              <View style={{height:4,borderRadius:3,backgroundColor:colors.line}}><View style={{height:4,borderRadius:3,width:`${percent}%`,backgroundColor:colors.accent}}/></View>
+              <Text style={{fontSize:11,color:colors.muted}}>{percent}% ({formatBytes(row.sent)} / {formatBytes(row.size)})</Text>
+            </View>
+            {!row.finishing&&icon('Cancel upload of '+row.name,'close-outline',()=>transfers.cancel(row.key))}
+          </View>;
+        })}
         {files?.files.map(item=><View key={item.id}>
           <View style={fileLine}>
             <Ionicons name="document-outline" size={20} color={colors.accent} accessible={false}/>
             {renameEntry?.id===item.id?renderNameEditor('File name',renameEntry.name,name=>setRenameEntry({...renameEntry,name}),()=>saveRename(item.id,false),()=>setRenameEntry(null)):
-              <View style={styles.finderName}><Text style={{color:colors.ink,fontWeight:'700'}}>{item.name}</Text>{paragraph(formatBytes(item.size))}</View>}
+              <Pressable accessibilityRole="button" style={styles.finderName} onPress={()=>run(()=>shareDownload('files/'+item.id,item.name,token))}><Text style={{color:colors.ink,fontWeight:'700'}}>{item.name}</Text>{paragraph(formatBytes(item.size))}</Pressable>}
             <View style={styles.finderActions}>
               {icon('Rename '+item.name,'pencil-outline',()=>{setCreatingFolder(false);setRenameEntry(item);})}
               {icon('Share '+item.name,'share-social-outline',()=>setSharing(value=>value===item.id?'':item.id))}
-              {icon('Download '+item.name,'download-outline',()=>run(()=>shareDownload('files/'+item.id,item.name,token)))}
+              {icon('Move '+item.name,'folder-open-outline',()=>chooseMove(item,false))}
               {icon('Remove '+item.name,'trash-outline',()=>confirm('Remove file?','This permanently removes the file.',
                 ()=>run(()=>mutate('files/'+item.id,{},'DELETE'),'File removed.')))}
             </View>
@@ -472,7 +505,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           {sharing===item.id&&(friends.length?friends.map(friend=><View key={friend.id}>{button('Share with @'+friend.username,
             ()=>run(async()=>{await api('files/shared',{file:item.id,friend:friend.id});setSharing('');},'Access granted.'))}</View>):paragraph('Invite a friend from Friends.'))}
         </View>)}
-        {files&&!files.files.length&&!files.folders.length&&(folder||!files.appContainers?.some(app=>app.showInFiles))&&paragraph('This folder is empty.')}
+        {transfers.rows.every(row=>row.folder!==folder)&&files&&!files.files.length&&!files.folders.length&&(folder||!files.appContainers?.some(app=>app.showInFiles))&&paragraph('This folder is empty.')}
       </>;
       break;
     }

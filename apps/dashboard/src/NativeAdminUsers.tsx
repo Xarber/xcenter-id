@@ -11,8 +11,8 @@ import {accountHost,nativeRequest} from './native-account';
 import type {ManagedAccount} from './support-model';
 
 type Colors=DashboardTheme;
-type User=ManagedAccount&{developerVerified?:boolean;admin:boolean;rootAdmin:boolean;verified:boolean;externalMailLimits?:{daily:number|null;monthly:number|null};name:string;devices:number;passkeys:number;apps:{client:string;label:string;verified?:boolean}[]};
-type App={verified:boolean;id:string;name:string;status:string;restricted:boolean};
+type User=ManagedAccount&{developerVerified?:boolean;admin:boolean;rootAdmin:boolean;verified:boolean;externalMailLimits?:{daily:number|null;monthly:number|null};name:string;devices:number;passkeys:number;apps:{client:string;label:string;icon?:string|null;verified?:boolean}[]};
+type App={icon?:string|null;verified:boolean;id:string;name:string;status:string;restricted:boolean};
 function Avatar({user,token,colors}:{user:ManagedAccount;token:string;colors:Colors}){
   const [failed,setFailed]=useState(false);
   return user.hasPicture&&!failed?<Image accessibilityLabel="Profile photo" onError={()=>setFailed(true)} source={{
@@ -128,11 +128,11 @@ export default function NativeAdminUsers({token,colors,onDetail}:{token:string;c
           </View>)}</>}
         <View style={divider}><SurfaceTitle colors={colors} title="Connected apps" icon="apps-outline" tint="lavender"/></View>
         {!user.apps.length&&<Text style={{color:colors.muted}}>No connected apps.</Text>}
-        {user.apps.map(app=><View key={app.client} style={[divider,{gap:4}]}><Text style={{color:colors.ink}}>{app.label}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View>)}
+        {user.apps.map(app=><View key={app.client} style={[divider,{gap:8,flexDirection:'row',alignItems:'center'}]}><AppIcon icon={app.icon} color={colors.accent}/><Text style={{color:colors.ink}}>{app.label}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View>)}
         <View style={divider}><SurfaceTitle colors={colors} title="Registered apps" icon="ribbon-outline" tint="mint"/></View>
         {!registered.length&&<Text style={{color:colors.muted}}>No registered apps.</Text>}
         {registered.map(app=><View key={app.id} style={[divider,{gap:8}]}>
-          <Text style={{color:colors.ink}}>{app.name} · {app.status}{app.restricted?' · Restricted':''}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/>
+          <View style={{flexDirection:'row',alignItems:'center',gap:8}}><AppIcon icon={app.icon} color={colors.accent}/><Text style={{color:colors.ink,flex:1}}>{app.name} · {app.status}{app.restricted?' · Restricted':''}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View>
           <View style={{flexDirection:'row',gap:8,flexWrap:'wrap'}}>{icon(app.verified?'Remove app verification':'Verify app','checkmark-circle-outline',()=>run(async()=>{await api('admin/apps',{type:'app',id:app.id,verified:!app.verified});}))}{app.status==='active'&&app.verified&&!app.restricted&&icon('Manage app storage','server-outline',()=>setStorageApp(app.id))}</View>
           {<View style={{flexDirection:'row',gap:10,flexWrap:'wrap'}}>
             {app.status==='active'&&icon(app.restricted?'Restore app':'Restrict app',app.restricted?'lock-open-outline':'lock-closed-outline',()=>run(async()=>{

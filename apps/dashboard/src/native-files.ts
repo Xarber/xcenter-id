@@ -3,6 +3,7 @@ import { getDocumentAsync } from 'expo-document-picker';
 import { Directory, File, Paths } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { isAvailableAsync, shareAsync } from 'expo-sharing';
+import {fetch} from 'expo/fetch';
 import { accountHost, AccountRequestError } from './native-account';
 
 export async function pickDocumentAsync(maxBytes=2*1024**2) {
@@ -20,18 +21,25 @@ export async function pickDocumentAsync(maxBytes=2*1024**2) {
 
 export async function pickDocumentsAsync() {
   const result=await getDocumentAsync({copyToCacheDirectory:true,multiple:true});
-  return result.canceled?[]:result.assets.map(asset=>({
-    name:asset.name,
-    async read(){
-      const file=new File(asset.uri);
-      if(!file.size||file.size>2*1024**2)throw new Error('Choose a file between 1 byte and 2 MB.');
-      return file.base64();
-    },
-    dispose(){
-      const file=new File(asset.uri);
-      if(file.exists)file.delete();
-    },
-  }));
+  return result.canceled?[]:result.assets.map(asset=>{
+    const file=new File(asset.uri);
+    return {
+      name:asset.name,
+      size:file.size,
+      async read(offset:number,length:number){
+        const handle=file.open();
+        try {
+          handle.offset=offset;
+          const bytes=await handle.readBytes(length);
+          if(bytes.length!==length)throw new Error('The selected file changed.');
+          let raw='';
+          for(let start=0;start<bytes.length;start+=8192)raw+=String.fromCharCode(...bytes.subarray(start,start+8192));
+          return btoa(raw);
+        }finally{handle.close();}
+      },
+      dispose(){if(file.exists)file.delete();},
+    };
+  });
 }
 
 export async function pickProfilePhoto() {
@@ -63,7 +71,20 @@ export async function shareDownload(path:string,name:string,token:string) {
   const file=new File(folder,safeName==='.'||safeName==='..'?'download':safeName);
   try {
     file.create();
-    file.write(new Uint8Array(await response.arrayBuffer()));
+    if(!response.body)throw new Error('No file content was returned.');
+    const reader=response.body.getReader();
+    const handle=file.open();
+    try{
+      for(;;){
+        const {done,value}=await reader.read();
+        if(done)break;
+        if(value)await handle.writeBytes(value);
+      }
+    }finally{
+      handle.close();
+      await reader.cancel().catch(()=>{});
+      reader.releaseLock();
+    }
     await shareAsync(file.uri);
   } finally {if(folder.exists)folder.delete();}
 }

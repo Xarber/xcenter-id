@@ -1,4 +1,4 @@
-import { Download, Folder, Pencil } from 'lucide-react';
+import { File, Folder, Pencil, Plus } from 'lucide-react';
 import { useAppFileContainer, useAppRecordEditor, type AppFileContainer as Container } from './account-file-containers';
 import AppIcon from './AppIcon.web';
 import { formatBytes } from './storage-summary';
@@ -15,7 +15,7 @@ export default function AppFileContainer({ app }: { app: Container }) {
     </nav>
     <div className="xc-row-head"><AppIcon icon={app.icon}/><h2>{collection || app.name}</h2></div>
     <p>Records in your account · {formatBytes(app.bytes)}</p>
-    <button className="xc-button xc-secondary xc-self-start" type="button" disabled={busy} onClick={()=>editor.create(collection)}>New record</button>
+
     {draft&&<form className="xc-stack" onSubmit={event=>{event.preventDefault();void editor.submit();}}>
       {!draft.revision&&<>
         <label>Collection<input value={draft.collection} onChange={event=>setDraft({...draft,collection:event.currentTarget.value})} required maxLength={80}/></label>
@@ -31,17 +31,20 @@ export default function AppFileContainer({ app }: { app: Container }) {
       </div>
     </form>}
     {editor.message&&<p role="status">{editor.message}</p>}
-    {folder?.collections.map(item => <div className="xc-list-row" key={item.collection}>
-      <button className="xc-button xc-secondary" type="button" onClick={() => setCollection(item.collection)}>
-        <Folder size={18}/>{item.collection}
-      </button><span>{item.records} records</span>
-    </div>)}
-    {folder?.records.map(record => <div className="xc-list-row" key={record.id}>
-      <div className="xc-file-meta"><strong>{record.id}.json</strong><p>{formatBytes(record.bytes)}</p></div>
-      <div className="xc-actions"><button className="xc-button xc-secondary" type="button" disabled={busy} aria-label={'Edit '+record.id}
-        onClick={()=>void editor.edit(collection,record.id)}><Pencil size={16}/></button>
-      <a className="xc-button xc-secondary" href={'/account/' + path + '/' + encodeURIComponent(record.id)} aria-label={'Download ' + record.id}><Download size={18}/></a></div>
-    </div>)}
+    <table className="xc-file-table"><thead><tr><th scope="col">Name</th><th scope="col">Size</th><th scope="col"><span className="xc-sr">Actions</span></th></tr></thead>
+      <tbody>
+        <tr><td colSpan={3}><button className="xc-file-new" type="button" disabled={busy} onClick={()=>editor.create(collection)}><Plus size={18}/> New record</button></td></tr>
+        {folder?.collections.map(item=><tr key={item.collection}><td>
+          <button className="xc-file-new" type="button" onClick={()=>setCollection(item.collection)}><Folder size={18}/>{item.collection}</button>
+        </td><td>{item.records} records</td><td/></tr>)}
+        {folder?.records.map(record=><tr key={record.id}>
+          <td><a className="xc-file-name" href={'/account/'+path+'/'+encodeURIComponent(record.id)}><File size={18}/><strong>{record.id}.json</strong></a></td>
+          <td>{formatBytes(record.bytes)}</td><td><div className="xc-file-actions">
+            <button className="xc-file-icon" type="button" disabled={busy} aria-label={'Edit '+record.id} onClick={()=>void editor.edit(collection,record.id)}><Pencil size={16}/></button>
+          </div></td>
+        </tr>)}
+      </tbody>
+    </table>
     {folder?.nextCursor && <button className="xc-button xc-secondary" disabled={loading} onClick={() => void more()}>Load more</button>}
     {folder && !loading && !folder.collections.length && !folder.records.length && <p>This folder is empty.</p>}
     {loading && <p role="status">Loading folder…</p>}

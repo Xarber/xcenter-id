@@ -1,9 +1,28 @@
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
+import { statfsSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { openFileTransfers,uploadChunkSize } from './file-transfers.mjs';
 
 const fileLimit = 2 * 1024 * 1024;
 const storageLimit = 10 * 1024 * 1024;
 const fileId = /^[0-9a-f]{8}-[0-9a-f-]{27}$/;
+function nameOf(input) {
+  const name=typeof input==='string'?input.trim().normalize('NFC'):'';
+  return name&&name!=='.'&&name!=='..'&&name.length<=160&&!/[\\/\p{Cc}\p{Cf}]/u.test(name)?name:null;
+}
+async function readInput(req,max) {
+  const chunks=[];
+  let size=0;
+  for await(const chunk of req.iterator({destroyOnReturn:false})){
+    size+=chunk.length;
+    if(size>max){req.resume();throw new Error('Request exceeds allowed size.');}
+    chunks.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString());
+}
 
 export function createAccountFiles({ database, key, accounts, origin, friends, usage = () => ({}), appContainers = () => [], fileAccess }) {
   if (!key || key.length !== 32) return null;
@@ -28,6 +47,23 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     ) STRICT;
     CREATE INDEX IF NOT EXISTS file_shares_recipient ON user_file_shares(recipient);
   `);
+  const transfers=openFileTransfers(db,key);
+  const hasDiskRoom=()=>{
+    if(database===':memory:')return true;
+    try{const status=statfsSync(dirname(database));return status.bavail*status.bsize>=256*1024**2;}
+    catch{return false;}
+  };
+  const folderHeight=db.prepare(`WITH RECURSIVE tree(id,depth) AS (
+    SELECT id,1 FROM user_folders WHERE owner=? AND id=? UNION ALL
+    SELECT f.id,t.depth+1 FROM user_folders f JOIN tree t ON f.parent=t.id WHERE f.owner=? AND t.depth<=8
+  ) SELECT max(depth) AS depth FROM tree`);
+  const directory=db.prepare('SELECT * FROM user_folders WHERE owner=? ORDER BY created,id');
+  const moveFolder=db.prepare('UPDATE user_folders SET parent=? WHERE owner=? AND id=?');
+  const unlinkFile=db.prepare('DELETE FROM user_file_folders WHERE file=?');
+  const removeOwnedFiles=db.prepare('DELETE FROM user_files WHERE owner=?');
+  const removeOwnedShares=db.prepare('DELETE FROM user_file_shares WHERE owner=? OR recipient=?');
+  const detachOwnedFolders=db.prepare('UPDATE user_folders SET parent=NULL WHERE owner=?');
+  const removeOwnedFolders=db.prepare('DELETE FROM user_folders WHERE owner=?');
   const forFolder = db.prepare('SELECT f.* FROM user_files f LEFT JOIN user_file_folders link ON link.file=f.id WHERE f.owner=? AND link.folder IS ? ORDER BY f.created DESC,f.id');
   const children = db.prepare('SELECT * FROM user_folders WHERE owner=? AND parent IS ? ORDER BY created,id');
   const folderById = db.prepare('SELECT * FROM user_folders WHERE owner=? AND id=?');
@@ -38,7 +74,7 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
   const clearOrphans = db.prepare('DELETE FROM user_file_folders WHERE folder=? AND NOT EXISTS(SELECT 1 FROM user_files WHERE id=file)');
   const linkFile = db.prepare('INSERT INTO user_file_folders VALUES (?,?)');
   const select = db.prepare('SELECT * FROM user_files WHERE owner=? AND id=?');
-  const count = db.prepare('SELECT total(size) AS bytes,count(*) AS total FROM user_files WHERE owner=?');
+  const count = db.prepare('SELECT total(max(1,size)) AS bytes,count(*) AS total FROM user_files WHERE owner=?');
   const insert = db.prepare('INSERT INTO user_files VALUES (?,?,?,?,?)');
   const remove = db.prepare('DELETE FROM user_files WHERE owner=? AND id=?');
   const incomingShares=db.prepare('SELECT * FROM user_file_shares WHERE recipient=?');
@@ -58,13 +94,13 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     return {id:row.id,created:row.created,size:row.size,name:plain.subarray(2,2+nameLength).toString(),
       ...(includeFile?{data:plain.subarray(2+nameLength)}:{})};
   }
-  function pack(owner,id,name,bytes) {
+  function pack(owner,id,name,bytes,size=bytes.length) {
     const filename=Buffer.from(name);
     const length=Buffer.alloc(2);
     length.writeUInt16BE(filename.length);
     const nonce=randomBytes(12);
     const cipher=createCipheriv('aes-256-gcm',key,nonce);
-    cipher.setAAD(aad(owner,id,bytes.length));
+    cipher.setAAD(aad(owner,id,size));
     const crypt=Buffer.concat([cipher.update(Buffer.concat([length,filename,bytes])),cipher.final()]);
     return Buffer.concat([nonce,cipher.getAuthTag(),crypt]);
   }
@@ -84,11 +120,86 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     res.end(JSON.stringify(result));
   }
 
-  function download(res,file) {
+  async function download(res,row) {
+    const transfer=transfers.byId.get(row.owner,row.id);
+    const file=unpack(row,!transfer?.committed);
     const name=encodeURIComponent(file.name).replace(/[!'()*]/g,char=>'%'+char.charCodeAt(0).toString(16));
     res.writeHead(200,{'Content-Type':'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
-      'Content-Disposition':"attachment; filename*=UTF-8''"+name});
-    res.end(file.data);
+      'Content-Disposition':"attachment; filename*=UTF-8''"+name,'Content-Length':row.size});
+    if(transfer?.committed){
+      try{await pipeline(Readable.from(transfers.read(transfer)),res);}
+      catch{res.destroy();}
+    }else res.end(file.data);
+  }
+
+  function transaction(work){
+    db.exec('BEGIN IMMEDIATE');
+    try{
+      const result=work();
+      db.exec('COMMIT');
+      return result;
+    }catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  const remaining=owner=>Math.max(0,(accounts.storageCapacity?.(owner)??storageLimit)
+    -count.get(owner).bytes-transfers.reserved(owner)-Object.values(usage(owner)).reduce((sum,value)=>sum+value,0));
+  function destination(owner,folder){
+    return folder===null?[]:typeof folder==='string'&&fileId.test(folder)?trail(owner,folder):null;
+  }
+  async function upload(req,res,owner,id){
+    if(req.method==='DELETE'&&id){
+      transfers.cancel.run(owner,id);
+      return json(res,200,{ok:true});
+    }
+    if(!['POST','PUT'].includes(req.method)||!req.headers['content-type']?.startsWith('application/json')){
+      return json(res,405,{error:'Method unavailable.'});
+    }
+    let input;
+    try{input=await readInput(req,req.method==='PUT'?Math.ceil(uploadChunkSize/3)*4+1024:4096);}
+    catch{return json(res,422,{error:'Invalid upload request.'});}
+    if(accounts.current(req)?.owner!==owner)return json(res,403,{error:'Sign in to continue the upload.'});
+    const [status,result]=transaction(()=>{
+      if(!id&&req.method==='POST'){
+        transfers.purge();
+        const name=nameOf(input?.name);
+        const size=input?.size;
+        const folder=input?.folder??null;
+        if(!name||!Number.isSafeInteger(size)||size<0)return [422,{error:'Choose a valid file.'}];
+        if(!destination(owner,folder))return [404,{error:'Folder unavailable.'}];
+        if(Math.max(1,size)>remaining(owner))return [409,{error:'Account storage is full.'}];
+        if(!hasDiskRoom())return [503,{error:'File storage is temporarily unavailable.'}];
+        const next=randomUUID();
+        transfers.begin.run(next,owner,folder,Date.now(),size,pack(owner,next,name,Buffer.alloc(0),size));
+        return [201,{id:next,chunkSize:uploadChunkSize}];
+      }
+      const row=id&&transfers.byId.get(owner,id);
+      if(!row||transfers.isExpired(row))return [404,{error:'Upload unavailable.'}];
+      if(req.method==='POST'){
+        if(row.committed)return [200,{id}];
+        if(row.received!==row.size)return [409,{error:'Upload is incomplete.'}];
+        if(!destination(owner,row.folder))return [404,{error:'Folder unavailable.'}];
+        if(count.get(owner).bytes+transfers.reserved(owner)+Object.values(usage(owner)).reduce((sum,value)=>sum+value,0)>
+          (accounts.storageCapacity?.(owner)??storageLimit)){
+          return [409,{error:'Account storage is full.'}];
+        }
+        insert.run(id,owner,Date.now(),row.size,row.metadata);
+        if(row.folder)linkFile.run(id,row.folder);
+        transfers.complete.run(id);
+        return [201,{id}];
+      }
+      const position=input?.position;
+      const content=input?.content;
+      const bytes=Buffer.from(typeof content==='string'?content:'','base64');
+      if(row.committed||!Number.isSafeInteger(position)||position<0||position>=row.size||
+        position%uploadChunkSize!==0||bytes.length!==Math.min(row.size-position,uploadChunkSize)||bytes.toString('base64')!==content){
+        return [422,{error:'Invalid upload chunk.'}];
+      }
+      if(position<row.received&&transfers.decrypt(row,position).equals(bytes))return [200,{received:position+bytes.length}];
+      if(position!==row.received)return [409,{error:'Upload chunk is out of order.'}];
+      if(!hasDiskRoom())return [503,{error:'File storage is temporarily unavailable.'}];
+      transfers.append(row,position,bytes);
+      return [200,{received:position+bytes.length}];
+    });
+    return json(res,status,result);
   }
 
   const handle=async (req,res,path)=>{
@@ -119,7 +230,7 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
       if (req.method==='GET'&&shareId) {
         const share=shareById.get(owner,shareId);
         const row=share&&activeShare(share)&&select.get(share.owner,share.file);
-        return row?download(res,unpack(row,true)):json(res,404,{error:'Shared file unavailable.'});
+        return row?download(res,row):json(res,404,{error:'Shared file unavailable.'});
       }
       if (!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent') {
         return json(res,403,{error:'Only the account manager can change file access.'});
@@ -174,13 +285,16 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
         return json(res,200,{...listing,categories,appContainers:appContainers(owner),
           used:Object.values(categories).reduce((total,value)=>total+value,0),total:stats.total,limit:capacity});
       }
+      if(!delegated&&path==='/account/files/destinations')return json(res,200,{folders:directory.all(owner).map(row=>({...unpack(row,false),parent:row.parent}))});
       const row=individual&&select.get(owner,id);
       if(!row)return json(res,404,{error:'File unavailable.'});
-      return download(res,unpack(row,true));
+      return download(res,row);
     }
     if(!delegated&&(!(accounts.allowsMutation?.(req) ?? req.headers.origin===origin)||req.headers['x-authnjs-request']!=='account-consent')){
       return json(res,403,{error:'Only the account manager can change your files.'});
     }
+    const uploadRoute=!delegated&&/^\/account\/files\/uploads(?:\/([0-9a-f-]{36}))?$/.exec(path);
+    if(uploadRoute)return upload(req,res,owner,uploadRoute[1]);
     if(req.method==='DELETE'&&individual&&folderItem){
       db.exec('BEGIN IMMEDIATE');
       try {
@@ -193,7 +307,12 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
       } finally { db.exec('COMMIT'); }
     }
     if(req.method==='DELETE'&&individual){
-      return remove.run(owner,id).changes===1 ? json(res,200,{ok:true}):json(res,404,{error:'File unavailable.'});
+      const deleted=transaction(()=>{
+        if(remove.run(owner,id).changes!==1)return false;
+        transfers.remove.run(owner,id);
+        return true;
+      });
+      return deleted?json(res,200,{ok:true}):json(res,404,{error:'File unavailable.'});
     }
     const rename=req.method==='PATCH'&&individual;
     const create=req.method==='POST'&&(path==='/account/files'||foldersRoute);
@@ -201,30 +320,35 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
       return json(res,405,{error:'Method unavailable.'});
     }
     let input;
-    try {
-      let size=0;
-      const chunks=[];
-      for await(const chunk of req.iterator({destroyOnReturn:false})){
-        size+=chunk.length;
-        if(size>(rename?4096:3*1024*1024)){req.resume();return json(res,413,{error:'File exceeds 2 MB.'});}
-        chunks.push(chunk);
-      }
-      input=JSON.parse(Buffer.concat(chunks).toString());
-    } catch {return json(res,422,{error:'Invalid upload.'});}
+    try{input=await readInput(req,rename?4096:3*1024*1024);}
+    catch{return json(res,422,{error:'Invalid file request.'});}
     if(delegated&&(await fileAccess(token,scopes))?.owner!==owner)return json(res,403,{error:'File access was revoked.'});
-    const name=typeof input?.name==='string'?input.name.trim().normalize('NFC'):'';
-    if(!name||name==='.'||name==='..'||name.length>160||/[\\/\p{Cc}\p{Cf}]/u.test(name)){
-      return json(res,422,{error:'Choose a valid name.'});
-    }
+    const name=nameOf(input?.name);
+    const moving=rename&&input&&Object.hasOwn(input,'folder');
+    if((!moving||Object.hasOwn(input,'name'))&&!name)return json(res,422,{error:'Choose a valid name.'});
     if(rename){
-      const row=folderItem?folderById.get(owner,id):select.get(owner,id);
-      if(!row)return json(res,404,{error:'File or folder unavailable.'});
-      const bytes=folderItem?Buffer.alloc(0):unpack(row,true).data;
-      const update=folderItem
-        ? db.prepare('UPDATE user_folders SET envelope=? WHERE owner=? AND id=?')
-        : db.prepare('UPDATE user_files SET envelope=? WHERE owner=? AND id=?');
-      update.run(pack(owner,id,name,bytes),owner,id);
-      return json(res,200,{ok:true});
+      return transaction(()=>{
+        const row=folderItem?folderById.get(owner,id):select.get(owner,id);
+        if(!row)return json(res,404,{error:'File or folder unavailable.'});
+        if(moving){
+          const trail=destination(owner,input.folder);
+          if(!trail)return json(res,404,{error:'Folder unavailable.'});
+          if(folderItem&&(trail.some(folder=>folder.id===id)||trail.length+folderHeight.get(owner,id,owner).depth>8)){
+            return json(res,409,{error:'This folder can’t be moved there.'});
+          }
+          if(folderItem)moveFolder.run(input.folder,owner,id);
+          else{
+            unlinkFile.run(id);
+            if(input.folder)linkFile.run(id,input.folder);
+          }
+        }
+        if(name){
+          const data=folderItem||transfers.byId.get(owner,id)?.committed?Buffer.alloc(0):unpack(row,true).data;
+          const table=folderItem?'user_folders':'user_files';
+          db.prepare('UPDATE '+table+' SET envelope=? WHERE owner=? AND id=?').run(pack(owner,id,name,data,row.size),owner,id);
+        }
+        return json(res,200,{ok:true});
+      });
     }
     const folder=input?.folder??null;
     const bytes=foldersRoute?Buffer.alloc(0):Buffer.from(typeof input.content==='string'?input.content:'','base64');
@@ -242,8 +366,7 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
         }
         folderInsert.run(next,owner,folder,Date.now(),pack(owner,next,name,bytes));
       } else {
-        const used=count.get(owner);
-        if(used.bytes+bytes.length+Object.values(usage(owner)).reduce((sum,value)=>sum+value,0)>capacity||used.total>=100){
+        if(bytes.length>remaining(owner)){
           db.exec('ROLLBACK');return json(res,409,{error:'Account file storage is full.'});
         }
         insert.run(next,owner,Date.now(),bytes.length,pack(owner,next,name,bytes));
@@ -253,5 +376,14 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
       return json(res,201,{id:next});
     } catch(error){db.exec('ROLLBACK');throw error;}
   };
-  return Object.assign(handle,{fileBytes:owner=>count.get(owner).bytes});
+  return Object.assign(handle,{
+    fileBytes:owner=>count.get(owner).bytes+transfers.reserved(owner),
+    removeAccount:owner=>transaction(()=>{
+      removeOwnedShares.run(owner,owner);
+      removeOwnedFiles.run(owner);
+      detachOwnedFolders.run(owner);
+      removeOwnedFolders.run(owner);
+      transfers.removeOwner.run(owner);
+    }),
+  });
 }

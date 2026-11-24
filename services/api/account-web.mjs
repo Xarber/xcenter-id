@@ -1,3 +1,4 @@
+import {createConsentTest} from './consent-test.mjs';
 import {localAccountMessage} from './account-mail.mjs';
 import {parseStorageVolumes,storageVolumeStatus} from './storage-volumes.mjs';
 import {createSupportMailer} from './service-mail.mjs';
@@ -41,6 +42,14 @@ const accounts = createAccounts({
     deliverLocal:(recipient,raw,from)=>mail?.receive([recipient],raw,accounts.badgeForAddress(from)),
   }),
   appBrand:client=>registry.brand(client),
+  purgeAccount:owner=>{
+    accountFiles?.removeAccount(owner);
+    applicationData?.removeAccount(owner);
+    friends?.removeAccount(owner);
+    mail?.removeAccount(owner);
+    store?.removeAccount(owner);
+    registry.removeAccount(owner);
+  },
   canReceiveMail:!!mailConfig?.inboundDomains?.length,
   externalMail:!!mailConfig?.publicDelivery,
   inboundVerification:!!mailConfig?.inboundVerification,
@@ -179,10 +188,24 @@ const appFriendRoutes=provider&&friends&&createAppFriendRoutes({
   accounts,friends,authorize:provider.friendAccess,subject:provider.friendSubject,
 });
 
+const consentTestConfig=process.env.AUTHNJS_CONSENT_TEST_CONFIG?
+  JSON.parse(readFileSync(process.env.AUTHNJS_CONSENT_TEST_CONFIG,'utf8')):null;
+const consentTest=consentTestConfig&&createConsentTest({issuer:origin,...consentTestConfig});
+
+accounts.retryDeletions();
+setInterval(()=>accounts.retryDeletions(),5*60_000).unref();
+
 createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   const target = new URL(req.url, 'http://localhost');
   const path = target.pathname;
   const forwardedOrigin='https://'+req.headers['x-forwarded-host'];
+  if(consentTest&&forwardedOrigin==='https://consent-test.xcenter.it'&&req.headers['x-forwarded-proto']==='https'){
+    void consentTest(req,res,new URL(path+target.search,forwardedOrigin)).catch(()=>{
+      if(!res.headersSent)res.writeHead(502,{'Cache-Control':'no-store','Content-Type':'text/plain'});
+      res.end('The consent test could not complete sign-in. Return to the app and try again.');
+    });
+    return;
+  }
   const externalSample=sampleOrigins.has(forwardedOrigin)&&req.headers['x-forwarded-proto']==='https';
   if(path==='/v1/profile/friends'&&appFriendRoutes){
     void appFriendRoutes(req,res).catch(()=>{
@@ -205,8 +228,18 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     }).catch(()=>res.writeHead(503,headers).end());
     return;
   }
+  if(path==='/account/app-data-permissions'&&req.method==='PUT'&&req.headers['x-authnjs-request']!=='account-consent'){
+    res.writeHead(403,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify({error:'Change permissions from your account.'}));return;
+  }
   if(applicationData&&(/^\/(?:public|v1)\/apps\//.test(path)||path.startsWith('/account/app-storage/')||path.startsWith('/account/file-containers/')||path==='/account/app-data-permissions')){
     void applicationData.handle(req,res,target);return;
+  }
+  const appIcon=/^\/public\/app-icons\/([0-9a-f-]{36})$/.exec(path)?.[1];
+  if(appIcon){
+    const icon=['GET','HEAD'].includes(req.method)?registry.icon(appIcon):null;
+    res.writeHead(icon?200:404,{'Content-Type':'image/png','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'});
+    res.end(icon&&req.method==='GET'?Buffer.from(icon,'base64'):undefined);
+    return;
   }
   const publicAvatar=/^\/public\/profiles\/([a-z][a-z0-9]{2,23})\/avatar$/.exec(path)?.[1];
   if(publicAvatar){const picture=req.method==='GET'?accounts.publicProfileAvatar(publicAvatar):null;
@@ -251,7 +284,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     });
     return;
   }
-  if (accountFiles && /^\/(?:account|v1)\/files(?:\/(?:folders|shared)(?:\/[0-9a-f-]{36})?|\/[0-9a-f-]{36})?$/.test(path)) {
+  if (accountFiles && (/^\/account\/files\/(?:destinations|uploads(?:\/[0-9a-f-]{36})?)$/.test(path)||/^\/(?:account|v1)\/files(?:\/(?:folders|shared)(?:\/[0-9a-f-]{36})?|\/[0-9a-f-]{36})?$/.test(path))) {
     void accountFiles(req,res,path).catch(()=>{
       if(!res.headersSent) res.writeHead(500,{'Cache-Control':'no-store'});
       res.end();
@@ -263,6 +296,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     return;
   }
   if (consentApi && path === '/account/data-grants') {
+    if(req.method==='PUT'){res.writeHead(405,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify({error:'Apps request data permissions during authorization.'}));return;}
     if (req.method !== 'GET' && (!accounts.allowsMutation(req) || req.headers['x-authnjs-request'] !== 'account-consent')) {
       res.writeHead(403, {'Content-Type':'application/json','Cache-Control':'no-store'}).end('{"error":"invalid_origin"}');
       return;

@@ -18,6 +18,7 @@ args = parser.parse_args()
 args.output.mkdir(parents=True, exist_ok=True)
 repo = Path(__file__).resolve().parents[3]
 version = json.loads((repo / "apps/dashboard/app.json").read_text())["expo"]["version"]
+history_count = len(json.loads((repo / "apps/dashboard/src/release-history.json").read_text()))
 app = {"client": "garden-journal", "label": "Garden Journal", "name": "Garden Journal",
        "verified": True, "description": "Keep a record of what you grow."}
 fixtures = {
@@ -66,11 +67,23 @@ with sync_playwright() as browser_tools:
     browser = browser_tools.chromium.launch()
     for kind, width, height in (("desktop", 1280, 800), ("mobile", 390, 844)):
         context = browser.new_context(viewport={"width": width, "height": height}, reduced_motion="reduce")
-        context.route("**/*", lambda route: route.continue_() if route.request.url.startswith(origin+"/") else route.abort())
+        signed_in = False
+        def route_fixture(route):
+            if not route.request.url.startswith(origin+"/"):
+                route.abort()
+            elif route.request.url == origin+"/account/me" and not signed_in:
+                route.fulfill(json={"account": None})
+            else:
+                route.continue_()
+        context.route("**/*", route_fixture)
         page = context.new_page()
         page.set_default_timeout(7000)
         page.goto(origin)
-        button(page, "Open web app").click()
+        expect(heading(page, "Sign in to X-Center ID")).to_be_visible()
+        expect(page.get_by_role("dialog")).to_have_count(0)
+        expect(button(page, "Pause animation")).to_have_count(0)
+        signed_in = True
+        page.reload()
         expect(heading(page, "Your X-Center ID")).to_be_visible()
         button(page, "Continue").click()
         expect(heading(page, "Connect your apps")).to_be_visible()
@@ -117,13 +130,20 @@ with sync_playwright() as browser_tools:
         expect(page.get_by_role("dialog")).to_have_count(0)
         page.goto(origin+"/changelog/0.10.0")
         expect(page.locator(".xc-release-rows li")).to_have_count(4)
-        page.goto(origin+"/settings#release-notes=0.10.0")
-        expect(heading(page, "Developer notes for 0.10.0")).to_have_count(0)
-        for _ in range(3):
-            button(page, version).click()
+        expect(button(page, "Developer notes")).to_have_count(0)
+        page.goto(origin+"/settings")
+        page.get_by_role("switch", name="Developer Mode").check()
+        page.get_by_role("link", name="View changelog").click()
+        expect(page.locator(".xc-release-entry")).to_have_count(history_count)
+        page.locator(".xc-release-entry").filter(has_text="0.10.0").get_by_role("link", name="Full changelog").click()
+        button(page, "Developer notes").click()
         expect(heading(page, "Developer notes for 0.10.0")).to_be_visible()
-        page.goto(origin+"/changelog")
-        expect(page.locator(".xc-release-entry")).to_have_count(15)
+        expect(page.get_by_role("button",name="Copy source revision")).to_be_visible()
+        page.get_by_role("link", name="Back", exact=True).click()
+        expect(heading(page, "Version history")).to_be_visible()
+        page.get_by_role("link", name="Back", exact=True).click()
+        expect(heading(page, "Settings")).to_be_visible()
+        page.get_by_role("link", name="View changelog").click()
         page.evaluate("navigator.serviceWorker.ready")
         context.set_offline(True)
         page.goto(origin+"/changelog/0.10.0")

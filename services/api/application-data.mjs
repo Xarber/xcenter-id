@@ -46,6 +46,15 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
     fail(400,'Invalid JSON object.');
   }
   return {
+    removeAccount(owner){
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        db.prepare('DELETE FROM app_data_grants WHERE owner=?').run(owner);
+        db.prepare('DELETE FROM app_readers WHERE owner=? OR reader=?').run(owner,owner);
+        db.prepare('DELETE FROM app_records WHERE owner=?').run(owner);
+        db.exec('COMMIT');
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    },
     requested,
     requestsForOwner,
     accountUsage:owner=>accountUsage.get(owner).used,
@@ -57,7 +66,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
       return [...rows.values()].map(row=>{
         const brand=registry.brand(row.client);
         return {...row,name:brand?.name??'App storage',showInFiles:!!ownerContainer(owner,row.client),
-          canManage:!!developerContainer(owner,row.client),icon:brand?.icon||null};
+          canManage:!!developerContainer(owner,row.client),icon:brand?.iconUrl??brand?.icon??null};
       });
     },
     revokeApp(owner,client){
@@ -69,7 +78,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         db.exec('COMMIT');
       }catch(error){db.exec('ROLLBACK');throw error;}
     },
-    permissions(owner){return registry.published().filter(app=>accounts.linkedGrant(owner,app.client)&&registry.access(owner,app.client).allowed).flatMap(app=>requestsForOwner(owner,app.client).filter(item=>item.linked).map(item=>({...item,destination:app.client,destinationName:app.name,unsecure:!!registry.brand(app.client)?.local,sourceName:registry.publicDetails(item.source)?.name??item.source,
+    permissions(owner){return registry.published().filter(app=>accounts.linkedGrant(owner,app.client)&&registry.access(owner,app.client).allowed).flatMap(app=>requestsForOwner(owner,app.client).filter(item=>item.linked).map(item=>({...item,destination:app.client,destinationName:app.name,unsecure:!!registry.brand(app.client)?.local,sourceName:registry.publicDetails(item.source)?.name??item.source,sourceIcon:registry.brand(item.source)?.iconUrl??null,destinationIcon:registry.brand(app.client)?.iconUrl??null,
       enabled:!!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(owner,item.source,app.client,item.collection)})));},
     authorize(owner,client,selected){
       const allowed=new Set(selected);
@@ -121,11 +130,11 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         }
         if(url.pathname==='/account/app-data-permissions'){
           const session=accounts.current(req);if(!session)fail(401,'Sign in first.');
-          const requestedForOwner=registry.published().filter(app=>accounts.linkedGrant(session.owner,app.client)&&registry.access(session.owner,app.client).allowed).flatMap(app=>requestsForOwner(session.owner,app.client).filter(item=>item.linked).map(item=>({...item,destination:app.client,destinationName:app.name,unsecure:!!registry.brand(app.client)?.local,sourceName:registry.publicDetails(item.source)?.name??item.source,
-            enabled:!!db.prepare('SELECT 1 FROM app_data_grants WHERE owner=? AND source=? AND destination=? AND collection=?').get(session.owner,item.source,app.client,item.collection)})));
+          const requestedForOwner=this.permissions(session.owner);
           if(req.method==='GET')return answer(200,{permissions:requestedForOwner});
-          if(req.method!=='PUT'||!accounts.allowsMutation(req))fail(403,'Change permissions from your account.');
-          const input=await body(req);const permission=requestedForOwner.find(p=>p.source===input.source&&p.destination===input.destination&&p.collection===input.collection);
+          if(req.method!=='PUT'||!accounts.allowsMutation(req)||(req.headers.origin&&req.headers['x-authnjs-request']!=='account-consent'))fail(403,'Change permissions from your account.');
+          const input=await body(req);if(accounts.current(req)?.owner!==session.owner)fail(401,'Sign in again.');
+          const permission=this.permissions(session.owner).find(p=>p.source===input.source&&p.destination===input.destination&&p.collection===input.collection);
           if(!permission||typeof input.enabled!=='boolean')fail(422,'Choose a requested app permission.');
           if(permission.unsecure&&input.confirmUnsecure!==true)fail(422,'Confirm that you want to edit permissions for this unsecure app.');
           const update=input.enabled
@@ -148,7 +157,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
           const serviceEnabled=verified(client);
           const unsecure=!!registry.brand(client)?.local;
           db.prepare('INSERT OR IGNORE INTO app_storage(client) VALUES(?)').run(client);
-          if(req.method==='GET')return answer(200,{name:registry.brand(client)?.name??'App storage',icon:registry.brand(client)?.icon??null,...usage(client),capacity:setting(client).capacity,hasKey:!!setting(client).secret,verified:serviceEnabled,unsecure,
+          if(req.method==='GET')return answer(200,{name:registry.brand(client)?.name??'App storage',icon:registry.brand(client)?.iconUrl??registry.brand(client)?.icon??null,...usage(client),capacity:setting(client).capacity,hasKey:!!setting(client).secret,verified:serviceEnabled,unsecure,
             shared:JSON.parse(setting(client).shared),requests:JSON.parse(setting(client).requests),showInFiles:!!visible.get(client),canShowInFiles:!!(owned&&serviceEnabled)});
           if(req.method!=='POST'||!accounts.allowsMutation(req)||!accounts.recentlyConfirmed(req))fail(403,'Confirm your identity before changing app storage.');
           const input=await body(req);

@@ -11,7 +11,7 @@ export function createAdminUsers({accounts,registry,mail,containers=()=>[]}){
     const {owner,...publicDetails}=details;
     if(req.method==='GET')return send(200,{account:{...publicDetails,...(registry.hasDeveloper(owner)?{
       developerVerified:registry.developer(owner).status==='verified',
-    }:{})},registered:registry.managed(owner),containers:containers(owner).map(({client,name,bytes,icon})=>({client,name,bytes,icon}))});
+    }:{})},registered:registry.managed(owner).map(({iconUrl,...app})=>({...app,icon:iconUrl??app.icon})),containers:containers(owner).map(({client,name,bytes,icon})=>({client,name,bytes,icon}))});
     if(req.method!=='POST')return send(405,{error:'Method unavailable.'});
     if(!req.headers['content-type']?.startsWith('application/json'))return send(415,{error:'JSON required.'});
     let size=0;

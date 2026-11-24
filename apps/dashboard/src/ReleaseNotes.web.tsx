@@ -13,19 +13,18 @@ function Rows({rows}:{rows:string[][]}){
   })}</ul>;
 }
 
-export function ReleaseArchive({developer=false}:{developer?:boolean}){
+export function ReleaseArchive(){
   return <div className="xc-stack"><h1>Version history</h1>{releaseHistory.map(release=><article className="xc-card xc-pad xc-release-entry" key={release.version}>
     <h2>{release.version} · {release.title}</h2>
     <p>{releaseStatus(release)} · <time dateTime={release.date}>{release.date}</time></p>
     <Rows rows={releaseOverview(release)}/>
     <a href={'/changelog/'+release.version}>Full changelog</a>
-    {developer&&<> · <a href={'#release-notes='+release.version}>Developer notes</a></>}
   </article>)}</div>;
 }
 
 export function FullRelease({release}:{release:Release}){
   return <article className="xc-card xc-pad xc-release-entry">
-    <a href="/changelog">Version history</a>
+    <a href="/changelog?from=settings">Version history</a>
     <h1>{release.version} · {release.title}</h1>
     <p>{releaseStatus(release)} · <time dateTime={release.date}>{release.date}</time></p>
     <Rows rows={release.features}/>
@@ -43,6 +42,7 @@ export function DeveloperRelease({version}:{version:string}){
   }
   return <section className="xc-stack">
     <h3>Developer notes for {version}</h3>
+    <p>Source commits, summaries and identifiers for this version.</p>
     <p>Recorded source revision <code>{output.revision}</code> <button className="xc-icon-link" aria-label="Copy source revision" onClick={()=>void copy(output.revision)}><Copy size={16}/></button></p>
     <span ref={status} role="status"/>
     {output.commits.map(commit=><article key={commit.id} className="xc-card xc-pad">

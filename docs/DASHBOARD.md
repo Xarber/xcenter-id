@@ -57,3 +57,11 @@ The native account overview no longer constructs Intl.PluralRules. The catalog u
 The service worker checks the network first when opening dashboard routes such as Profile, Permissions, and Mail. If that request fails offline, it displays a cached public fallback with a retry action. Private API responses, login and consent transactions, and account data stay outside the worker cache.
 
 Web and native device sign-in render six independently focusable code fields. Paste can fill the code, and entering a character advances focus. The web page keeps the issuer form as a fallback and submits the combined code to the same confirmation step.
+
+## Transfers, account switching and Developer Mode
+
+Files uploads reserve account quota and transfer bounded encrypted segments. Up to three files progress independently. The row shows confirmed bytes and cancellation until finalization. The modern dashboard can upload beyond the legacy inline API limit. Web supports dropping local files and dragging existing entries into folders. Both platforms have an explicit Move picker. Native uses the platform Files picker for adding documents. Select the file name to download. App containers use the same row layout for collections and JSON records, and keep their existing access and visibility controls.
+
+The root opens sign-in for a signed-out visitor. A completed profile is required before the first tour. The sidebar holds the account switcher and active account sign-out button. Saved sessions are limited to three per switcher and remain separate from the reusable SDK. Browser sessions are kept in protected cookies and native sessions in device-only SecureStore. Changing accounts resets the dashboard view.
+
+Settings contains Developer Mode and account deletion. Each full changelog has Back. Developer Mode adds a Developer notes control to the full page with commit titles, summaries, and identifiers. Release-note screenshots are reviewed separately from user-account screenshots.

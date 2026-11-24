@@ -16,12 +16,13 @@ export default function AppFileContainer({ app, token, colors, back }: {
   const editor=useAppRecordEditor(app.client,request,refresh);
   const {draft,setDraft,busy}=editor;
   const [downloadError, setDownloadError] = useState('');
-  const action = (label: string, onPress: () => void, icon: 'folder-outline' | 'download-outline' | 'arrow-back' | 'ellipsis-horizontal' | 'add-outline' | 'checkmark-outline' | 'close-outline' | 'trash-outline' | 'pencil-outline') =>
+  const action = (label: string, onPress: () => void, icon: 'folder-outline' | 'document-outline' | 'arrow-back' | 'ellipsis-horizontal' | 'add-outline' | 'checkmark-outline' | 'close-outline' | 'trash-outline' | 'pencil-outline') =>
     <Pressable accessibilityRole="button" disabled={loading||busy} onPress={onPress}
       style={({pressed})=>({minHeight:44,flexDirection:'row',alignItems:'center',gap:8,padding:8,borderRadius:10,backgroundColor:pressed?colors.soft:colors.panel})}>
       <Ionicons accessible={false} name={icon} size={19} color={colors.accent}/>
       <Text style={{color:colors.ink,flexShrink:1}}>{label}</Text>
     </Pressable>;
+  const fileRow={flexDirection:'row' as const,alignItems:'center' as const,borderTopWidth:1,borderColor:colors.line,minHeight:45,gap:8};
   return <View style={{gap:12}}>
     <Pressable accessibilityRole="button" onPress={back} style={{minHeight:44,justifyContent:'center'}}>
       <Text style={{color:colors.accent}}>Back to your files</Text>
@@ -49,14 +50,21 @@ export default function AppFileContainer({ app, token, colors, back }: {
       ]),'trash-outline')}
     </View>}
     {!!editor.message&&<Text accessibilityLiveRegion="polite" style={{color:colors.ink}}>{editor.message}</Text>}
-    {folder?.collections.map(item=><View key={item.collection}>{action(item.collection,()=>setCollection(item.collection),'folder-outline')}</View>)}
-    {folder?.records.map(record=><View key={record.id} style={{borderTopWidth:1,borderColor:colors.line,paddingTop:6}}>
-      {action('Download '+record.id+'.json',()=>{
+    <View style={fileRow}><Text accessibilityRole="header" style={{flex:1,color:colors.muted}}>Name</Text>
+      <Text accessibilityRole="header" style={{color:colors.muted}}>Size</Text></View>
+    {folder?.collections.map(item=><View style={fileRow} key={item.collection}><View style={{flex:1}}>
+      {action(item.collection,()=>setCollection(item.collection),'folder-outline')}</View>
+      <Text style={{color:colors.muted}}>{item.records} records</Text>
+    </View>)}
+    {folder?.records.map(record=><View key={record.id} style={fileRow}>
+      <View style={{flex:1}}>{action(record.id+'.json',()=>{
         setDownloadError('');
         void shareDownload(path+'/'+encodeURIComponent(record.id),record.id+'.json',token).catch(()=>setDownloadError('Could not download this record.'));
-      },'download-outline')}
-      {action('Edit '+record.id,()=>void editor.edit(collection,record.id),'pencil-outline')}
+      },'document-outline')}</View>
       <Text style={{color:colors.muted}}>{formatBytes(record.bytes)}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={'Edit '+record.id} onPress={()=>void editor.edit(collection,record.id)} style={{padding:12}} disabled={busy}>
+        <Ionicons name="pencil-outline" size={19} color={colors.accent}/>
+      </Pressable>
     </View>)}
     {!!folder?.nextCursor&&action('Load more',()=>void more(),'ellipsis-horizontal')}
     {folder&&!loading&&!folder.collections.length&&!folder.records.length&&<Text style={{color:colors.muted}}>This folder is empty.</Text>}

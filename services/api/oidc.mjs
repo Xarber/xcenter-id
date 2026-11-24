@@ -476,7 +476,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const profile = registry.brand(source);
       const name = profile?.name ?? registry.publicDetails(source)?.name ?? source;
       const icon = profile?.icon
-        ? `<img alt="" class="source-icon" src="data:image/png;base64,${escape(profile.icon)}">`
+        ? `<img alt="" class="source-icon" src="${escape(profile.iconUrl??'data:image/png;base64,'+profile.icon)}">`
         : `<span class="source-icon" aria-hidden="true">${escape(name.slice(0,2).toUpperCase())}</span>`;
       const title = `<h2 class="source-heading">${icon}${escape(name)}</h2>`;
       const access = items[0].linked ? `<ul class="permission-list">${items.map(item => {
@@ -489,7 +489,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     }).join('');
     return html(res,`<div class="connection" aria-hidden="true">
       <span class="avatar">${person.hasPicture?'<img alt="" src="/account/avatar">':glyph('user')}</span>${glyph('link')}
-      <span class="avatar">${brand?.icon?`<img alt="" src="data:image/png;base64,${escape(brand.icon)}">`:visual?glyph(visual):escape(title.slice(0,2).toUpperCase())}</span></div>
+      <span class="avatar">${brand?.icon?`<img alt="" src="${escape(brand.iconUrl??'data:image/png;base64,'+brand.icon)}">`:visual?glyph(visual):escape(title.slice(0,2).toUpperCase())}</span></div>
       <h1>${incremental?'Authorize logging back into '+escape(title)+'?':'Link '+escape(title)+' to X-Center ID'}</h1>
       ${device?'<p>You’re approving sign-in on your other device.</p>':''}
       ${incremental?`<p>${escape(title)} is already linked to your X-Center ID. Review its permissions before continuing.</p>`:''}
