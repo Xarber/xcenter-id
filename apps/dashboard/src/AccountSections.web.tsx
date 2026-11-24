@@ -199,9 +199,9 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
             <button className="xc-file-icon" aria-label={'Rename '+item.name} onClick={()=>{setCreating(false);setRenaming(item);}} disabled={busy}><Pencil size={16}/></button>
             <button type="button" className="xc-file-icon" aria-label={'Move '+item.name} disabled={busy} onClick={()=>chooseMove({...item,folder:true})}><FolderInput size={16}/></button>
             <button type="button" className="xc-file-icon" disabled={busy} onClick={()=>{
-              if(confirm!==item.id){setConfirm(item.id);return;}
-              change(()=>api('files/folders/'+item.id+'?recursive=1',{},'DELETE'),'Folder removed.');
-            }} aria-label={confirm===item.id?'Confirm removing '+item.name+' and its contents':'Remove folder '+item.name}>{confirm===item.id?<Check size={16}/>:<Trash2 size={16}/>}</button>
+              if(!window.confirm('Permanently remove '+item.name+' and everything inside it?'))return;
+              change(()=>api('files/folders/'+item.id+'?recursive=1',{},'DELETE'),'Folder and contents removed.');
+            }} aria-label={'Remove folder '+item.name}><Trash2 size={16}/></button>
           </div></td>
         </tr>)}
         {transfers.rows.filter(row=>row.folder===folder).map(row=><tr key={'upload-'+row.key}>

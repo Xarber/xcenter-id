@@ -22,5 +22,7 @@ test('every legacy milestone has a full version entry and three or fewer archive
 test('same marketing version suppresses the announcement and skipped versions contribute highlights',()=>{
   assert.equal(model.releaseAnnouncement(releases[0].version).length,0);
   assert.equal(model.releaseAnnouncement('0.11.0').length,3);
-  assert.equal(model.releaseAnnouncement(null).length,3);
+  const freshOverview=model.releaseAnnouncement(null);
+  assert.ok(freshOverview.length>=1&&freshOverview.length<=3);
+  assert.equal(JSON.stringify(freshOverview),JSON.stringify(model.releaseOverview(releases[0])));
 });
