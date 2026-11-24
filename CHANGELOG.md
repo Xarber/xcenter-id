@@ -3,6 +3,20 @@
 This archive covers the original AuthNJS source and the X-Center ID rewrite. Earlier entries reconstruct source milestones. Development entries identify unreleased work. There are no published GitHub releases in this history.
 Deployment and native build evidence are recorded in [release documentation](docs/RELEASES.md).
 
+## 0.16.0 · 2026-11-24
+
+Development
+
+### Profiles and app configuration
+
+- **More flexible usernames**. Use dots, underscores, and dashes in your X-Center ID username.
+- **More ways to add a photo**. Choose a photo from the library, take one with your camera, or open an image file. Saved photos count toward your storage.
+- **Edit app permissions visually**. Select an app and collection, write a consent title, or update the full registration from a single configuration document.
+
+### Fixes & Improvements
+
+- Dashboard confirmations use in-app dialogs across web and mobile.
+
 ## 0.15.2 · 2026-11-24
 
 Development

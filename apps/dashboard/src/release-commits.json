@@ -1,4 +1,29 @@
 {
+  "0.16.0": {
+    "revision": "885ee212904a2eb03fa5dc2dbf6aa3ce8f1ba638",
+    "commits": [
+      {
+        "id": "316c79e1bef9e636541a46322bffb419a690c435",
+        "title": "chore(release): prepare dashboard 0.15.2",
+        "detail": "Changed areas: CHANGELOG.md, apps/dashboard."
+      },
+      {
+        "id": "71292e65a43134aada32dbbd7b7731ddfbf3845a",
+        "title": "feat(api): support punctuated usernames and portable app settings",
+        "detail": "Changed areas: services/api."
+      },
+      {
+        "id": "8f9ca75f60bd5b670ce2136b3e29aa773ba1ea08",
+        "title": "feat(dashboard): add profile photo sources and app configuration editors",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/DASHBOARD.md, docs/HOSTED_DATA.md, docs/IDENTITY.md, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "885ee212904a2eb03fa5dc2dbf6aa3ce8f1ba638",
+        "title": "test(dashboard): exercise configuration and modal flows",
+        "detail": "Changed areas: apps/dashboard, services/api."
+      }
+    ]
+  },
   "0.15.2": {
     "revision": "80be3a860268ea497c9ab48b1ccd9c9536dc046f",
     "commits": [

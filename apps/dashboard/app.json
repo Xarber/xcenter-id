@@ -2,16 +2,16 @@
   "expo": {
     "name": "X-Center ID",
     "slug": "authnjs-dashboard",
-    "version": "0.15.2",
+    "version": "0.16.0",
     "scheme": "authnjs-dashboard",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "17",
+      "buildNumber": "18",
       "bundleIdentifier": "com.xarber.authnjs.dashboard"
     },
     "android": {
-      "versionCode": 17,
+      "versionCode": 18,
       "package": "com.xarber.authnjs.dashboard"
     },
     "web": {
