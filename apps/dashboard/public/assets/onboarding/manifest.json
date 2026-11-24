@@ -1,6 +1,6 @@
 {
-  "version": "0.15.1",
-  "sourceRevision": "1acba82a180d04cd3a4d52c15338710cd9e780bb",
+  "version": "0.16.0",
+  "sourceRevision": "b703d05f6a2efe008533bb3700f158a191ea17b1",
   "capturedOn": "2026-11-24",
   "screenshots": [
     {
@@ -40,6 +40,24 @@
       "environment": "Chromium with isolated fixture"
     },
     {
+      "file": "desktop-sharing-editor.png",
+      "platform": "web",
+      "deviceClass": "desktop",
+      "feature": "sharing-editor",
+      "width": 1280,
+      "height": 800,
+      "environment": "Chromium with isolated fixture"
+    },
+    {
+      "file": "desktop-app-configuration.png",
+      "platform": "web",
+      "deviceClass": "desktop",
+      "feature": "app-configuration",
+      "width": 1280,
+      "height": 800,
+      "environment": "Chromium with isolated fixture"
+    },
+    {
       "file": "mobile-overview.png",
       "platform": "web",
       "deviceClass": "mobile",
@@ -71,6 +89,24 @@
       "platform": "web",
       "deviceClass": "mobile",
       "feature": "developers",
+      "width": 390,
+      "height": 844,
+      "environment": "Chromium with isolated fixture"
+    },
+    {
+      "file": "mobile-sharing-editor.png",
+      "platform": "web",
+      "deviceClass": "mobile",
+      "feature": "sharing-editor",
+      "width": 390,
+      "height": 844,
+      "environment": "Chromium with isolated fixture"
+    },
+    {
+      "file": "mobile-app-configuration.png",
+      "platform": "web",
+      "deviceClass": "mobile",
+      "feature": "app-configuration",
       "width": 390,
       "height": 844,
       "environment": "Chromium with isolated fixture"
