@@ -1,8 +1,10 @@
+import {useConfirmDialog} from './dialog-model';
 import CopyButton from './CopyButton.web';
 import {mailClientSettings} from './mail-client-settings';
 import {useEffect,useState} from 'react';import {api} from './web-account';import {confirmIdentity} from './Reauthenticate.web';
 type Client={id:string;label:string;created:number;lastUsed:number|null};
 export default function MailClients({username}:{username?:string}){
+  const confirmAction=useConfirmDialog();
  const [clients,setClients]=useState<Client[]>([]),[label,setLabel]=useState(''),[secret,setSecret]=useState(''),[editing,setEditing]=useState(false),[status,setStatus]=useState('');
  const [profile,setProfile]=useState<{name:string;username:string;hasPicture:boolean}|null>(null);
  const load=()=>api('mail/clients').then(r=>{setClients(r.clients);setProfile(r.profile);});useEffect(()=>{void load().catch(e=>setStatus(e.message));},[]);
@@ -12,7 +14,7 @@ export default function MailClients({username}:{username?:string}){
  {editing&&<form onSubmit={event=>{event.preventDefault();act({action:'create',label});}}><label>Client name<input value={label} maxLength={64} required onChange={e=>setLabel(e.target.value)}/></label><button className="xc-button xc-primary">Create client credential</button></form>}
  {secret&&<div className="xc-info"><p>Save this password in your mail client now. It is shown once.</p>
    <div className="xc-code-row"><code>{secret}</code><CopyButton value={secret} label="Copy mail password"/></div><button className="xc-button xc-secondary" onClick={()=>setSecret('')}>Hide credential</button></div>}
- {clients.map(client=><div key={client.id} className="xc-list-row"><div><strong>{client.label}</strong><p>{client.lastUsed?'Last used '+new Date(client.lastUsed).toLocaleString():'Not used yet'}</p></div><button className="xc-button xc-secondary" onClick={()=>{if(window.confirm('Revoke access for '+client.label+'?'))act({action:'revoke',id:client.id});}}>Revoke client</button></div>)}
+ {clients.map(client=><div key={client.id} className="xc-list-row"><div><strong>{client.label}</strong><p>{client.lastUsed?'Last used '+new Date(client.lastUsed).toLocaleString():'Not used yet'}</p></div><button className="xc-button xc-secondary" onClick={async()=>{if(await confirmAction('Revoke access for '+client.label+'?','Revoke access'))act({action:'revoke',id:client.id});}}>Revoke client</button></div>)}
  <section className="xc-stack"><h3>Mail app connection settings</h3>
  {profile&&<div className="xc-row-head">{profile.hasPicture&&<img className="xc-avatar" src="/account/avatar" alt=""/>}<strong>{profile.name}</strong></div>}
  <dl className="xc-mail-connection">{mailClientSettings(profile?.username??username).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>

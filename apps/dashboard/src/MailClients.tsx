@@ -1,7 +1,9 @@
+import {useDialog} from './dialog-model';
 import CopyButton from './CopyButton';
 import {mailClientSettings} from './mail-client-settings';
-import {useEffect,useState} from 'react';import {Alert,Image,Pressable,Text,TextInput,View} from 'react-native';import {accountHost,nativeReauthenticate,nativeRequest} from './native-account';
+import {useEffect,useState} from 'react';import {Image,Pressable,Text,TextInput,View} from 'react-native';import {accountHost,nativeReauthenticate,nativeRequest} from './native-account';
 export default function MailClients({token,colors,username}:{username?:string;token:string;colors:{ink:string;muted:string;accent:string;soft:string}}){
+  const showDialog=useDialog();
  const [clients,setClients]=useState<{id:string;label:string}[]>([]),[label,setLabel]=useState(''),[secret,setSecret]=useState(''),[editing,setEditing]=useState(false),[status,setStatus]=useState('');
  const [profile,setProfile]=useState<{name:string;username:string;hasPicture:boolean}|null>(null);
  const load=()=>nativeRequest('mail/clients',token).then(r=>{setClients(r.clients);setProfile(r.profile);});useEffect(()=>{void load().catch(e=>setStatus(e.message));},[token]);
@@ -13,7 +15,7 @@ export default function MailClients({token,colors,username}:{username?:string;to
    <Text style={{color:colors.ink}}>Save this password now. It is shown once.</Text><View style={{flexDirection:'row',alignItems:'center'}}>
    <Text selectable style={{flex:1,color:colors.ink}}>{secret}</Text><CopyButton value={secret} label="Copy mail password" color={colors.accent}/></View>
    {button('Hide credential',()=>setSecret(''))}</View>}
- {clients.map(client=><View key={client.id} style={{gap:6}}><Text style={{color:colors.ink}}>{client.label}</Text>{button('Revoke client',()=>Alert.alert('Revoke '+client.label+'?','This mail app will lose access.',[{text:'Cancel',style:'cancel'},{text:'Revoke',style:'destructive',onPress:()=>void act({action:'revoke',id:client.id})}]))}</View>)}
+ {clients.map(client=><View key={client.id} style={{gap:6}}><Text style={{color:colors.ink}}>{client.label}</Text>{button('Revoke client',()=>showDialog('Revoke '+client.label+'?','This mail app will lose access.',[{text:'Cancel',style:'cancel'},{text:'Revoke',style:'destructive',onPress:()=>void act({action:'revoke',id:client.id})}]))}</View>)}
  <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Mail app connection settings</Text>
  {profile&&<View style={{flexDirection:'row',alignItems:'center',gap:10}}>{profile.hasPicture&&<Image accessible={false}
    source={{uri:accountHost+'/account/avatar',headers:{'X-AuthNJS-Native':'account-manager',Authorization:'Bearer '+token}}}

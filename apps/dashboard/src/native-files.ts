@@ -1,3 +1,4 @@
+import {launchCameraAsync, launchImageLibraryAsync, requestCameraPermissionsAsync} from 'expo-image-picker';
 import { randomUUID } from 'expo-crypto';
 import { getDocumentAsync } from 'expo-document-picker';
 import { Directory, File, Paths } from 'expo-file-system';
@@ -42,21 +43,38 @@ export async function pickDocumentsAsync() {
   });
 }
 
-export async function pickProfilePhoto() {
-  const response=await getDocumentAsync({type:['image/jpeg','image/png'],copyToCacheDirectory:true});
+export type ProfilePhotoSource = 'library' | 'camera' | 'files';
+
+export async function pickProfilePhoto(source: ProfilePhotoSource) {
+  if(source==='camera' && !(await requestCameraPermissionsAsync()).granted){
+    throw new Error('Allow camera access in Settings to take a photo.');
+  }
+
+  const response=source==='files'
+    ? await getDocumentAsync({type:'image/*',copyToCacheDirectory:true})
+    : source==='camera'
+      ? await launchCameraAsync({mediaTypes:['images'],quality:1})
+      : await launchImageLibraryAsync({mediaTypes:['images'],quality:1});
   if(response.canceled)return null;
   const original=new File(response.assets[0].uri);
   try{
-    if(!original.size||original.size>12*1024**2)throw new Error('Choose a JPEG or PNG under 12 MB.');
-    const edit=ImageManipulator.manipulate(original.uri).resize({width:256});
-    const rendered=await edit.renderAsync();
-    const output=await rendered.saveAsync({format:SaveFormat.JPEG,compress:.7,base64:true});
-    const cache=new File(output.uri);
+    if(!original.size||original.size>40*1024**2)throw new Error('Choose an image under 40 MB.');
+    const image=ImageManipulator.manipulate(original.uri);
+    const input=await image.renderAsync();
+    const side=Math.min(input.width,input.height);
+    const output=await ImageManipulator.manipulate(input)
+      .crop({originX:Math.floor((input.width-side)/2),originY:Math.floor((input.height-side)/2),width:side,height:side})
+      .resize({width:256,height:256}).renderAsync();
+    const saved=await output.saveAsync({format:SaveFormat.JPEG,compress:.7,base64:true});
+    const cache=new File(saved.uri);
     try{
-      if(!output.base64||output.base64.length>45_000)throw new Error('Choose a smaller profile photo.');
-      return output.base64;
+      if(!saved.base64||saved.base64.length>45_000)throw new Error('Choose a smaller profile photo.');
+      return saved.base64;
     }finally{if(cache.exists)cache.delete();}
-  }finally{if(original.exists)original.delete();}
+  }finally{
+    // DocumentPicker copies to cache. Other platforms may return a provider-owned URI.
+    if(source==='files'&&original.exists)original.delete();
+  }
 }
 
 export async function shareDownload(path:string,name:string,token:string) {

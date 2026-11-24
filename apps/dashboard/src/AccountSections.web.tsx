@@ -1,3 +1,4 @@
+import {useConfirmDialog} from './dialog-model';
 import {useFileTransfers} from './file-transfers';
 import {destinationLabels,type FolderDestination} from './file-destinations';
 import AppFileContainer from './AppFileContainer.web';
@@ -48,6 +49,7 @@ export function DevicesPage() {
 }
 
 export function FilesPage({ summary=false }: { summary?:boolean }) {
+  const confirmAction=useConfirmDialog();
   const [state,setState]=useState<Files|null>(null);
   const [status,setStatus]=useState('');
   const [busy,setBusy]=useState(false);
@@ -198,8 +200,8 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
           <td>—</td><td className="xc-file-date">—</td><td><div className="xc-file-actions">
             <button className="xc-file-icon" aria-label={'Rename '+item.name} onClick={()=>{setCreating(false);setRenaming(item);}} disabled={busy}><Pencil size={16}/></button>
             <button type="button" className="xc-file-icon" aria-label={'Move '+item.name} disabled={busy} onClick={()=>chooseMove({...item,folder:true})}><FolderInput size={16}/></button>
-            <button type="button" className="xc-file-icon" disabled={busy} onClick={()=>{
-              if(!window.confirm('Permanently remove '+item.name+' and everything inside it?'))return;
+            <button type="button" className="xc-file-icon" disabled={busy} onClick={async()=>{
+              if(!await confirmAction('Permanently remove '+item.name+' and everything inside it?'))return;
               change(()=>api('files/folders/'+item.id+'?recursive=1',{},'DELETE'),'Folder and contents removed.');
             }} aria-label={'Remove folder '+item.name}><Trash2 size={16}/></button>
           </div></td>
@@ -261,6 +263,7 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
 const mailLocation=()=>/^\/mail\/([0-9a-f-]{36})$/.exec(window.location.pathname)?.[1]??null;
 
 export function MailPage({ account }:{account:Account}) {
+  const confirmAction=useConfirmDialog();
   const [messages,setMessages]=useState<{id:string;received:number;size:number;subject?:string;from?:string;preview?:string}[]|null>(null);
   const [inboxCursor,setInboxCursor]=useState<string|null>(null);
   const [selecting,setSelecting]=useState(false);
@@ -388,7 +391,7 @@ export function MailPage({ account }:{account:Account}) {
       <h3>{accountMessage('privateAddresses','Hide My Email addresses')} · {aliases.filter(item=>item.active).length} On / {aliases.filter(item=>!item.active).length} Off</h3><p>On forwards incoming mail to your inbox. Off stops new deliveries to that address.</p>
       {aliases.map(item=><div className="xc-list-row" key={item.address}>
         <div><strong>{item.address}</strong><p>{item.active?'On · '+(item.premium?'Premium address':'Private address'):'Off · Not receiving mail'}</p><small>{item.clientLabel??(item.client.startsWith('dashboard')?'Created by you':item.client)}</small></div>
-        {!item.active&&<button type="button" className="xc-button xc-secondary" onClick={()=>{if(!window.confirm('Permanently delete '+item.address+'?'))return;void api('mail/aliases/'+item.address+'?permanent=true',{},'DELETE').then(()=>setAliases(items=>items.filter(alias=>alias.address!==item.address))).catch(error=>setStatus(notice(error)));}}>Delete address</button>}
+        {!item.active&&<button type="button" className="xc-button xc-secondary" onClick={async()=>{if(!await confirmAction('Permanently delete '+item.address+'?','Delete address'))return;void api('mail/aliases/'+item.address+'?permanent=true',{},'DELETE').then(()=>setAliases(items=>items.filter(alias=>alias.address!==item.address))).catch(error=>setStatus(notice(error)));}}>Delete address</button>}
         {!item.active&&<button className="xc-button xc-secondary" disabled={busy} onClick={()=>{setBusy(true);void api('mail/aliases/'+item.address,{active:true},'PUT').then(()=>api('mail/aliases')).then(r=>{setAliases(r.aliases);setStatus('Private address enabled.');}).catch(e=>setStatus(notice(e))).finally(()=>setBusy(false));}}>Turn on</button>}
         {item.active&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{
           if(confirmAlias!==item.address){setConfirmAlias(item.address);return;}

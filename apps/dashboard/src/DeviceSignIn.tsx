@@ -1,10 +1,12 @@
+import {useDialog} from './dialog-model';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef, useState, type ComponentRef } from 'react';
-import { Alert, Linking, Pressable, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, Text, TextInput, View } from 'react-native';
 import { deviceSignInUrl, isDeviceCode, normalizeDeviceCode } from './device-link';
 import { accountHost } from './native-account';
 
 export default function DeviceSignIn({colors,back}: {colors:{ink:string;accent:string;muted:string;soft:string;line:string};back:()=>void}) {
+  const showDialog=useDialog();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
   const [characters,setCharacters] = useState<string[]>(()=>Array(6).fill(''));
@@ -32,10 +34,10 @@ export default function DeviceSignIn({colors,back}: {colors:{ink:string;accent:s
     opening.current = true;
     setScanning(false);
     const dismiss = () => { opening.current = false; };
-    Alert.alert('Review device sign-in?', 'Continue only if the code is on a device you want to sign in. You’ll review the app on X-Center ID before approving.', [
+    showDialog('Review device sign-in?', 'Continue only if the code is on a device you want to sign in. You’ll review the app on X-Center ID before approving.', [
       {text:'Cancel',style:'cancel',onPress:dismiss},
       {text:'Review sign-in',onPress:()=>{dismiss();void open(url);}},
-    ], {cancelable:true,onDismiss:dismiss});
+    ]);
   }
 
   async function scan() {

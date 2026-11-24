@@ -1,11 +1,13 @@
+import {useDialog} from './dialog-model';
 import {Ionicons} from '@expo/vector-icons';
 import {groupHostedPermissions,permissionDirections,type HostedPermission} from './hosted-permission-groups';
 import {useEffect,useState} from 'react';
-import {Alert,Switch,Text,View} from 'react-native';
+import {Switch,Text,View} from 'react-native';
 import AppIcon from './AppIcon';
 import {nativeRequest} from './native-account';
 
 export default function HostedDataPermissions({token,colors,client}:{token:string;client:string;colors:{ink:string;muted:string;accent:string;line:string}}){
+  const showDialog=useDialog();
   const [items,setItems]=useState<HostedPermission[]>([]);
   const [status,setStatus]=useState('');
   const [busy,setBusy]=useState(false);
@@ -17,7 +19,7 @@ export default function HostedDataPermissions({token,colors,client}:{token:strin
       void nativeRequest('app-data-permissions',token,{source:item.source,destination:item.destination,collection:item.collection,enabled,confirmUnsecure:item.unsecure},'PUT')
         .then(load).catch(error=>setStatus(error.message)).finally(()=>setBusy(false));
     };
-    if(item.unsecure)Alert.alert('Unsecure app','Its hosting domain has not been verified.',[{text:'Cancel',style:'cancel'},{text:'Change permission',onPress:save}]);
+    if(item.unsecure)showDialog('Unsecure app','Its hosting domain has not been verified.',[{text:'Cancel',style:'cancel'},{text:'Change permission',onPress:save}]);
     else save();
   }
   return <View style={{gap:12}}>

@@ -26,7 +26,7 @@ export function UsernameChange() {
       <div className="xc-actions">{!request.confirmed&&<button className="xc-button xc-primary" disabled={busy} onClick={()=>change('confirm')}>Confirm request</button>}
         <button className="xc-button xc-secondary" disabled={busy} onClick={()=>change('cancel')}>Cancel request</button></div>
     </div>:<form className="xc-inline-form" onSubmit={event=>{event.preventDefault();change('request');}}>
-      <label>New username<input required pattern="[A-Za-z][A-Za-z0-9]{2,23}" maxLength={24} autoComplete="off"
+      <label>New username<input required pattern={String.raw`[A-Za-z0-9._\-]{3,24}`} maxLength={24} autoComplete="off"
         value={name} onChange={event=>setName(event.target.value)}/></label>
       <button className="xc-button xc-secondary" disabled={busy}>Request change</button>
     </form>}

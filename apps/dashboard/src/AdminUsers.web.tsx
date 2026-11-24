@@ -34,7 +34,7 @@ export function AdminAccounts(){
   const [capacity,setCapacity]=useState('');
   const [mailDaily,setMailDaily]=useState('');const [mailMonthly,setMailMonthly]=useState('');
   const [unit,setUnit]=useState(2);
-  const name=/^\/admin\/users\/([a-z][a-z0-9]{2,23})$/.exec(window.location.pathname)?.[1];
+  const name=/^\/admin\/users\/([a-z0-9._-]{3,24})$/.exec(window.location.pathname)?.[1];
   async function load(){
     if(name){setDetails(await api('admin/users/'+name));}
     else setUsers((await api('admin/accounts')).accounts);

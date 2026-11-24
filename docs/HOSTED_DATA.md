@@ -58,3 +58,21 @@ Cross-app requests are grouped under the linked publisher's name and current ico
 Developers can enable **Show this app’s data in the Files browser** in database settings for their own active, verified app. It is off by default. Linked accounts see the app name, icon and storage used. The app developer can open the folder and browse, download, create, edit or remove JSON records in the developer’s own account. Other linked accounts see usage only. Admin storage views show metadata and size. Service records and records owned by another user stay outside the folder. Turning the setting off also closes its content endpoints. Writes use the record revision and preserve existing sharing settings.
 
 The dashboard Permissions directory lists linked apps. Applications declare cross-app collection requests under their own registration and X-Center ID presents the eligible requests in sign-in and reauthorization. Incoming and outgoing sections show the other app and a switch for each request. The dashboard no longer creates arbitrary cross-app grants. Existing older saved-place grants can still be revoked. Active linked apps retain private user-container storage before verification; app-owned service storage still requires verification.
+
+
+## Developer permissions and configuration
+
+Open a registered app and choose **Manage app storage** or **Manage sharing requests**. To publish data for user-approved cross-app reads, a verified app adds collection names under **Published collections**. To request access, select a source app and one of its published collections under **Permissions requested from other apps**. Enter a user-facing title. An optional permission name uses lowercase letters, digits, underscores or dashes. The optional description and icon appear in consent. The source client ID and collection remain the access key. Removing a collection or a request revokes matching cross-app grants.
+
+**App configuration** exports editable JSON from the selected registration. Start from its exported document, edit it, and apply it after confirming your identity. The version 1 fields are:
+
+| Field | Format |
+| --- | --- |
+| `profile` | `name`, `description`, GitHub `repository` URL or empty string, exact `callbacks` array, and `icon` containing base64 PNG/JPEG or `null`. |
+| `requirements` | `email` and `age_range` booleans. Clients must request active required scopes. |
+| `access` | `private`, `allowRequests`, and `readerTrust` set to `secure`, `verified`, or `any`. Allowlisting stays in the app access screen. |
+| `storage` | `shared` array, `requests` array, and `showInFiles` boolean. Pending registrations export `null`. |
+
+A request has `source` (source client ID), `collection`, and `label` (the title). Optional fields include `name`, `description`, and `icon` selected from `records`, `folder`, `photo`, `calendar`, `location`, `heart`, and `shield`. Service storage and publishing require app verification, as does showing app folders in Files. Profile changes retain the verified callback origin and require app re-verification. The document excludes credentials, app approvals, user grants, capacity and database contents. Import applies to the selected registration only. Activation and consent still use their own flows.
+
+The first-party configuration route is `GET /account/developer/apps/:id/configuration`, returning `{ configuration, revision }`. The portal sends that revision with the updated configuration in a first-party `PUT`, requiring a recent passkey confirmation and rejecting stale edits. Registration and data settings are committed together. OAuth relying parties continue to use the documented authorization and data endpoints.

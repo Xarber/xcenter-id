@@ -1,3 +1,4 @@
+import {useDialog} from './dialog-model';
 import {developerModeKey,useDeveloperPanel} from './developer-panel';
 import { dashboardThemes } from './native-surfaces';
 import ReleaseNotes from './ReleaseNotes';
@@ -14,7 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { openBrowserAsync } from 'expo-web-browser';
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
-import { AccessibilityInfo, ActivityIndicator, Alert, AppState, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useColorScheme } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, AppState, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AccountEntry } from '@authnjs/expo';
 import { sample } from './sample';
@@ -42,6 +43,7 @@ const copy:Record<string,string> = {
 
 
 function NativeAccount() {
+  const showDialog=useDialog();
   const [reducedMotion,setReducedMotion]=useState(true);
   useEffect(()=>{void AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion);const subscription=AccessibilityInfo.addEventListener('reduceMotionChanged',setReducedMotion);return ()=>subscription.remove();},[]);
   const systemTheme=useColorScheme();
@@ -372,7 +374,7 @@ function NativeAccount() {
             <TextInput accessibilityLabel="Enter your username to confirm deletion" value={deleteName} onChangeText={setDeleteName}
               autoCapitalize="none" autoCorrect={false} style={{minHeight:44,color:colors.ink,borderWidth:1,borderColor:colors.line,padding:8}}/>
             {action('Cancel','close-outline',()=>setDeleteName(null))}
-            {deleteName===account.profile?.username&&action('Permanently delete account','trash-outline',()=>Alert.alert('Delete your account?','This cannot be undone.',[
+            {deleteName===account.profile?.username&&action('Permanently delete account','trash-outline',()=>showDialog('Delete your account?','This cannot be undone.',[
               {text:'Cancel',style:'cancel'},{text:'Delete',style:'destructive',onPress:()=>void deleteAccount()},
             ]))}
           </View>}

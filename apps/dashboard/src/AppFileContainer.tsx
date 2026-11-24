@@ -1,6 +1,7 @@
+import {useDialog} from './dialog-model';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import AppIcon from './AppIcon';
 import { useAppFileContainer, useAppRecordEditor, type AppFileContainer as Container } from './account-file-containers';
 import { nativeRequest } from './native-account';
@@ -11,6 +12,7 @@ import { formatBytes } from './storage-summary';
 export default function AppFileContainer({ app, token, colors, back }: {
   app: Container; token: string; colors: DashboardTheme; back: () => void;
 }) {
+  const showDialog=useDialog();
   const request = useCallback((path: string, data?:object, method?:string) => nativeRequest(path, token, data, method), [token]);
   const { collection, setCollection, folder, loading, error, more, path, refresh } = useAppFileContainer(app.client, request);
   const editor=useAppRecordEditor(app.client,request,refresh);
@@ -45,7 +47,7 @@ export default function AppFileContainer({ app, token, colors, back }: {
         autoCapitalize="none" autoCorrect={false} style={{color:colors.ink,minHeight:110,borderColor:colors.line,borderWidth:1,padding:8}}/>
       {action('Save record',()=>void editor.submit(),'checkmark-outline')}
       {action('Cancel',()=>setDraft(undefined),'close-outline')}
-      {!!draft.revision&&action('Remove record',()=>Alert.alert('Remove this record?','This permanently deletes the record.',[
+      {!!draft.revision&&action('Remove record',()=>showDialog('Remove this record?','This permanently deletes the record.',[
         {text:'Cancel',style:'cancel'},{text:'Remove',style:'destructive',onPress:()=>void editor.submit(true)},
       ]),'trash-outline')}
     </View>}

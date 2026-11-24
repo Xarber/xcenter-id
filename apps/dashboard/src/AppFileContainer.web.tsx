@@ -1,3 +1,4 @@
+import {useConfirmDialog} from './dialog-model';
 import { File, Folder, Pencil, Plus } from 'lucide-react';
 import { useAppFileContainer, useAppRecordEditor, type AppFileContainer as Container } from './account-file-containers';
 import AppIcon from './AppIcon.web';
@@ -5,6 +6,7 @@ import { formatBytes } from './storage-summary';
 import { api } from './web-account';
 
 export default function AppFileContainer({ app }: { app: Container }) {
+  const confirmAction=useConfirmDialog();
   const { collection, setCollection, folder, loading, error, more, path, refresh } = useAppFileContainer(app.client, api);
   const editor = useAppRecordEditor(app.client,api,refresh);
   const {draft,setDraft,busy} = editor;
@@ -25,8 +27,8 @@ export default function AppFileContainer({ app }: { app: Container }) {
       <div className="xc-actions">
         <button className="xc-button xc-primary" disabled={busy}>Save record</button>
         <button className="xc-button xc-secondary" type="button" disabled={busy} onClick={()=>setDraft(undefined)}>Cancel</button>
-        {!!draft.revision&&<button className="xc-button xc-secondary" type="button" disabled={busy} onClick={()=>{
-          if(window.confirm('Permanently remove this record?'))void editor.submit(true);
+        {!!draft.revision&&<button className="xc-button xc-secondary" type="button" disabled={busy} onClick={async()=>{
+          if(await confirmAction('Permanently remove this record?'))void editor.submit(true);
         }}>Remove record</button>}
       </div>
     </form>}

@@ -1,3 +1,4 @@
+import AppConfiguration from './AppConfiguration';
 import CopyButton from './CopyButton';
 import { optionalClaims, type ClaimRequirements, type DeveloperIdentity } from './developer-web';
 import TrustBadges from './TrustBadges';
@@ -34,6 +35,7 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
   const [permissionApp,setPermissionApp]=useState('');
   const [requirements,setRequirements]=useState(optionalClaims);
   const [creating,setCreating]=useState(false);
+  const [configuration,setConfiguration]=useState('');
   const [storage,setStorage]=useState('');
   const [apps, setApps] = useState<Registration[] | null>(null);
   const [notice, setNotice] = useState('Checking developer access…');
@@ -204,6 +206,18 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
     {profile?.status==='unverified'&&action('Request verification',()=>void saveDeveloper(true),saving||!profileName.trim())}
     {notice&&<Text accessibilityLiveRegion="polite" style={{color:ink}}>{notice}</Text>}
   </View>;
+  if(configuration&&token)return <AppConfiguration key={configuration} token={token}
+    colors={colors??{ink,accent,muted:border,soft:dark?'#23355d':'#e9f0ff'}} back={()=>{
+      setConfiguration('');
+      void request().then(async response=>{if(response.ok)setApps((await response.json()).apps);}).catch(()=>setNotice('Could not refresh apps.'));
+    }} request={async body=>{
+      const response=await request('/'+configuration+'/configuration',body?{
+        method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),
+      }:undefined);
+      const result=await response.json();
+      if(!response.ok)throw new Error(result.error??'Could not load configuration.');
+      return result;
+    }}/>;
   if(storage&&token)return <ApplicationStorage id={storage} token={token} colors={colors??{ink,accent,muted:border,soft:dark?'#23355d':'#e9f0ff'}} back={()=>setStorage('')}/>;
   return <Animated.View entering={entering} style={styles.content}>
     {action('Back to X-Center ID', back)}
@@ -239,6 +253,7 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
           {action('Save permissions',()=>void savePermissions(app.id),saving)}
           {action('Cancel',()=>setPermissionApp(''),saving)}
         </View>:action('Edit permissions',()=>{setRequirements(app.requirements??optionalClaims);setPermissionApp(app.id);},saving)}
+        {token&&action('App configuration',()=>setConfiguration(app.id),saving)}
         {app.status==='active'&&action('Manage application database',()=>setStorage(app.id))}
         {action('Manage app access and credentials on the web',()=>void Linking.openURL(accountHost+'/developer?app='+app.id).catch(()=>setNotice('Could not open the developer portal.')))}
         {app.status !== 'revoked' && (revoking === app.id ? <>

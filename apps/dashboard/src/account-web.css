@@ -284,3 +284,15 @@ input:is([type=checkbox],[type=radio]){inline-size:1.2rem;block-size:1.2rem;min-
 .xc-permission-group>.xc-row-head{padding:11px 0;gap:10px}
 .xc-permission-group h3{margin:0;overflow-wrap:anywhere}
 .xc-permission-group>.xc-list-row{padding:3px 0;gap:12px}
+.xc-action-dialog{max-height:calc(100dvh - 32px);overflow:auto;padding:22px}
+.xc-action-dialog h2{font-size:1.3rem;letter-spacing:-.025em}
+.xc-action-dialog p{color:var(--muted)}
+.xc-action-dialog .xc-actions{margin-top:16px;justify-content:flex-end}
+.xc-action-dialog .xc-danger{color:#a32134;background:#ffe9ed}
+.xc-permission-editor-item{display:grid;gap:12px;border:1px solid var(--line);border-radius:14px;padding:14px}
+.xc-permission-editor-item h3{margin:0;overflow-wrap:anywhere}
+.xc-permission-editor-item .xc-row-head{justify-content:space-between}
+.xc-permission-editor-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}
+.xc-permission-editor-grid label{min-width:0}
+.xc-permission-editor-grid small{color:var(--muted)}
+.xc-config-code{max-width:100%;width:100%;max-height:65dvh;resize:vertical;tab-size:2;font-family:ui-monospace,monospace}

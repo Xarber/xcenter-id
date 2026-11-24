@@ -1,9 +1,11 @@
+import AppConfiguration from './AppConfiguration.web';
+import {useConfirmDialog} from './dialog-model';
 import CopyButton from './CopyButton.web';
 import DeveloperAppAccess from './DeveloperAppAccess.web';
 import {confirmIdentity} from './Reauthenticate.web';
 import {api} from './web-account';
 import TrustBadges from './TrustBadges.web';
-import { ArrowLeft, ChevronRight, Database, Grid2X2, ImagePlus, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Braces, ChevronRight, Database, Grid2X2, ImagePlus, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { developerApi, optionalClaims, readAppIcon, type AppRegistration } from './developer-web';
 
@@ -11,6 +13,7 @@ type Draft=Pick<AppRegistration,'name'|'description'|'repository'|'icon'|'callba
 const blank=():Draft=>({name:'',description:'',repository:'',icon:null,callbacks:[''],native:false});
 
 export default function DeveloperPortal({back}:{back:()=>void}){
+  const confirmAction=useConfirmDialog();
   const [apps,setApps]=useState<AppRegistration[]|null>(null);
   const [selection,setSelection]=useState<AppRegistration|'create'|null>(null);
   const [draft,setDraft]=useState<Draft>(blank);
@@ -18,6 +21,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
   const [deleteConfirm,setDeleteConfirm]=useState(false);
   const [notice,setNotice]=useState('');
   const [busy,setBusy]=useState(false);
+  const [showConfiguration,setShowConfiguration]=useState(false);
   const [secret,setSecret]=useState<{clientId:string;clientSecret?:string}|null>(null);
   async function load(){
     const result=await developerApi('apps');
@@ -64,9 +68,14 @@ export default function DeveloperPortal({back}:{back:()=>void}){
   </div>;
 
   const existing=selection==='create'?null:selection;
+  if(existing&&showConfiguration)return <AppConfiguration key={existing.id} id={existing.id} back={()=>{
+    setShowConfiguration(false);
+    void load().then(items=>{const app=items.find(item=>item.id===existing.id);if(app)edit(app);}).catch(error=>setNotice(error.message));
+  }}/>;
   return <div className="xc-stack">
     <button type="button" className="xc-button xc-secondary xc-self-start" onClick={()=>{history.replaceState(history.state,'','/developer');edit(null);}} disabled={busy}><ArrowLeft size={16}/> Registered apps</button>
     {existing?.status==='active'&&<a className="xc-button xc-secondary xc-self-start" href={'/developer/storage/'+existing.id}><Database size={17}/> {existing.verified?'Manage app storage':'Manage sharing requests'}</a>}
+    {existing&&<button type="button" className="xc-button xc-secondary xc-self-start" onClick={()=>setShowConfiguration(true)}><Braces size={17}/> App configuration</button>}
     <div><h2>{existing?.name??'Register an app'}</h2><TrustBadges kind="app" verified={existing?.verified}/></div>
     <form className="xc-stack" onSubmit={event=>{event.preventDefault();save();}}>
       <div className="xc-profile-head xc-portal-profile">
@@ -132,7 +141,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
       {existing.client&&<div className="xc-code-row"><small>Client ID <code>{existing.client}</code></small><CopyButton value={existing.client} label="Copy client ID"/></div>}
       {existing.status==='active'&&existing.client&&!existing.native&&<div className="xc-actions">
         {(['rotate','revoke'] as const).map(action=><button type="button" key={action} className="xc-button xc-secondary" disabled={busy}
-          onClick={()=>{if(!window.confirm('The current OAuth client secret will stop working immediately. Continue?'))return;
+          onClick={async()=>{if(!await confirmAction('Change OAuth client secret?',action==='rotate'?'Generate new secret':'Revoke secret','The current secret will stop working immediately.'))return;
             work(async()=>{
               if(!(await api('session/access')).confirmed)await confirmIdentity();
               const credential=await developerApi('apps/'+existing.id+'/client-secret',{action});

@@ -1,3 +1,4 @@
+import {useDialog} from './dialog-model';
 import {useFileTransfers} from './file-transfers';
 import {destinationLabels,type FolderDestination} from './file-destinations';
 import AppFileContainer from './AppFileContainer';
@@ -22,8 +23,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { accountGreeting, accountShortcuts, accountStatus } from './account-overview';
 import BirthdayPicker from './BirthdayPicker';
 import type { MailMessage, PrivateAddress } from './mail-message';
-import { pickDocumentAsync, pickDocumentsAsync, pickProfilePhoto, shareDownload } from './native-files';
-import { Alert, AppState, Image, KeyboardAvoidingView, Modal, Platform, Pressable, Share, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { pickDocumentAsync, pickDocumentsAsync, pickProfilePhoto, shareDownload, type ProfilePhotoSource } from './native-files';
+import { ActionSheetIOS, AppState, Image, KeyboardAvoidingView, Modal, Platform, Pressable, Share, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -75,6 +76,7 @@ function MailScreen({colors,close,children}:{colors:Theme;close:()=>void;childre
 }
 
 export default function NativeSections({ section,token,account,colors,reload,expired,passkeys,navigate }:Props) {
+  const showDialog=useDialog();
   const [supportSubject,setSupportSubject]=useState('');
   const [supportText,setSupportText]=useState('');
   const [heroPhotoFailed,setHeroPhotoFailed]=useState(false);
@@ -234,8 +236,29 @@ export default function NativeSections({ section,token,account,colors,reload,exp
     </View>;
   }
   function paragraph(value:string) {return <Text style={{color:colors.muted}}>{value}</Text>;}
+  function chooseProfilePhoto() {
+    const sources: {text:string;source:ProfilePhotoSource}[] = [
+      {text:'Photo Library',source:'library'},
+      {text:'Take Photo',source:'camera'},
+      {text:'Choose File',source:'files'},
+    ];
+    const pick=(source:ProfilePhotoSource)=>run(async()=>{
+      const selected=await pickProfilePhoto(source);
+      if(selected)setPicture(selected);
+    });
+    if(Platform.OS==='ios'){
+      ActionSheetIOS.showActionSheetWithOptions({
+        options:[...sources.map(choice=>choice.text),'Cancel'],cancelButtonIndex:sources.length,
+      },index=>{if(sources[index])pick(sources[index].source);});
+      return;
+    }
+    showDialog('Choose profile photo',undefined,[
+      ...sources.map(({text,source})=>({text,onPress:()=>pick(source)})),{text:'Cancel',style:'cancel'},
+    ]);
+  }
+
   function confirm(title:string,body:string,operation:()=>void) {
-    Alert.alert(title,body,[{text:'Cancel',style:'cancel'},{text:'Confirm',style:'destructive',onPress:operation}]);
+    showDialog(title,body,[{text:'Cancel',style:'cancel'},{text:'Confirm',style:'destructive',onPress:operation}]);
   }
   function row(key:string,label:string,description:string,actions?:ReactNode) {
     return <View style={[styles.row,{borderColor:colors.line}]} key={key}><Text style={[styles.label,{color:colors.ink}]}>{label}</Text>
@@ -296,7 +319,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
             headers:{Authorization:'Bearer '+token,'X-AuthNJS-Native':'account-manager'},cache:'reload',
           }}/>}
         <View style={styles.actions}>
-          {button('Choose profile photo',()=>run(async()=>{const selected=await pickProfilePhoto();if(selected)setPicture(selected);}))}
+          {button('Choose profile photo',chooseProfilePhoto)}
           {(picture||(picture===undefined&&account.profile?.hasPicture))&&button('Remove photo',()=>setPicture(null))}
         </View>
         {field('Given name',givenName,setGiven,{maxLength:64,autoComplete:'given-name'})}

@@ -1,3 +1,4 @@
+import {useConfirmDialog} from './dialog-model';
 import {ArrowDownLeft,ArrowUpRight,LockKeyhole} from 'lucide-react';
 import {groupHostedPermissions,permissionDirections,type HostedPermission} from './hosted-permission-groups';
 import {useEffect,useState} from 'react';
@@ -5,13 +6,14 @@ import AppIcon from './AppIcon.web';
 import {api} from './web-account';
 
 export default function HostedDataPermissions({client}:{client:string}){
+  const confirmAction=useConfirmDialog();
   const [items,setItems]=useState<HostedPermission[]>([]);
   const [status,setStatus]=useState('');
   const [busy,setBusy]=useState(false);
   const load=()=>api('app-data-permissions').then(result=>setItems(result.permissions));
   useEffect(()=>{void load().catch(error=>setStatus(error.message));},[]);
-  function change(item:HostedPermission,enabled:boolean){
-    if(item.unsecure&&!window.confirm('Edit data permissions for this app? Its hosting domain has not been verified.'))return;
+  async function change(item:HostedPermission,enabled:boolean){
+    if(item.unsecure&&!await confirmAction('Edit data permissions for this app? Its hosting domain has not been verified.'))return;
     setBusy(true);
     void api('app-data-permissions',{source:item.source,destination:item.destination,collection:item.collection,enabled,confirmUnsecure:item.unsecure},'PUT')
       .then(load).catch(error=>setStatus(error.message)).finally(()=>setBusy(false));

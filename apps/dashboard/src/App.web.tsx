@@ -142,7 +142,7 @@ function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,cre
         <p>{signup?'Choose your username, then save a passkey for it.':'Use your username or sign in directly with a passkey.'}</p>
         {signup ? <form onSubmit={event=>{event.preventDefault();create(username);}}>
           <label>X-Center username<input name="username" autoComplete="username" spellCheck={false}
-            pattern="[A-Za-z][A-Za-z0-9]{2,23}" maxLength={24} required value={username} onChange={event=>setUsername(event.target.value)}/></label>
+            pattern={String.raw`[A-Za-z0-9._\-]{3,24}`} maxLength={24} required value={username} onChange={event=>setUsername(event.target.value)}/></label>
           <button type="submit" className="xc-button xc-primary xc-full" disabled={busy||!username.trim()}>
             <Fingerprint size={19}/>{busy?'Waiting for your passkey…':'Choose username and create passkey'}<ArrowRight size={17}/>
           </button>

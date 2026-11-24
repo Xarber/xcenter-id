@@ -1,3 +1,4 @@
+import {useConfirmDialog} from './dialog-model';
 import {useEffect,useState} from 'react';
 import {developerApi} from './developer-web';
 import {api} from './web-account';
@@ -5,6 +6,7 @@ import {api} from './web-account';
 type Access = {readerTrust:'secure'|'verified'|'any';private:boolean;requests:boolean;members:{username:string;approved:boolean}[]};
 
 export default function DeveloperAppAccess({id}:{id:string}){
+  const confirmAction=useConfirmDialog();
   const [access,setAccess]=useState<Access|null>(null);
   const [friends,setFriends]=useState<{username:string}[]>([]);
   const [username,setUsername]=useState('');
@@ -28,7 +30,7 @@ export default function DeveloperAppAccess({id}:{id:string}){
   const members=new Map(access?.members.map(item=>[item.username,item.approved]));
   const friendNames=new Set(friends.map(person=>person.username));
   const rows=[...new Set([...friendNames,...members.keys()])].filter(name=>name.includes(query)).sort();
-  const lookUp=!!access?.private&&/^[a-z][a-z0-9]{2,23}$/.test(query)&&!friendNames.has(query)&&!members.has(query);
+  const lookUp=!!access?.private&&/^[a-z0-9._-]{3,24}$/.test(query)&&!friendNames.has(query)&&!members.has(query);
   useEffect(()=>{
     if(!lookUp)return;
     let active=true;
@@ -43,9 +45,9 @@ export default function DeveloperAppAccess({id}:{id:string}){
   return <section className="xc-stack">
     <h3>Who can use this app</h3>
     {access&&<><label>Apps allowed to read shared data
-      <select value={access.readerTrust} disabled={busy} onChange={event=>{
+      <select value={access.readerTrust} disabled={busy} onChange={async event=>{
         const mode=event.target.value;
-        if(mode==='any'&&!window.confirm('Allow unsecure apps to request access to shared records? Users must still approve.'))return;
+        if(mode==='any'&&!await confirmAction('Allow unsecure apps to request access to shared records? Users must still approve.'))return;
         void change({action:'reader-trust',mode});
       }}><option value="secure">Secure apps</option><option value="verified">Verified apps only</option><option value="any">All apps, including unsecure apps</option></select>
     </label><label className="xc-device-option"><span>Private app</span>

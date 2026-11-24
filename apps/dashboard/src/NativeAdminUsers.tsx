@@ -1,3 +1,4 @@
+import {useDialog} from './dialog-model';
 import AppIcon from './AppIcon';
 import type {AppFileContainer as Container} from './account-file-containers';
 import {Surface,SurfaceTitle,type DashboardTheme} from './native-surfaces';
@@ -5,7 +6,7 @@ import {formatBytes} from './storage-summary';
 import TrustBadges from './TrustBadges';
 import ApplicationStorage from './ApplicationStorage';
 import {useEffect,useState} from 'react';
-import {Alert,Image,Pressable,Text,TextInput,View} from 'react-native';
+import {Image,Pressable,Text,TextInput,View} from 'react-native';
 import {Ionicons} from '@expo/vector-icons';
 import {accountHost,nativeRequest} from './native-account';
 import type {ManagedAccount} from './support-model';
@@ -21,6 +22,7 @@ function Avatar({user,token,colors}:{user:ManagedAccount;token:string;colors:Col
   }} style={{width:44,height:44,borderRadius:22}}/>:<View style={{width:44,height:44,borderRadius:22,alignItems:'center',justifyContent:'center',backgroundColor:colors.soft}}><Ionicons accessible={false} name="person-outline" size={23} color={colors.accent}/></View>;
 }
 export default function NativeAdminUsers({token,colors,onDetail}:{token:string;colors:Colors;onDetail:(open:boolean)=>void}){
+  const showDialog=useDialog();
   const [users,setUsers]=useState<ManagedAccount[]>([]);
   const [capacity,setCapacity]=useState<string|null>(null);
   const [unit,setUnit]=useState(2);
@@ -87,14 +89,14 @@ export default function NativeAdminUsers({token,colors,onDetail}:{token:string;c
           {user.developerVerified!==undefined&&icon(user.developerVerified?'Remove developer verification':'Verify developer','ribbon-outline',()=>run(async()=>{
             await api('admin/users/'+user.username,{action:'verify-developer',enabled:!user.developerVerified});
           }))}
-          {!user.rootAdmin&&icon(user.admin?'Remove admin access':'Grant admin access','shield-checkmark-outline',()=>Alert.alert('Change administrator access?','Administrators can manage accounts, apps and support.',[{text:'Cancel',style:'cancel'},{text:'Confirm',onPress:()=>run(async()=>{await api('admin/users/'+user.username,{action:'set-admin',enabled:!user.admin});})}]))}
+          {!user.rootAdmin&&icon(user.admin?'Remove admin access':'Grant admin access','shield-checkmark-outline',()=>showDialog('Change administrator access?','Administrators can manage accounts, apps and support.',[{text:'Cancel',style:'cancel'},{text:'Confirm',onPress:()=>run(async()=>{await api('admin/users/'+user.username,{action:'set-admin',enabled:!user.admin});})}]))}
           {icon('Change storage','server-outline',()=>{setCapacity(String(user.capacity/1024**2));setUnit(2);})}
           {icon('External email limits','mail-open-outline',()=>setMailLimits({daily:user.externalMailLimits?.daily==null?'':String(user.externalMailLimits.daily),monthly:user.externalMailLimits?.monthly==null?'':String(user.externalMailLimits.monthly)}))}
           {icon(user.premium?'Disable premium aliases':'Enable premium aliases','eye-off-outline',()=>run(async()=>{await api('admin/premium',{username:user.username,enabled:!user.premium});}))}
           {!user.protected&&<>{icon(user.locked?'Unlock account':'Lock account',user.locked?'lock-open-outline':'lock-closed-outline',()=>run(async()=>{
             await api('admin/account-status',{username:user.username,action:user.locked?'unlock':'lock'});
           }))}
-          {icon('Sign out all devices','log-out-outline',()=>Alert.alert('Sign out all devices?','The user can sign in again.',[
+          {icon('Sign out all devices','log-out-outline',()=>showDialog('Sign out all devices?','The user can sign in again.',[
             {text:'Cancel',style:'cancel'},{text:'Confirm',onPress:()=>run(async()=>{await api('admin/account-status',{username:user.username,action:'revoke-sessions'});})},
           ]))}
           {icon('Delete account','trash-outline',()=>{setDeleting(true);setTyped('');})}</>}
@@ -138,7 +140,7 @@ export default function NativeAdminUsers({token,colors,onDetail}:{token:string;c
             {app.status==='active'&&icon(app.restricted?'Restore app':'Restrict app',app.restricted?'lock-open-outline':'lock-closed-outline',()=>run(async()=>{
               await api('admin/users/'+user.username,{action:app.restricted?'restore':'restrict',app:app.id});
             }))}
-            {icon('Delete app','trash-outline',()=>Alert.alert('Delete this app?','Future sign-in through this registration will stop.',[
+            {icon('Delete app','trash-outline',()=>showDialog('Delete this app?','Future sign-in through this registration will stop.',[
               {text:'Cancel',style:'cancel'},{text:'Delete',style:'destructive',onPress:()=>run(async()=>{
                 await api('admin/users/'+user.username,{action:'delete',app:app.id,confirmation:app.id});
               })},

@@ -516,9 +516,22 @@ The batch-only usage override ends here. See the [0.15.1 verification report](re
 
 | ID | Request | State | Acceptance criteria |
 | --- | --- | --- | --- |
-| AUTHN-142 | Open consent immediately for the current signed-in browser account and offer explicit account switching | In Progress | Use the existing dashboard session for ordinary authorization. Offer a separate account picker only from the account row, including on private-app access denial. Return to the same authorization, preserve saved sessions, and keep explicit fresh sign-in requirements. |
-| AUTHN-143 | Confirm native administration for the native account | In Progress | Use the one-time request from the native session and verify that account’s passkey even when the browser has another account or is signed out. Elevate the native session only. |
-| AUTHN-144 | Align the orbit, permission chevron and grouped permission switches | In Progress | Put the service tiles on the same orbit, move the arrow to the row edge, align the group spacing and show the same visible switch as other permissions. |
-| AUTHN-145 | Verify and deploy this batch | Queued | Verify account and consent boundaries, source and browser checks, then stage and verify production. |
+| AUTHN-142 | Open consent immediately for the current signed-in browser account and offer explicit account switching | Implemented | Browser OAuth fixture verified direct consent, explicit selection, stale form rejection and the selected account’s independent grant. Private-app denial includes selection. |
+| AUTHN-143 | Confirm native administration for the native account | Implemented | Synthetic signed passkey assertion verified confirmation and replay controls for the requesting native session. Installed device verification remains open. |
+| AUTHN-144 | Align the orbit, permission chevron and grouped permission switches | Verified | Chromium verified centered orbit tiles, edge-aligned permission arrow and visible switches at desktop and mobile web widths. |
+| AUTHN-145 | Verify and deploy this batch | Verified | Dashboard 0.15.2 web/API deployed as `316c79e`. Public revision and readiness confirmed, candidate had zero restarts. Native preview [45349747460](https://github.com/Xarber/xcenter-id/actions/runs/45349747460) passed all four jobs. |
 
 Usage thresholds were waived for this batch only.
+
+### Profile and application configuration improvements
+
+| ID | Request | State | Acceptance criteria |
+| --- | --- | --- | --- |
+| AUTHN-146 | Accept dots, underscores, dashes and digits in usernames | Implemented | API regression covers normalized punctuated handles, mailbox routing and valid dot placement. Browser forms and real mail-client paths remain to verify. |
+| AUTHN-147 | Count profile photos and offer camera, photo library and Files | Implemented | API verifies upload and removal accounting, and preserves the prior photo and usage on quota failure. Camera, Files and photo library need an installed build. |
+| AUTHN-148 | Replace system confirmation prompts with reusable dashboard dialogs | Implemented | Dashboard uses a shared in-app modal. Verify cancellation, confirmation, focus, dark mode and small screens in Chromium and on an installed native build. |
+| AUTHN-149 | Build a visual data permissions editor and editable app configuration | Implemented | API verified the full configuration round trip, owner checks, confirmation, stale edits and grant revocation. Portal fields and code screen need a browser and native test. Repository and installed integration skill updated. |
+
+24 November 11:43 CET usage checkpoint under UADS §0. The older 0.15.2 override ended with that deployment. This batch has 34% weekly usage left and no reset credits. The weekly reset is 30 November at 11:09:58 CET. The 35% weekly threshold applies until 25 November at 11:09:58 CET. The five-hour window has 70% remaining and resets on 24 November at 16:33:38 CET. All 47 API tests passed. The profile and configuration changes have not been deployed or built for native.
+
+Next action when usage allows: export the web dashboard from `testing`, run the existing Chromium capture and regression script, then exercise both username flows, modal cancellation and focus, the visual permission editor and the code screen with isolated app fixtures. Prepare version and release notes, verify Expo's native permission configuration, and use a preview build for installed iOS and Android verification. If promoting this batch, stage and verify inbound SMTP plus SMTP/IMAP client service dependencies along with the web/API because mailbox routing changed.

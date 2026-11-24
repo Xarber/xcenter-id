@@ -67,3 +67,7 @@ The root opens sign-in for a signed-out visitor. A completed profile is required
 The account deletion action is in Settings. Tap the app version three times to reveal the saved Developer Mode switch. With the switch enabled, open Developer Options as a separate panel. Leaving Settings or timing out hides its entry. Each full changelog has Back. Developer Mode adds a Developer notes control to the full page with commit titles, summaries, and identifiers. Release-note screenshots are reviewed separately from user-account screenshots.
 
 The desktop sign-in constellation runs over the fixed night backdrop. The star layer moves independently and respects Reduced Motion. Device-code fields accept ASCII letters and digits, including lowercase input, and the issuer validates the combined code against an issued transaction.
+
+In Profile → Edit profile, mobile offers the camera, photo library, and Files through the system pickers. On iOS the source menu is a platform action sheet. Saved photos are normalized to JPEG and contribute their encrypted stored size to Data usage. New or larger photos that would exceed the remaining account quota are rejected.
+
+Dashboard confirmations use the shared in-app dialog provider on web, iOS and Android. Escape or Back cancels where supported. System camera, file selection and passkey UI remain platform-owned.

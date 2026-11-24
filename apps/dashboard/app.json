@@ -24,8 +24,16 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow X-Center ID to scan a device sign-in code.",
+          "cameraPermission": "Allow X-Center ID to take a profile photo or scan a device sign-in code.",
           "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a profile photo for your X-Center ID.",
+          "cameraPermission": "Allow X-Center ID to take a profile photo or scan a device sign-in code.",
+          "microphonePermission": false
         }
       ],
       "@react-native-community/datetimepicker"
