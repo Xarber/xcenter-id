@@ -1,6 +1,6 @@
 {
   "0.16.0": {
-    "revision": "885ee212904a2eb03fa5dc2dbf6aa3ce8f1ba638",
+    "revision": "a36fd3f9bd2663b4b89df9b0f46e4f265bbb8b94",
     "commits": [
       {
         "id": "316c79e1bef9e636541a46322bffb419a690c435",
@@ -21,6 +21,26 @@
         "id": "885ee212904a2eb03fa5dc2dbf6aa3ce8f1ba638",
         "title": "test(dashboard): exercise configuration and modal flows",
         "detail": "Changed areas: apps/dashboard, services/api."
+      },
+      {
+        "id": "6664a9175e1997439d24c0398ffb16c41eb16ee2",
+        "title": "chore(release): prepare dashboard 0.16.0 preview",
+        "detail": "Changed areas: CHANGELOG.md, apps/dashboard."
+      },
+      {
+        "id": "26356ffbe00913a2d54c17aec64992988a3dc71a",
+        "title": "fix(dashboard): label permission selectors and clean cached profile photos",
+        "detail": "Changed areas: apps/dashboard."
+      },
+      {
+        "id": "ca59cf9b0497f073f2a3768662d7f0ee649b8872",
+        "title": "fix(dashboard): preserve code formatting in the configuration editor",
+        "detail": "Changed areas: apps/dashboard, services/api."
+      },
+      {
+        "id": "a36fd3f9bd2663b4b89df9b0f46e4f265bbb8b94",
+        "title": "docs(integration): describe the configuration editor and portal compatibility",
+        "detail": "Changed areas: apps/dashboard, docs/RELEASES.md, skills/integrate-xcenter-id."
       }
     ]
   },
