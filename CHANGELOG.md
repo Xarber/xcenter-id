@@ -3,6 +3,19 @@
 This archive covers the original AuthNJS source and the X-Center ID rewrite. Earlier entries reconstruct source milestones. Development entries identify unreleased work. There are no published GitHub releases in this history.
 Deployment and native build evidence are recorded in [release documentation](docs/RELEASES.md).
 
+## 0.15.2 · 2026-11-24
+
+Development
+
+### App authorization and account switching
+
+
+### Fixes & Improvements
+
+- App authorization uses the signed-in account and lets you choose a different one from consent or a private app’s access screen.
+- Native admin confirmation uses the passkey for the account signed into the app.
+- Grouped permission switches are visible, permission arrows align right, and all sign-in tiles line up on the orbit.
+
 ## 0.15.1 · 2026-11-24
 
 Development

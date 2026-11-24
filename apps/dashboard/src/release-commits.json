@@ -1,4 +1,29 @@
 {
+  "0.15.2": {
+    "revision": "80be3a860268ea497c9ab48b1ccd9c9536dc046f",
+    "commits": [
+      {
+        "id": "a902402a2f40a9d69ae93fe5955cfe6794dc95f7",
+        "title": "chore(release): prepare dashboard 0.15.1 preview",
+        "detail": "Changed areas: CHANGELOG.md, apps/dashboard, docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "2c931ed30a4ad4ff3f80f2e5d438d57a317f2a43",
+        "title": "fix(files): clarify recursive removal confirmation",
+        "detail": "Changed areas: apps/dashboard."
+      },
+      {
+        "id": "82e9bb3fc66593c59082d3d36f50051864750340",
+        "title": "docs(ops): record dashboard 0.15.1 rollout",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations, docs/reports."
+      },
+      {
+        "id": "80be3a860268ea497c9ab48b1ccd9c9536dc046f",
+        "title": "fix(identity): resume authorization with the selected account",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/IDENTITY.md, docs/SECURITY.md, services/api."
+      }
+    ]
+  },
   "0.15.1": {
     "revision": "1acba82a180d04cd3a4d52c15338710cd9e780bb",
     "commits": [

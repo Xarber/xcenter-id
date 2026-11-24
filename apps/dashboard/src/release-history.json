@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.15.2",
+    "date": "2026-11-24",
+    "revision": "80be3a860268ea497c9ab48b1ccd9c9536dc046f",
+    "title": "App authorization and account switching",
+    "status": "Development",
+    "features": [],
+    "fixes": [
+      "App authorization uses the signed-in account and lets you choose a different one from consent or a private app’s access screen.",
+      "Native admin confirmation uses the passkey for the account signed into the app.",
+      "Grouped permission switches are visible, permission arrows align right, and all sign-in tiles line up on the orbit."
+    ]
+  },
+  {
     "version": "0.15.1",
     "date": "2026-11-24",
     "revision": "1acba82a180d04cd3a4d52c15338710cd9e780bb",
