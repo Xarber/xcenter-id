@@ -407,7 +407,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
       }
       if(input.action==='settings'){
         if(typeof input.private!=='boolean'||typeof input.requests!=='boolean')return answer(422,{error:'Choose valid access settings.'});
-      }else if(['approve','remove'].includes(input.action)&&typeof input.username==='string'&&/^[a-z0-9._-]{3,24}$/.test(input.username)){
+      }else if(['approve','remove'].includes(input.action)&&isUsername(input.username)){
         input.account=accounts.ownerForUsername(input.username);
         if(!input.account||input.account===owner)return answer(422,{error:'Choose another existing username.'});
       }else return answer(422,{error:'Choose a valid access action.'});

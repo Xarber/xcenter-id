@@ -251,6 +251,11 @@ with sync_playwright() as browser_tools:
         page.get_by_label("Title",exact=True).fill("Read plants")
         page.get_by_label("Description").fill("Show your plants in the journal")
         page.get_by_label("Icon",exact=True).select_option("folder")
+        page.evaluate("window.scrollTo(0, 0)")
+        name = f"{kind}-sharing-editor.png"
+        page.screenshot(path=args.output / name, animations="disabled")
+        shots.append({"file": name, "platform": "web", "deviceClass": kind, "feature": "sharing-editor",
+                      "width": width, "height": height, "environment": "Chromium with isolated fixture"})
         button(page,"Save sharing settings").click()
         expect(page.get_by_text("Saved.",exact=True)).to_be_visible()
         assert mutations[-1][0] == app_storage_path
@@ -277,6 +282,10 @@ with sync_playwright() as browser_tools:
         dialog.get_by_role("button",name="Apply configuration").click()
         expect(page.get_by_text("Configuration saved.")).to_be_visible()
         assert mutations[-1] == (configuration_path, {"configuration":updated,"revision":"fixture-revision","confirmUnsecure":False})
+        context.grant_permissions(["clipboard-read", "clipboard-write"], origin=origin)
+        button(page,"Copy app configuration").click()
+        page.wait_for_function("async () => (await navigator.clipboard.readText()).includes('/second')")
+        page.evaluate("window.scrollTo(0, 0)")
         name = f"{kind}-app-configuration.png"
         page.screenshot(path=args.output / name, animations="disabled")
         shots.append({"file": name, "platform": "web", "deviceClass": kind, "feature": "app-configuration",

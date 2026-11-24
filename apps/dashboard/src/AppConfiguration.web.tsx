@@ -20,7 +20,7 @@ export default function AppConfiguration({id,back}:{id:string;back:()=>void}){
     <p>Copy or paste a complete JSON configuration for this registration. It contains no credentials.</p>
     {editor.ready&&<>
       <label htmlFor="app-configuration">Configuration JSON</label>
-      <textarea id="app-configuration" rows={20} className="xc-config-code" value={editor.text}
+      <textarea id="app-configuration" rows={20} wrap="off" className="xc-config-code" value={editor.text}
         onChange={event=>editor.setText(event.currentTarget.value)} disabled={editor.busy} spellCheck={false} autoCapitalize="off" maxLength={150000}/>
       <div className="xc-actions">
         <button className="xc-button xc-primary" disabled={editor.busy} onClick={()=>void editor.save()}><Save size={16}/> Apply configuration</button>
