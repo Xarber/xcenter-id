@@ -539,3 +539,7 @@ Next action when usage allows: export the web dashboard from `testing`, run the 
 The user waived the weekly threshold for this batch. Source, isolated Chromium, picture quota and registration configuration checks passed. See [verification report](reports/PROFILE_AND_APP_CONFIGURATION_2026-11-24.md). The next stage is a native preview, then installed confirmation, library, camera and Files checks when devices are available. This batch leaves production at 0.15.2.
 
 The 0.16.0 [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45378307774) was submitted from `308747c`. Next check the job results, then install and exercise photo selection, account confirmation and developer tools on an available device. The weekly usage override ends with this batch.
+
+| ID | Request | State | Evidence |
+| --- | --- | --- | --- |
+| AUTHN-150 | Deploy 0.16.0 to production and start a native build if needed | Verified | `308747c` is live for the website, API and mail. Staged mail passed with a punctuated handle and public 465/993 TLS checks passed. Reused the running [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45378307774) for the same revision. Build completion and installed checks remain open. |
