@@ -24,7 +24,7 @@ Run 44138528022 for `207627d` published private workflow artifacts for the unsig
 
 ## Version history and onboarding
 
-[CHANGELOG.md](../CHANGELOG.md) includes the original AuthNJS 1.0.0 milestone and X-Center ID 0.1.0 through 0.15.1. There were no published GitHub releases when these records were reconstructed. Older dates identify source milestones. The 0.15.0 development entry records transfers, account switching and the updated sign-in flow. Preview builds and production revisions have separate receipts.
+[CHANGELOG.md](../CHANGELOG.md) includes the original AuthNJS 1.0.0 milestone and X-Center ID 0.1.0 through 0.16.0. There were no published GitHub releases when these records were reconstructed. Older dates identify source milestones. The 0.15.0 development entry records transfers, account switching and the updated sign-in flow. Preview builds and production revisions have separate receipts.
 
 The structured source is `apps/dashboard/src/release-history.json`. Overview cards show up to three icon-led changes. Every version has a public web route at `/changelog/<version>` and a native deep link at `authnjs-dashboard://changelog/<version>`. The Settings archive works offline from the installed app or cached web shell. Tap the version three times in Settings to reveal and enable Developer Mode to open source commit notes from a full changelog page. GitHub's public commit history remains available.
 
