@@ -1,3 +1,4 @@
+import {isUsername} from './identity-profile.mjs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -140,7 +141,7 @@ export function createFriendRoutes({accounts,friends}) {
     catch { return send(res,422,{error:'Invalid invitation.'}); }
     if(path.endsWith('/request')){
       const name=typeof input?.username==='string'?input.username.trim().toLowerCase():'';
-      if(!/^[a-z][a-z0-9]{2,23}$/.test(name))return send(res,422,{error:'Enter a valid username.'});
+      if(!isUsername(name))return send(res,422,{error:'Enter a valid username.'});
       friends.request(user.owner,accounts.ownerForUsername(name));
       return send(res,202,{ok:true});
     }

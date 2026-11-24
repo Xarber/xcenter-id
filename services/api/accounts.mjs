@@ -6,7 +6,7 @@ import { createPasskeyLabelResolver, passkeyLabel } from './passkey-label.mjs';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import { openEmailVerification } from './email-verification.mjs';
 import sharp from 'sharp';
-import { ageRangeFromBirthday, validateProfile, validateUsername } from './identity-profile.mjs';
+import {isUsername, ageRangeFromBirthday, validateProfile, validateUsername } from './identity-profile.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import {
   generateAuthenticationOptions, generateRegistrationOptions,
@@ -58,7 +58,7 @@ async function body(req, limit=65536) {
   throw new AccountError(400, 'Invalid request.');
 }
 
-export function createAccounts({ database, origin, sendVerification, profileKey, outboundMail, canReceiveMail = false, externalMail = false, inboundVerification=false,appBrand=()=>null,purgeAccount=()=>{} }) {
+export function createAccounts({ database, origin, sendVerification, profileKey, outboundMail, canReceiveMail = false, externalMail = false, inboundVerification=false,appBrand=()=>null,purgeAccount=()=>{}, extraStorage=()=>0, mailboxNameTaken=()=>false }) {
   const url = new URL(origin);
   if (url.origin !== origin || url.protocol !== 'https:') throw new Error('Set the exact HTTPS account origin');
   const rpID = url.hostname;
@@ -150,6 +150,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     const value = JSON.parse(Buffer.concat([cipher.update(packed.subarray(28)),cipher.final()]).toString());
     return { username:row.username, ...value, ageRange:ageRangeFromBirthday(value.birthday) ?? value.ageRange };
   }
+  const profileBytes=q(`SELECT length(CAST(username AS BLOB))+length(CAST(given_name AS BLOB))+
+    length(CAST(surname AS BLOB))+length(CAST(age_range AS BLOB)) AS bytes FROM identity_profiles WHERE owner=?`);
   function writeProfile(owner,{username,givenName,surname,ageRange,birthday,picture}) {
     if (!profileKey) {
       insertProfile.run(owner,username,givenName,surname,ageRange);
@@ -164,11 +166,19 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   }
   const insertProfile = q(`INSERT INTO identity_profiles VALUES (?,?,?,?,?) ON CONFLICT(owner)
     DO UPDATE SET username=excluded.username,given_name=excluded.given_name,surname=excluded.surname,age_range=excluded.age_range`);
+  function accountUsage(owner) {
+    const bytes=(query)=>q(query).get(owner).bytes;
+    return {
+      account:(profileBytes.get(owner)?.bytes??0)+bytes('SELECT total(length(CAST(address AS BLOB))+8) AS bytes FROM verified_emails WHERE owner=?'),
+      security:bytes('SELECT total(length(id)+length(CAST(label AS BLOB))+length(publicKey)+length(transports)+16) AS bytes FROM passkeys WHERE owner=?'),
+      apps:bytes('SELECT total(length(client)+length(CAST(label AS BLOB))+8) AS bytes FROM connected_apps WHERE owner=?'),
+    };
+  }
   const usernameOwner = q('SELECT owner FROM identity_profiles WHERE username=?');
   const reservedOwner = q('SELECT owner FROM signup_usernames WHERE username=? AND expires>?');
   const reservedUsername = q('SELECT username FROM signup_usernames WHERE owner=? AND expires>?');
   function ensureAvailable(name, owner) {
-    requireCondition(!q('SELECT 1 FROM mailbox_aliases WHERE local=?').get(name),409,'This username is unavailable.');
+    requireCondition(!mailboxNameTaken(name)&&!q('SELECT 1 FROM mailbox_aliases WHERE local=?').get(name),409,'This username is unavailable.');
     requireCondition(!q('SELECT 1 FROM retired_usernames WHERE username=?').get(name),409,'This username is unavailable.');
     const existing = usernameOwner.get(name)?.owner ?? reservedOwner.get(name,now())?.owner;
     requireCondition(!existing || existing === owner,409,'This username is unavailable.');
@@ -443,7 +453,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         WHERE confirmed=1 AND expires>? AND owner NOT IN (SELECT owner FROM account_restrictions)
         ORDER BY expires LIMIT 100`).all(now())};
     }
-    const adminPhoto=/^\/account\/admin\/accounts\/([a-z][a-z0-9]{2,23})\/avatar$/.exec(pathname)?.[1];
+    const adminPhoto=/^\/account\/admin\/accounts\/([a-z0-9._-]{3,24})\/avatar$/.exec(pathname)?.[1];
     if(req.method==='GET'&&adminPhoto){
       requireCondition(isAdmin(active),403,'Administrator access is required.');
       const selected=usernameOwner.get(adminPhoto);
@@ -467,7 +477,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       const channel=nativeChannel?'native':active?'web-add:'+active.hash:'web';
       if(pathname.endsWith('/username')){
         const username=typeof input.username==='string'?input.username.trim().toLowerCase():'';
-        requireCondition(/^[a-z][a-z0-9]{2,23}$/.test(username),422,'Enter a valid X-Center username.');
+        requireCondition(isUsername(username),422,'Enter a valid X-Center username.');
         const owner=usernameOwner.get(username)?.owner;
         requireCondition(owner&&(available(owner)||restriction.get(owner)?.status==='locked'),404,'No available X-Center ID uses this username.');
         if(!nativeChannel)checkBrowserCapacity(req,owner);
@@ -694,15 +704,20 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       const chosen = existing?.username ?? reservedUsername.get(active.owner,now())?.username;
       const candidate = validateProfile({ ...input, username:chosen ?? input.username },reservedNames,existing?.username);
       requireCondition(!candidate.error,422,candidate.error);
-      let picture = existing?.picture;
-      if (input.picture === null) picture = undefined;
-      else if (input.picture !== undefined) picture = await normalizePicture(input.picture);
-      candidate.username = profile(active.owner)?.username ?? candidate.username;
+      const replacement = input.picture == null ? undefined : await normalizePicture(input.picture);
       db.exec('BEGIN IMMEDIATE');
       try {
         requireCondition(session(req),401,'Sign in first.');
+        const current=profile(active.owner);
+        const picture=input.picture===undefined?current?.picture:replacement;
+        candidate.username=current?.username??candidate.username;
         ensureAvailable(candidate.username,active.owner);
+        const before=profileBytes.get(active.owner)?.bytes??0;
         writeProfile(active.owner,{...candidate,picture});
+        if(replacement && profileBytes.get(active.owner).bytes>before){
+          const used=Object.values(accountUsage(active.owner)).reduce((sum,value)=>sum+value,0);
+          requireCondition(used+extraStorage(active.owner)<=storageCapacity(active.owner),409,'Account storage quota exceeded.');
+        }
         q('DELETE FROM signup_usernames WHERE owner=?').run(active.owner);
         db.exec('COMMIT');
       } catch (error) { db.exec('ROLLBACK'); throw error; }
@@ -745,7 +760,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         const options = await generateAuthenticationOptions({ rpID, userVerification: 'required',
           ...(action==='reauth'?{allowCredentials:keys.all(owner).map(({id,transports})=>({id,transports:JSON.parse(transports)}))}:{}) });
         const username = typeof input.username === 'string' ? input.username.trim().toLowerCase() : '';
-        requireCondition(!username || /^[a-z][a-z0-9]{2,23}$/.test(username),422,'Enter a valid X-Center username.');
+        requireCondition(!username || isUsername(username),422,'Enter a valid X-Center username.');
         prepare(res, { action, username, expected:options.challenge, sessionHash:active?.hash,
           ...(nativeTarget?{target:nativeTarget.hash,request:input.request}:{}) });
         return options;
@@ -892,7 +907,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       db.exec('BEGIN IMMEDIATE');
       try{
         requireCondition(q('SELECT count(*) AS n FROM mailbox_aliases WHERE owner=?').get(owner).n<30,409,'Private address limit reached.');
-        requireCondition(!usernameOwner.get(result.username)&&!reservedOwner.get(result.username,now())&&!q('SELECT 1 FROM retired_usernames WHERE username=?').get(result.username)&&!q('SELECT 1 FROM mailbox_aliases WHERE local=?').get(result.username),409,'This address is unavailable.');
+        requireCondition(!mailboxNameTaken(result.username)&&!usernameOwner.get(result.username)&&!reservedOwner.get(result.username,now())&&!q('SELECT 1 FROM retired_usernames WHERE username=?').get(result.username)&&!q('SELECT 1 FROM mailbox_aliases WHERE local=?').get(result.username),409,'This address is unavailable.');
         q('INSERT INTO mailbox_aliases VALUES(?,?,?,1,?)').run(result.username,owner,client,now());
         db.exec('COMMIT');return result.username+'@mail.xcenter.it';
       }catch(error){db.exec('ROLLBACK');throw error;}
@@ -917,7 +932,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       const current=profile(owner)?.username+'@mail.xcenter.it';
       if(!available(owner))return false;
       if(address===current)return true;
-      const local=/^([a-z][a-z0-9]{2,23})@mail\.xcenter\.it$/.exec(address)?.[1];
+      const local=/^([a-z0-9._-]{3,24})@mail\.xcenter\.it$/.exec(address)?.[1];
       return !!local&&!!q('SELECT 1 FROM mailbox_aliases WHERE owner=? AND local=? AND active=1').get(owner,local);
     },
     setMailLimits(owner,limits){
@@ -937,7 +952,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     profileBadges:owner=>available(owner)?badges(owner):{verified:false,admin:false},
     badgeForAddress(address) {
       const user=q('SELECT owner FROM verified_emails WHERE address=?').get(address?.toLowerCase());
-      const local=/^([a-z][a-z0-9]{2,23})@mail\.xcenter\.it$/.exec(address?.toLowerCase()??'');
+      const local=/^([a-z0-9._-]{3,24})@mail\.xcenter\.it$/.exec(address?.toLowerCase()??'');
       const owner=user?.owner??(local?(usernameOwner.get(local[1])?.owner??q('SELECT owner FROM mailbox_aliases WHERE local=? AND active=1').get(local[1])?.owner):null);
       if(!owner||!available(owner))return {verified:false,admin:false};
       return badges(owner);
@@ -970,13 +985,13 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       return 200;
     },
     renameStoredUsername(owner, from, to) {
-      if (!profileKey || !/^[a-z][a-z0-9]{2,23}$/.test(to) || from === to) {
+      if (!profileKey || !isUsername(to) || from === to) {
         throw new Error('Invalid operator rename configuration');
       }
       db.exec('BEGIN IMMEDIATE');
       try {
         const current = profile(owner);
-        if (current?.username !== from || usernameOwner.get(to) || reservedOwner.get(to,now()) ||
+        if (current?.username !== from || mailboxNameTaken(to) || usernameOwner.get(to) || reservedOwner.get(to,now()) ||
           q('SELECT 1 FROM retired_usernames WHERE username=?').get(to)||q('SELECT 1 FROM mailbox_aliases WHERE local=?').get(to)) {
           db.exec('ROLLBACK');
           return false;
@@ -1025,15 +1040,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         return removed.changes===1?grants:null;
       } catch(error) { db.exec('ROLLBACK'); throw error; }
     },
-    usage(owner) {
-      const bytes=(query)=>q(query).get(owner).bytes;
-      return {
-        account:bytes(`SELECT total(length(CAST(username AS BLOB))+length(CAST(given_name AS BLOB))+length(CAST(surname AS BLOB))+length(CAST(age_range AS BLOB))) AS bytes FROM identity_profiles WHERE owner=?`)
-          +bytes('SELECT total(length(CAST(address AS BLOB))+8) AS bytes FROM verified_emails WHERE owner=?'),
-        security:bytes('SELECT total(length(id)+length(CAST(label AS BLOB))+length(publicKey)+length(transports)+16) AS bytes FROM passkeys WHERE owner=?'),
-        apps:bytes('SELECT total(length(client)+length(CAST(label AS BLOB))+8) AS bytes FROM connected_apps WHERE owner=?'),
-      };
-    },
+    usage:accountUsage,
     premiumEligible: (owner) => q('SELECT premium_mail FROM account_entitlements WHERE owner=?').get(owner)?.premium_mail===1,
     profileAvatar:owner=>available(owner)?profile(owner)?.picture??null:null,
     identity(owner) {

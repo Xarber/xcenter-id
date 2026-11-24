@@ -1,3 +1,4 @@
+import {isUsername} from './identity-profile.mjs';
 import { composeContent } from './mail-compose.mjs';
 import nodemailer from 'nodemailer';
 
@@ -27,7 +28,7 @@ export function createOutboundMail(config,{limits,deliverLocal,allowSender,sende
     external:!!upstream,
     limits,
     async send(owner,username,input) {
-      if (!/^[a-z][a-z0-9]{2,23}$/.test(username)) return {status:403,error:'Sender is unavailable.'};
+      if (!isUsername(username)) return {status:403,error:'Sender is unavailable.'};
       const recipient = typeof input.to === 'string' ? input.to.trim() : '';
       const subject = typeof input.subject === 'string' ? input.subject.trim() : '';
       const text = typeof input.text === 'string' ? input.text.trim() : '';

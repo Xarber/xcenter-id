@@ -94,7 +94,13 @@ const iconPaths={
   user:'M4 21v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2 M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
   age:'M4 7h16v13H4z M4 11h16 M8 4v5m8-5v5',
   mail:'M3 5h18v14H3z m0 1 9 7 9-7',
-  records:'M3 7h7l2 2h9v11H3z',
+  records:'M3 4h18v16H3z M7 8h10m-10 4h10m-10 4h6',
+  folder:'M3 7h7l2 2h9v11H3z',
+  photo:'M3 4h18v16H3z M3 17l6-6 4 4 3-3 5 5 M15 8h2',
+  calendar:'M4 7h16v13H4z M4 11h16 M8 4v5m8-5v5',
+  location:'M19 10c0 5-7 11-7 11s-7-6-7-11a7 7 0 1 1 14 0z M12 10h.01',
+  heart:'M12 21 4 13a5 5 0 0 1 8-6 5 5 0 0 1 8 6z',
+  shield:'M12 3l8 4v5c0 5-8 9-8 9s-8-4-8-9V7z M9 12l2 2 4-4',
   id:'M3 5h18v14H3z M7 9h4m-4 4h4m4-4h3m-3 4h3',
   notes:'M5 3h10l4 4v14H5z M15 3v5h4 M8 12h8m-8 4h8',
   trips:'M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z M9 3v15m6-12v15',
@@ -512,7 +518,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const access = items[0].linked ? `<ul class="permission-list">${items.map(item => {
         const checked = activeDataPermissions.some(permission => permission.source===source&&permission.collection===item.collection);
         const label = escape(item.label);
-        return `<li><label class="permission-toggle">${glyph('records')}<span>${label}<small>Read ${escape(item.collection)}</small></span>
+        return `<li><label class="permission-toggle">${glyph(Object.hasOwn(iconPaths,item.icon)?item.icon:'records')}<span>${label}<small>${item.description?escape(item.description)+' · ':''}Read ${escape(item.collection)}</small></span>
           <input type="checkbox" role="switch" name="data-permission" value="${escape(source+'/'+item.collection)}" aria-label="${label}"${checked?' checked':''}></label></li>`;
       }).join('')}</ul>` : '<p>Access declined. Link this app to your account first.</p>';
       return `<section class="source-permissions">${title}${access}</section>`;

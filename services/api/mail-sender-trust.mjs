@@ -11,7 +11,7 @@ export function openMailSenderTrust(path,{admins=[],resolver}={}){
   if(parsed.headerLines.filter(h=>h.key==='from').length!==1||parsed.from?.value.length!==1||parsed.headerLines.filter(h=>h.key==='dkim-signature').length>8)return noTrust;
   const address=parsed.from.value[0].address?.toLowerCase();if(!address)return noTrust;
   let owner=db.prepare('SELECT owner FROM verified_emails WHERE address=?').get(address)?.owner;
-  const local=/^([a-z][a-z0-9]{2,23})@mail\.xcenter\.it$/.exec(address);
+  const local=/^([a-z0-9._-]{3,24})@mail\.xcenter\.it$/.exec(address);
   if(!owner&&local)owner=db.prepare('SELECT owner FROM identity_profiles WHERE username=?').get(local[1])?.owner??db.prepare('SELECT owner FROM mailbox_aliases WHERE local=? AND active=1').get(local[1])?.owner;
   if(!owner||db.prepare('SELECT 1 FROM account_restrictions WHERE owner=?').get(owner))return noTrust;
   const flags=db.prepare('SELECT verified,admin FROM account_flags WHERE owner=?').get(owner);

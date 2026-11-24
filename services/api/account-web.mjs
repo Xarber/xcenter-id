@@ -1,3 +1,5 @@
+import {appConfiguration} from './application-configuration.mjs';
+import {isUsername} from './identity-profile.mjs';
 import {createConsentTest} from './velunivo-consent-preview.mjs';
 import {localAccountMessage} from './account-mail.mjs';
 import {parseStorageVolumes,storageVolumeStatus} from './storage-volumes.mjs';
@@ -42,6 +44,8 @@ const accounts = createAccounts({
     deliverLocal:(recipient,raw,from)=>mail?.receive([recipient],raw,accounts.badgeForAddress(from)),
   }),
   appBrand:client=>registry.brand(client),
+  extraStorage:owner=>(accountFiles?.fileBytes(owner)??0)+(applicationData?.accountUsage(owner)??0)+(store?.usage(owner)??0)+(mail?.usage(owner)??0),
+  mailboxNameTaken:name=>mail?.hasLegacyPremiumName(name)??false,
   purgeAccount:owner=>{
     accountFiles?.removeAccount(owner);
     applicationData?.removeAccount(owner);
@@ -106,6 +110,8 @@ const applicationData=configuration?openApplicationData({path:join(state,'app-da
   otherUsage:owner=>accountFiles.fileBytes(owner)+Object.values(otherStorage(owner,false)).reduce((sum,value)=>sum+value,0),
   notify:notifyAppChange,
 }):null;
+if(applicationData)registry.attachStorage(join(state,'app-data.sqlite'));
+const configurationRoute=appConfiguration({accounts,registry,applicationData});
 provider = configuration ? createIdentityProvider({
   issuer: origin, database: join(state, 'oidc.sqlite'), accounts, configuration, mail:mailConfig?.publicDelivery?mail:null, registry,applicationData,notify:notifyAppChange,
 }) : null;
@@ -243,10 +249,10 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     res.end(icon&&req.method==='GET'?Buffer.from(icon,'base64'):undefined);
     return;
   }
-  const publicAvatar=/^\/public\/profiles\/([a-z][a-z0-9]{2,23})\/avatar$/.exec(path)?.[1];
+  const publicAvatar=/^\/public\/profiles\/([a-z0-9._-]{3,24})\/avatar$/.exec(path)?.[1];
   if(publicAvatar){const picture=req.method==='GET'?accounts.publicProfileAvatar(publicAvatar):null;
     res.writeHead(picture?200:404,{'Content-Type':picture?'image/jpeg':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}).end(picture?Buffer.from(picture,'base64'):'{}');return;}
-  const publicUser=/^\/public\/profiles\/([a-z][a-z0-9]{2,23})$/.exec(path)?.[1];
+  const publicUser=/^\/public\/profiles\/([a-z0-9._-]{3,24})$/.exec(path)?.[1];
   if(publicUser){
     const person=req.method==='GET'?accounts.publicProfile(publicUser):null;
     res.writeHead(person?200:404,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}).end(JSON.stringify(person??{error:'Profile unavailable.'}));return;
@@ -357,6 +363,11 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     res.end(JSON.stringify({apps:registry.published().filter(({client})=>!accounts.isDisconnected(session.owner,client))}));
     return;
   }
+  const configurationId=/^\/account\/developer\/apps\/([0-9a-f-]{36})\/configuration$/.exec(path)?.[1];
+  if(configurationId){
+    void configurationRoute(req,res,configurationId).catch(()=>{if(!res.headersSent)res.writeHead(503,{'Cache-Control':'no-store'});res.end();});
+    return;
+  }
   const accessId=/^\/account\/developer\/apps\/([0-9a-f-]{36})\/access$/.exec(path)?.[1];
   if(accessId){
     const answer=(status,body)=>res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(body));
@@ -374,7 +385,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
       if(!settings)return answer(404,{error:'App unavailable.'});
       const name=target.searchParams.get('username');
       if(name===null)return answer(200,settings);
-      if(!settings.private||!/^[a-z][a-z0-9]{2,23}$/.test(name))return answer(422,{error:'Enter an exact username.'});
+      if(!settings.private||!isUsername(name))return answer(422,{error:'Enter an exact username.'});
       const minute=Math.floor(Date.now()/60_000);
       for(const [id,entry] of developerLookupAttempts)if(entry.minute!==minute)developerLookupAttempts.delete(id);
       const attempts=developerLookupAttempts.get(owner)?.attempts??0;
@@ -396,7 +407,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
       }
       if(input.action==='settings'){
         if(typeof input.private!=='boolean'||typeof input.requests!=='boolean')return answer(422,{error:'Choose valid access settings.'});
-      }else if(['approve','remove'].includes(input.action)&&typeof input.username==='string'&&/^[a-z][a-z0-9]{2,23}$/.test(input.username)){
+      }else if(['approve','remove'].includes(input.action)&&typeof input.username==='string'&&/^[a-z0-9._-]{3,24}$/.test(input.username)){
         input.account=accounts.ownerForUsername(input.username);
         if(!input.account||input.account===owner)return answer(422,{error:'Choose another existing username.'});
       }else return answer(422,{error:'Choose a valid access action.'});
@@ -492,7 +503,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void support(req,res,path).catch(()=>{if(!res.headersSent)res.writeHead(500,{'Cache-Control':'no-store'});res.end();});
     return;
   }
-  const adminUsername=/^\/account\/admin\/users\/([a-z][a-z0-9]{2,23})$/.exec(path)?.[1];
+  const adminUsername=/^\/account\/admin\/users\/([a-z0-9._-]{3,24})$/.exec(path)?.[1];
   if(adminUsername){
     void adminUsers(req,res,adminUsername).catch(()=>{if(!res.headersSent)res.writeHead(500,{'Cache-Control':'no-store'});res.end();});
     return;
@@ -507,7 +518,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   }
   const webPages = new Set(['/mail-clients','/changelog','/docs','/','/signin','/signup','/native-session','/dashboard','/profile','/profile/visibility','/profile/username','/profile/developer','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/friends','/mail','/admin','/support','/reauth']);
   const relative = webPages.has(path)||/^\/changelog\/\d+\.\d+\.\d+$/.test(path)||/^\/developer\/storage\/[0-9a-f-]{36}$/.test(path)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(path)||
-    /^\/(?:mail\/[0-9a-f-]{36}|admin\/users\/[a-z][a-z0-9]{2,23})$/.test(path) ? 'index.html' : path.slice(1);
+    /^\/(?:mail\/[0-9a-f-]{36}|admin\/users\/[a-z0-9._-]{3,24})$/.test(path) ? 'index.html' : path.slice(1);
   const valid = /^(?:index\.html|offline\.html|revision\.txt|manifest\.webmanifest|service-worker\.js|authnjs-[\w-]+\.(?:svg|png)|(?:_expo|assets)\/[\w@./-]+)$/.test(relative);
   if (!valid || relative.split('/').some((part) => part === '.' || part === '..') ||
       (req.method !== 'GET' && req.method !== 'HEAD')) {

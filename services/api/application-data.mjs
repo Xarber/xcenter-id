@@ -1,3 +1,5 @@
+import {validateSharing,writeSharing} from './application-sharing.mjs';
+import {isUsername} from './identity-profile.mjs';
 import {createCipheriv,createDecipheriv,createHash,createHmac,randomBytes} from 'node:crypto';
 import {statfsSync} from 'node:fs';
 import {dirname} from 'node:path';
@@ -29,6 +31,11 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
   const ownerContainer=(owner,client)=>verified(client)&&visible.get(client)&&sourceLinked(owner,client);
   const developerContainer=(owner,client)=>ownerContainer(owner,client)&&registry.brand(client)?.owner===owner;
   const usage=client=>serviceUsage.get(client);
+  const sharing=client=>({shared:JSON.parse(setting(client)?.shared??'[]'),requests:JSON.parse(setting(client)?.requests??'[]')});
+  const prepareSharing=(client,input)=>validateSharing(input,{
+    client,verified,existing:sharing(client).requests,
+    published:(source,collection)=>verified(source)&&sharing(source).shared.includes(collection),
+  });
   const requested=client=>JSON.parse(setting(client)?.requests??'[]').filter(item=>verified(item.source)&&registry.crossReadAllowed(item.source,client)&&JSON.parse(setting(item.source)?.shared??'[]').includes(item.collection));
   const sourceLinked=(owner,client)=>!!accounts.linkedGrant(owner,client)&&registry.access(owner,client).allowed;
   const requestsForOwner=(owner,client)=>requested(client).map(item=>({...item,linked:sourceLinked(owner,item.source)}));
@@ -56,6 +63,13 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
       }catch(error){db.exec('ROLLBACK');throw error;}
     },
     requested,
+    sharing,
+    prepareSharing,
+    fileVisibility:client=>!!visible.get(client),
+    sharingSources(client){
+      return registry.published().filter(app=>app.client!==client&&verified(app.client)&&registry.crossReadAllowed(app.client,client))
+        .map(app=>({client:app.client,name:app.name,collections:sharing(app.client).shared})).filter(app=>app.collections.length);
+    },
     requestsForOwner,
     accountUsage:owner=>accountUsage.get(owner).used,
     containers:owner=>{
@@ -158,7 +172,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
           const unsecure=!!registry.brand(client)?.local;
           db.prepare('INSERT OR IGNORE INTO app_storage(client) VALUES(?)').run(client);
           if(req.method==='GET')return answer(200,{name:registry.brand(client)?.name??'App storage',icon:registry.brand(client)?.iconUrl??registry.brand(client)?.icon??null,...usage(client),capacity:setting(client).capacity,hasKey:!!setting(client).secret,verified:serviceEnabled,unsecure,
-            shared:JSON.parse(setting(client).shared),requests:JSON.parse(setting(client).requests),showInFiles:!!visible.get(client),canShowInFiles:!!(owned&&serviceEnabled)});
+            ...sharing(client),sources:this.sharingSources(client),showInFiles:!!visible.get(client),canShowInFiles:!!(owned&&serviceEnabled)});
           if(req.method!=='POST'||!accounts.allowsMutation(req)||!accounts.recentlyConfirmed(req))fail(403,'Confirm your identity before changing app storage.');
           const input=await body(req);
           if(!serviceEnabled&&(input.action!=='sharing'||!Array.isArray(input.shared)||input.shared.length))fail(403,'Service storage requires a verified app.');
@@ -180,12 +194,13 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
             if(!Number.isSafeInteger(input.capacity)||input.capacity<1024**2||input.capacity>100*1024**4||input.capacity<usage(client).used)fail(422,'Choose a capacity above current usage, from 1 MB to 100 TB.');
             db.prepare('UPDATE app_storage SET capacity=? WHERE client=?').run(input.capacity,client);
           }else if(input.action==='sharing'){
-            if(!Array.isArray(input.shared)||input.shared.length>30||!input.shared.every(x=>typeof x==='string'&&name.test(x)))fail(422,'Choose valid shared collections.');
-            const requests=input.requests??[];
-            if(!Array.isArray(requests)||requests.length>30||!requests.every(x=>x&&typeof x==='object'&&typeof x.source==='string'&&x.source!==client&&name.test(x.collection)&&typeof x.label==='string'&&x.label.length>0&&x.label.length<=160&&!/[\p{Cc}\p{Cf}]/u.test(x.label)&&verified(x.source)&&JSON.parse(setting(x.source)?.shared??'[]').includes(x.collection)))fail(422,'Requests must target collections published for sharing by verified apps.');
-            const removed=JSON.parse(setting(client).shared).filter(collection=>!input.shared.includes(collection));
-            for(const collection of removed)db.prepare('DELETE FROM app_data_grants WHERE source=? AND collection=?').run(client,collection);
-            db.prepare('UPDATE app_storage SET shared=?,requests=? WHERE client=?').run(JSON.stringify([...new Set(input.shared)]),JSON.stringify([...new Map(requests.map(({source,collection,label})=>[source+'/'+collection,{source,collection,label:label.trim()}])).values()]),client);
+            let plan;
+            try{plan=prepareSharing(client,{...input,requests:input.requests??[]});}catch(error){fail(422,error.message);}
+            db.exec('BEGIN IMMEDIATE');
+            try{
+              writeSharing(db,'main',client,plan);
+              db.exec('COMMIT');
+            }catch(error){db.exec('ROLLBACK');throw error;}
           }else if(input.action!=='revoke-key')fail(422,'Choose a storage action.');
           if(admin)accounts.auditAdmin(req,client,'app-storage-'+input.action);
           return answer(200,{ok:true});
@@ -251,7 +266,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         if(!Object.hasOwn(input,'data')||(!container&&typeof input.public!=='boolean'))fail(422,'Provide data and an explicit public flag.');
         if(container)input.public=!!previous?.public;
         const readers=input.readers??[];
-        if(!Array.isArray(readers)||readers.length>50||!readers.every(value=>typeof value==='string'&&/^[a-z][a-z0-9]{2,23}$/.test(value)))fail(422,'Choose up to 50 recipient usernames.');
+        if(!Array.isArray(readers)||readers.length>50||!readers.every(value=>typeof value==='string'&&isUsername(value)))fail(422,'Choose up to 50 recipient usernames.');
         const readerOwners=container?JSON.parse(previous?.readers??'[]'):[...new Set(readers.map(username=>accounts.ownerForUsername?.(username)))];
         if(!container&&readerOwners.some(owner=>!owner||!accounts.available(owner)||!accounts.linkedGrant(owner,client)))fail(422,'Recipients must have linked this app.');
         const currentIdentity=await authenticateRequest();

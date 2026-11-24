@@ -54,6 +54,12 @@ export function openRegistry(path) {
   const hasDeveloper=owner=>!!(readDeveloper.get(owner)||registeredDeveloper.get(owner));
   const developerView=owner=>({...readDeveloper.get(owner)??{name:'',status:'unverified'},githubProfile:githubProfile.get(owner)?.url??''});
   const setAppName=db.prepare('UPDATE clients SET name=?,callback=? WHERE id=? AND developer=?');
+  function saveProfile(owner,id,profile){
+    setAppName.run(profile.name,profile.callbacks[0],id,owner);
+    const oldBrand=db.prepare('SELECT developer_name FROM client_brand WHERE id=?').get(id);
+    setBrand.run(id,oldBrand?.developer_name??'',profile.icon);
+    writeAppProfile.run(id,profile.description,profile.repository,JSON.stringify(profile.callbacks));
+  }
   const accessByClient=db.prepare("SELECT c.id,c.developer,p.private,p.requests FROM clients c LEFT JOIN app_access_policy p ON p.id=c.id WHERE c.client=? AND c.status='active'");
   const membership=db.prepare('SELECT approved FROM app_access_members WHERE id=? AND account=?');
   const access=(owner,client)=>{
@@ -144,16 +150,34 @@ export function openRegistry(path) {
       return result;
       }catch(error){db.exec('ROLLBACK');throw error;}
     },
+    attachStorage(path){
+      db.prepare('ATTACH DATABASE ? AS hosted_config').run(path);
+    },
+    saveConfiguration(owner,id,configuration,storageChange){
+      const previous=appView(lookup.get(id,owner));
+      if(!previous||previous.status==='revoked')return false;
+      const {profile,requirements,access}=configuration;
+      if(previous.status!=='pending'&&new URL(previous.callback).origin!==new URL(profile.callbacks[0]).origin)return false;
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        const profileChanged=['name','description','repository','icon'].some(key=>(previous[key]??null)!==profile[key])||
+          JSON.stringify(previous.callbacks)!==JSON.stringify(profile.callbacks);
+        if(profileChanged)saveProfile(owner,id,profile);
+        this.saveRequirements(owner,id,requirements);
+        this.saveAccess(owner,id,{action:'settings',private:access.private,requests:access.allowRequests});
+        this.setReaderTrust(owner,id,access.readerTrust);
+        storageChange?.(db,'hosted_config');
+        db.exec('COMMIT');
+        return true;
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    },
     saveApp(owner,id,profile){
       const previous=appView(lookup.get(id,owner));
       if(!previous||previous.status==='revoked')return null;
       if(previous.status!=='pending'&&new URL(previous.callback).origin!==new URL(profile.callbacks[0]).origin)return null;
       db.exec('BEGIN IMMEDIATE');
       try{
-        setAppName.run(profile.name,profile.callbacks[0],id,owner);
-        const oldBrand=db.prepare('SELECT developer_name FROM client_brand WHERE id=?').get(id);
-        setBrand.run(id,oldBrand?.developer_name??'',profile.icon);
-        writeAppProfile.run(id,profile.description,profile.repository,JSON.stringify(profile.callbacks));
+        saveProfile(owner,id,profile);
         db.exec('COMMIT');
         return {...appView(lookup.get(id,owner)),icon:profile.icon};
       }catch(error){db.exec('ROLLBACK');throw error;}

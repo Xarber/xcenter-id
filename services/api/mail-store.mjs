@@ -63,18 +63,19 @@ export function openMailStore({ accountsPath, mailPath, configuration,accountSer
   const remove = db.prepare('DELETE FROM inbox WHERE owner=? AND id=?');
   const get = db.prepare('SELECT * FROM inbox WHERE owner=? AND id=?');
 
+  const legacyPremiumName=db.prepare('SELECT 1 FROM premium_aliases WHERE id=? UNION SELECT 1 FROM revoked_premium_aliases WHERE id=?');
   function resolveRecipient(value) {
     if(supportAddresses.has(value.toLowerCase()))return externalSupportOwner;
-    const match = /^([a-z0-9][a-z0-9.-]{1,62})@([a-z.]+)$/i.exec(value);
+    const match = /^([a-z0-9_-][a-z0-9._-]{1,62})@([a-z.]+)$/i.exec(value);
     if (!match) return null;
     const local = match[1].toLowerCase();
     const domain = match[2].toLowerCase();
     if (!domains.has(domain)) return null;
-    if (domain === 'hme.xcenter.it' || (domain === 'mail.xcenter.it' && local.includes('.'))) {
+    if (domain === 'hme.xcenter.it') {
       const owner=(domain==='hme.xcenter.it'?resolveAlias:resolvePremium).get(local)?.owner;
       return owner&&username.get(owner)&&!accounts.prepare('SELECT 1 FROM account_restrictions WHERE owner=?').get(owner)?owner:null;
     }
-    const owner=lookup.get(local)?.owner??accounts.prepare('SELECT owner FROM mailbox_aliases WHERE local=? AND active=1').get(local)?.owner;
+    const owner=lookup.get(local)?.owner??(domain==='mail.xcenter.it'?resolvePremium.get(local)?.owner:undefined)??accounts.prepare('SELECT owner FROM mailbox_aliases WHERE local=? AND active=1').get(local)?.owner;
     return owner&&username.get(owner)&&!accounts.prepare('SELECT 1 FROM account_restrictions WHERE owner=?').get(owner)?owner:null;
   }
 
@@ -125,6 +126,7 @@ export function openMailStore({ accountsPath, mailPath, configuration,accountSer
       }catch(error){db.exec('ROLLBACK');throw error;}
     },
     resolveRecipient,
+    hasLegacyPremiumName:name=>!!legacyPremiumName.get(name,name),
     maskedAvailable: domains.has('hme.xcenter.it'),
     premiumAvailable: domains.has('mail.xcenter.it'),
     createPrivateAddress(owner,name){

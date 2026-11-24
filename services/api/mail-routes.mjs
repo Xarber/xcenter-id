@@ -49,7 +49,7 @@ export async function handleMailAliases(req,res,path,accounts,mail) {
       const address=mail.createPrivateAddress(session.owner,input?.name);json(res,address?{address}:{error:'Private address unavailable.'},address?201:422);
     }catch(error){json(res,{error:error.status?error.message:'Could not create this address.'},error.status??422);}return true;
   }
-  const address=/^\/account\/mail\/aliases\/([a-z0-9.-]+@(?:hme\.|mail\.)xcenter\.it)$/.exec(path)?.[1];
+  const address=/^\/account\/mail\/aliases\/([a-z0-9._-]+@(?:hme\.|mail\.)xcenter\.it)$/.exec(path)?.[1];
   if(address&&req.method==='PUT'){
     if(!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent'){json(res,{error:'Invalid origin.'},403);return true;}
     let text='';try{for await(const chunk of req.iterator({destroyOnReturn:false})){text+=chunk.toString();if(text.length>256){req.resume();json(res,{error:'Request too large.'},413);return true;}}

@@ -9,6 +9,10 @@ const reserved = new Set([
   'respring', 's1tinfoil', 's2tinfoil', 's3tinfoil', 'sleepwell', 'ss', 'tempo',
   'tinfoil', 'unmasked', 'url', 'velunivo', 'wave', 'whasync',
 ]);
+export const usernameCharacters = /^[a-z0-9._-]{3,24}$/;
+export const isUsername = value => typeof value === 'string' && usernameCharacters.test(value)
+  && !value.startsWith('.') && !value.endsWith('.') && !value.includes('..');
+
 const namePattern = /^(?!.*[\p{Cc}\p{Cf}]).{1,64}$/u;
 export function ageRangeFromBirthday(birthday, today = new Date()) {
   if (typeof birthday !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) return null;
@@ -23,7 +27,7 @@ export function ageRangeFromBirthday(birthday, today = new Date()) {
 
 export function validateUsername(value, additionallyReserved = [], currentUsername) {
   const username = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (!/^[a-z][a-z0-9]{2,23}$/.test(username)) return {error:'Use 3–24 letters and numbers, starting with a letter.'};
+  if (!isUsername(username)) return {error:'Use 3–24 letters, numbers, dots, underscores or dashes. Dots must be between other characters.'};
   if (username !== currentUsername && (reserved.has(username) || additionallyReserved.includes(username))) {
     return {error:'This username is unavailable.'};
   }
