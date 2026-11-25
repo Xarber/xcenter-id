@@ -1,7 +1,9 @@
+import { SdkReferenceLink } from './SdkReference.web';
+
 export default function DeveloperDocumentation(){
  return <main className="xc-main xc-docs" style={{maxWidth:1000}}><a className="xc-brand" href="/">X-Center ID</a><h1>Build with X-Center ID</h1>
  <p>One registered identity integration, reusable sign-in and an optional hosted application database.</p>
- <nav className="xc-actions"><a href="#register">Register an app</a><a href="#manual">Use OpenID Connect</a><a href="#install">Install the SDK</a><a href="#authentication">Secure sign-in</a><a href="#hosted-data">Hosted data</a><a href="/developer">Developer portal</a></nav>
+ <nav className="xc-actions"><SdkReferenceLink/><a href="#register">Register an app</a><a href="#manual">Use OpenID Connect</a><a href="#install">Install the SDK</a><a href="#authentication">Secure sign-in</a><a href="#hosted-data">Hosted data</a><a href="/developer">Developer portal</a></nav>
  <section className="xc-card xc-pad xc-stack" id="register"><h2>1. Register and activate</h2><p>Open Apps → Developer portal. Create a distinct registration for each product. Choose Native for a public mobile client or Website for a confidential backend. Enter exact HTTPS callbacks on a domain you control, a name, icon and permission description.</p><p>Publish the DNS TXT challenge supplied by the portal, then verify ownership. Pending, restricted and revoked registrations cannot sign users in. A verification badge is separate from callback activation.</p></section>
  <section className="xc-card xc-pad xc-stack" id="manual"><h2>Connect from any platform</h2>
  <p>Install an OpenID Connect client library for your language, or use the standard HTTPS endpoints. Configure the issuer as <code>https://id.xcenter.it</code>, using the client ID and exact callback from the portal.</p>
@@ -25,6 +27,7 @@ grant_type=authorization_code&client_id=CLIENT_ID&code=CODE
  </section>
  <section className="xc-card xc-pad xc-stack" id="install">
    <h2>2. Add an account component</h2>
+   <SdkReferenceLink/>
    <p>Use AccountOverview at the top of Settings. It shows the sign-in banner or the current profile and includes account management, linked-app permissions and sign-out.</p>
    <a className="xc-button xc-secondary xc-self-start" href="https://github.com/Xarber/xcenter-id-sdk">X-Center ID SDK and setup guides</a>
    <p>Choose Expo, SwiftUI, Kotlin/Compose, Flutter, or the HTML Web Component. The SDK also includes Next.js routes for Vercel and the Integrate X-Center ID skill. Other stacks can use the OpenID Connect guide below.</p>
@@ -45,7 +48,7 @@ if (authorization) {
   // Consume prepared.transactionId once, then establish your own app session.
   await yourBackend.finishSignIn(prepared.transactionId, authorization);
 }`}</pre><p>For reusable UI import RegisteredAppSignIn from @authnjs/expo/registered-signin. Its clientId, redirectUri, scopes, nonce and onAuthorized props use the same contract. To request additional scopes later, use promptConsent.</p>
-<p>Request only supported scopes: openid, profile, email, age_range, app_data, friends and offline_access. Use Developer apps → Permissions to require email or age range and include each required scope in every authorization request. Private app storage is included when app_data is requested. Cross-app permissions and Friends stay optional. With a friends access token, GET /v1/profile/friends lists accepted friends, including their OIDC subject for this registration when they have also linked it. Use prompt=consent when asking for additional access; denied scopes and revoked links must be respected by the app.</p></section>
+<p>Request only supported scopes: openid, profile, email, age_range, app_data, friends, offline_access, files_read, files_write and shared_files_read. Use Developer apps → Permissions to require email or age range and include each required scope in every authorization request. Private app storage is included when app_data is requested. Cross-app permissions and Friends stay optional. With a friends access token, GET /v1/profile/friends lists accepted friends, including their OIDC subject for this registration when they have also linked it. Use prompt=consent when asking for additional access; denied scopes and revoked links must be respected by the app.</p></section>
  <section className="xc-card xc-pad xc-stack" id="hosted-data"><h2>4. Use hosted application data</h2><p>Activate your registration before requesting access to private user storage. Administrator verification enables a separate service database, public records and collection exports. Add the real product icon in the Developer Portal so users can identify it on the consent screen. The icon is optional. The service stores encrypted JSON records, not executable SQL or uploaded database files.</p><pre style={{overflow:'auto'}}>{`PUT /v1/apps/CLIENT_ID/data/posts/post_1
 Authorization: Bearer USER_ACCESS_TOKEN
 Content-Type: application/json

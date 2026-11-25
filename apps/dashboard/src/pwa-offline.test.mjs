@@ -17,6 +17,7 @@ test('offline worker falls back for account pages without caching authenticated 
     const listeners = new Map();
     const origin = 'https://identity.example.test';
     const offlinePage = new Response('Offline fallback');
+    const publicShell = new Response('Public app shell');
     let online = false;
     runInNewContext(readFileSync(join(directory, 'service-worker.js'), 'utf8'), {
       URL, Response,
@@ -25,7 +26,7 @@ test('offline worker falls back for account pages without caching authenticated 
         if (!online) throw new TypeError('Network unavailable');
         return new Response('Online account page');
       },
-      caches:{open:async()=>({match:async path=>path==='/offline.html'?offlinePage:undefined})},
+      caches:{open:async()=>({match:async path=>path==='/offline.html'?offlinePage:path==='/'?publicShell:undefined})},
     });
 
     function navigate(path, mode='navigate', method='GET') {
@@ -38,6 +39,7 @@ test('offline worker falls back for account pages without caching authenticated 
     }
 
     assert.equal(await navigate('/permissions/xid-test?view=detail'), offlinePage);
+    assert.equal(await navigate('/docs/sdk/upload-file'), publicShell);
     assert.equal(await (await navigate('/profile')).text(), 'Offline fallback');
     assert.equal(navigate('/profile','cors'), undefined);
     assert.equal(navigate('/profile','navigate','POST'), undefined);

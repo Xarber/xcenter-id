@@ -552,3 +552,9 @@ The 0.16.0 [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45
 25 November verification for AUTHN-151–152. All 49 provider API tests and 15 dashboard tests passed, as did TypeScript and the Expo web export. The full provider fixture proved the admin approval path skipped DNS, rejected claims by a different account or stale owner session, issued a confidential secret only once, and issued only a public client ID for a native registration. It also exercised delegated file CORS and anonymous profile responses. Chromium exercised approval, cancellation and the credential claim at 390 and 1280 pixels with isolated fixtures. Both tasks are on `testing`. Production remains `308747c`; the new browser CORS and administrator flow are awaiting provider deployment. Native behavior still needs device verification.
 
 25 November deployment complete. AUTHN-151 and AUTHN-152 are live as 0.17.0 on revision `7124b6b`. Chromium verified cross-origin responses on production and both registration screens with isolated sessions. The full provider test used an isolated admin and developer. Installed native app verification remains open. See [production rollout and rollback](operations/XCENTER_ID_PRODUCTION.md#25-november-dashboard-0170-rollout).
+
+### Public SDK documentation
+
+| ID | Request | State | Next verification |
+| --- | --- | --- | --- |
+| AUTHN-153 | Publish a navigable SDK reference with per-operation guides, arguments, examples, sample outputs and flow diagrams | In Progress | Inventory the public SDK at `0a03c74`, preserve existing guide links, add deep links and verify desktop and mobile web rendering. |
