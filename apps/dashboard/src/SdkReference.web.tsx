@@ -1,10 +1,23 @@
 import { useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, BookOpen, Code2, Copy, Database, FolderOpen, Globe2, KeyRound, Search, Settings2, UserRound, Workflow } from 'lucide-react';
 import { groups, reference, sdkSource, type Reference } from './sdk-reference';
+import { exampleFor, languages, parseLanguage, type Language } from './sdk-reference-languages';
 import './sdk-docs.css';
 
 const root = '/docs/sdk';
-const href = (entry: Reference) => root+'/'+entry.id;
+const preferenceKey='xcenter.sdk.language';
+const languageEntries=Object.entries(languages) as [Language,string][];
+
+function readLanguage(): Language {
+  const fromUrl=parseLanguage(new URLSearchParams(window.location.search).get('lang'));
+  if(fromUrl)return fromUrl;
+  try { return parseLanguage(window.localStorage.getItem(preferenceKey))??'javascript'; }
+  catch { return 'javascript'; }
+}
+
+function referenceUrl(language:Language,entry?:Reference,group?:string){
+  return root+(entry?'/'+entry.id:'')+'?lang='+language+(group?'#'+group:'');
+}
 const icons = {setup:Settings2, identity:KeyRound, profile:UserRound, data:Database, files:FolderOpen, components:Globe2, migration:Database, advanced:Code2};
 const collections = Object.entries(groups).map(([group, label])=>({
   group:group as keyof typeof groups, label, entries:reference.filter(entry=>entry.group===group),
@@ -48,31 +61,59 @@ function FlowDiagram({entry}:{entry:Reference}){
   </figure>;
 }
 
-function ReferenceArticle({entry}:{entry:Reference}){
+function ReferenceArticle({entry,language}:{entry:Reference;language:Language}){
   const related=reference.find(item=>item.id===entry.related);
+  const example=exampleFor(entry,language);
+  const index=referenceUrl(language);
   return <article className="xid-article" aria-labelledby="sdk-heading">
-    <div className="xid-crumb"><a href={root}>SDK reference</a><span aria-hidden="true">/</span><a href={root+'#'+entry.group}>{groups[entry.group]}</a></div>
-    <header className="xc-page-title"><h1 id="sdk-heading">{entry.title}</h1><code className="xid-signature">{entry.signature}</code><p>{entry.description}</p></header>
+    <div className="xid-crumb"><a href={index}>SDK reference</a><span aria-hidden="true">/</span><a href={referenceUrl(language,undefined,entry.group)}>{groups[entry.group]}</a></div>
+    <header className="xc-page-title">
+      <h1 id="sdk-heading">{entry.title}</h1>
+      {'signature' in example&&<code className="xid-signature">{example.signature}</code>}
+      <p>{entry.description}</p>
+    </header>
     {entry.access&&<div className="xid-access"><KeyRound size={16} aria-hidden="true"/><strong>Access</strong><span>{entry.access}</span></div>}
     <FlowDiagram entry={entry}/>
-    <section aria-labelledby="sdk-arguments"><h2 id="sdk-arguments">Arguments and options</h2>
-      {entry.args.length?<dl className="xid-args">{entry.args.map(([name,type,description])=><div key={name}>
-        <dt><code>{name}</code><span>{type}</span></dt><dd>{description}</dd>
-      </div>)}</dl>:<p>This call takes no arguments.</p>}
-    </section>
-    <CodeBlock label="Example" value={entry.example} copy/>
-    <CodeBlock label="Sample output" value={entry.output}/>
-    {entry.variants&&<section><h2>Platform notes</h2><p>{entry.variants}</p><a href={sdkSource+'/docs/CONFIGURATION.md'}>Platform configuration and package links</a></section>}
-    {related&&<a className="xid-related" href={href(related)}><span><small>Related guide</small><strong>{related.title}</strong></span><ArrowRight size={19} aria-hidden="true"/></a>}
+    {'unavailable' in example?<section className="xc-card xc-pad" aria-labelledby="sdk-availability">
+      <h2 id="sdk-availability">{languages[language]} availability</h2><p>{example.unavailable}</p>
+      <div className="xid-available-languages">
+        {languageEntries.filter(([value])=>!('unavailable' in exampleFor(entry,value))).map(([value,label])=>
+          <a className="xc-button xc-secondary" key={value} href={referenceUrl(value,entry)}>View {label}</a>)}
+      </div>
+    </section>:<>
+      <section aria-labelledby="sdk-arguments"><h2 id="sdk-arguments">Arguments and options</h2>
+        {example.args.length?<dl className="xid-args">{example.args.map(([name,type,description])=><div key={name}>
+          <dt><code>{name}</code><span>{type}</span></dt><dd>{description}</dd>
+        </div>)}</dl>:<p>This call takes no arguments.</p>}
+      </section>
+      <CodeBlock key={language+'-example'} label="Example" value={example.example} copy/>
+      <CodeBlock label="Sample output" value={example.output??entry.output}/>
+      {(example.note||((language==='javascript'||language==='typescript')&&entry.variants))&&<section>
+        <h2>Platform notes</h2>
+        <p>{example.note??entry.variants}</p>
+        <a href={sdkSource+'/docs/CONFIGURATION.md'}>Platform configuration and package links</a>
+      </section>}
+    </>}
+    {related&&<a className="xid-related" href={referenceUrl(language,related)}><span><small>Related guide</small><strong>{related.title}</strong></span><ArrowRight size={19} aria-hidden="true"/></a>}
   </article>;
 }
 
 export default function SdkReference({slug}:{slug?:string}){
   const [query,setQuery]=useState('');
+  const [language,setLanguage]=useState(readLanguage);
+  const index=referenceUrl(language);
+  function selectLanguage(value:Language){
+    setLanguage(value);
+    const url=new URL(window.location.href);
+    url.searchParams.set('lang',value);
+    window.history.replaceState(window.history.state,'',url);
+    try { window.localStorage.setItem(preferenceKey,value); } catch { /* URL still preserves selection. */ }
+  }
   const current=reference.find(entry=>entry.id===slug);
   const search=query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const matching=collections.map(group=>({...group,entries:group.entries.filter(entry=>{
-    const text=[group.label,entry.title,entry.signature,entry.description,entry.variants,entry.access].join(' ').toLowerCase();
+    const example=exampleFor(entry,language);
+    const text=[group.label,entry.title,'signature' in example?example.signature:entry.signature,entry.description,entry.access].join(' ').toLowerCase();
     return search.every(word=>text.includes(word));
   })})).filter(group=>group.entries.length);
   return <div className="xid-doc-shell">
@@ -83,19 +124,26 @@ export default function SdkReference({slug}:{slug?:string}){
     <div className="xid-doc-grid">
       <aside className="xid-doc-sidebar">
         <nav aria-label="SDK topics">
-          <a className="xid-doc-index" href={root}><BookOpen size={17} aria-hidden="true"/> SDK reference</a>
+          <a className="xid-doc-index" href={index}><BookOpen size={17} aria-hidden="true"/> SDK reference</a>
           {collections.map(({group,label,entries})=>{
             const Icon=icons[group];
             return <details key={group} open={group===current?.group||undefined}>
               <summary><Icon size={16} aria-hidden="true"/>{label}</summary>
-              <ul>{entries.map(entry=><li key={entry.id}><a href={href(entry)} aria-current={current?.id===entry.id?'page':undefined}>{entry.title}</a></li>)}</ul>
+              <ul>{entries.map(entry=><li key={entry.id}><a href={referenceUrl(language,entry)} aria-current={current?.id===entry.id?'page':undefined}>{entry.title}</a></li>)}</ul>
             </details>;
           })}
         </nav>
       </aside>
       <main className="xid-doc-main">
-        {current?<ReferenceArticle key={current.id} entry={current}/>:slug?<div className="xc-page-title">
-          <h1>Guide unavailable</h1><a className="xc-button xc-secondary" href={root}><ArrowLeft size={17} aria-hidden="true"/> SDK reference</a>
+        <fieldset className="xid-language">
+          <legend>Code language</legend>
+          <div>{languageEntries.map(([value,label])=><label key={value}>
+            <input type="radio" name="sdk-language" checked={language===value} onChange={()=>selectLanguage(value)}/>
+            <span>{label}</span>
+          </label>)}</div>
+        </fieldset>
+        {current?<ReferenceArticle key={current.id} entry={current} language={language}/>:slug?<div className="xc-page-title">
+          <h1>Guide unavailable</h1><a className="xc-button xc-secondary" href={index}><ArrowLeft size={17} aria-hidden="true"/> SDK reference</a>
         </div>:<>
           <div className="xid-doc-hero">
             <div className="xc-page-title"><h1>X-Center ID SDK</h1><p>Install the SDK, sign users in, and work with their consented data. Every operation includes a flow diagram, arguments, an example, and sample output.</p></div>
@@ -107,7 +155,7 @@ export default function SdkReference({slug}:{slug?:string}){
           {!search.length&&<div className="xid-feature-links">
             {highlights.map(id=>reference.find(entry=>entry.id===id)!).map(entry=>{
               const Icon=icons[entry.group];
-              return <a key={entry.id} href={href(entry)}><span className="xc-symbol xc-small xc-sky"><Icon size={17} aria-hidden="true"/></span>{entry.title}<ArrowRight size={16} aria-hidden="true"/></a>;
+              return <a key={entry.id} href={referenceUrl(language,entry)}><span className="xc-symbol xc-small xc-sky"><Icon size={17} aria-hidden="true"/></span>{entry.title}<ArrowRight size={16} aria-hidden="true"/></a>;
             })}
           </div>}
           <div className="xid-doc-results" aria-live="polite">
@@ -115,7 +163,14 @@ export default function SdkReference({slug}:{slug?:string}){
             {matching.map(({group,label,entries})=>{
               const Icon=icons[group];
               return <section key={group} id={group}><h2><Icon size={20} aria-hidden="true"/>{label}</h2>
-                <ul>{entries.map(entry=><li key={entry.id}><a href={href(entry)}><strong>{entry.title}</strong><code>{entry.signature}</code><ArrowRight size={16} aria-hidden="true"/></a></li>)}</ul>
+                <ul>{entries.map(entry=>{
+                  const example=exampleFor(entry,language);
+                  return <li key={entry.id}><a href={referenceUrl(language,entry)}>
+                    <strong>{entry.title}</strong>
+                    {'signature' in example?<code>{example.signature}</code>:<small>See platform availability</small>}
+                    <ArrowRight size={16} aria-hidden="true"/>
+                  </a></li>;
+                })}</ul>
               </section>;
             })}
           </div>

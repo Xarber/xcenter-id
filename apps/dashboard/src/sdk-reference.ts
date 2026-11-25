@@ -435,4 +435,24 @@ identity.push({
   related:'create-server-oauth',
 });
 
+advanced.push(
+  {group:'advanced',id:'swift-config-data',title:'Create a Swift data client from configuration',signature:'config.data(accessToken:)',description:'Uses the client ID already held in public configuration to create a delegated Swift data client.',
+    flow:['Public Swift configuration','Supply a token callback','Delegated Swift data client'],args:[['accessToken','async closure','Returns the current end-user token.']],
+    example:'let data = config.data { try await source.accessToken() }',output:'An XCenterDataClient bound to the configured registration.',related:'create-user-client'},
+  {group:'advanced',id:'jvm-data-client',title:'Create the JVM data adapter',signature:'createDataClient(clientId, accessToken)',description:'Uses the JVM networking transport for a standalone Kotlin process. It supports both anonymous and delegated calls.',
+    flow:['Kotlin/JVM worker','Construct the JDK HTTP adapter','Call the X-Center data API'],args:[clientId,['accessToken','callback','Returns the current delegated bearer token.']],
+    example:'val user = createDataClient(clientId) { source.accessToken() }',output:'XCenterDataClient over the JVM transport.',related:'create-user-client'},
+  {group:'advanced',id:'close-dart-clients',title:'Close a Dart HTTP client',signature:'client.close()',description:'Release the transport when an adapter is no longer needed. Give the adapter a dedicated HTTP client if other code needs its transport to remain open.',
+    flow:['Finished with adapter','Close its HTTP transport','Resources released'],args:[],
+    example:'user.close();',output:'The adapter releases its HTTP client.',related:'create-user-client'},
+  {group:'advanced',id:'oauth-errors',title:'Handle native OAuth failures',signature:'OAuth error types by platform',description:'Handle cancellation, expiry, unsupported callbacks, and HTTP failures through the SDK and the host’s session flow. Never include authorization codes or token values in logs.',
+    flow:['Sign-in attempt fails','Inspect platform error','Show a useful next step'],args:[],
+    example:'Use the native language guide for the exact error.',output:'The host displays a recovery action based on the error.',related:'complete-sign-in'},
+  {group:'identity',id:'session-tokens',title:'Store a session token set',signature:'SessionTokens {accessToken, refreshToken?, expiresAt}',description:'Store tokens with absolute access expiry. Convert expires_in seconds from the token endpoint to a platform timestamp. Keep the pair in one protected record and replace it atomically.',
+    flow:['Verified token response','Convert expiry and persist','Session source reads current tokens'],
+    args:[['accessToken','string','Current access bearer.'],['refreshToken?','string','Current refresh credential if granted.'],['expiresAt','number','Absolute epoch milliseconds.']],
+    example:'if (typeof tokens.expires_in !== "number") throw new Error("Missing access expiry");\nconst saved = {accessToken: tokens.access_token, refreshToken: tokens.refresh_token, expiresAt: Date.now() + tokens.expires_in * 1000};',
+    output:'{"accessToken":"<redacted>","refreshToken":"<redacted>","expiresAt":1795623000000}',related:'session-token-source'},
+);
+
 export const reference: readonly Reference[] = [...setup,...identity,...profile,...data,...files,...components,...migration,...advanced];
