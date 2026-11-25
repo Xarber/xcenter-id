@@ -154,7 +154,7 @@ async function activateApplication(req,res,id) {
   const active = accounts.current(req);
   const app = active && registry.lookup(active.owner,id);
   if (!app || app.status !== 'pending') return json(404,{error:'registration_unavailable'});
-  if(app.local&&!accounts.recentlyConfirmed(req))return json(403,{error:'Confirm your identity to activate a local registration.'});
+  if((app.local||app.callbackApproved)&&!accounts.recentlyConfirmed(req))return json(403,{error:'Confirm your identity to activate a local registration.'});
   const time = Date.now();
   for (const [key,after] of verificationAttempts) if (after <= time) verificationAttempts.delete(key);
   if (verificationAttempts.has(id) || verificationAttempts.size >= 100) return json(429,{error:'retry_later'});
@@ -163,10 +163,12 @@ async function activateApplication(req,res,id) {
   if (!app.local&&host.replace(/\.$/,'') === new URL(origin).hostname) return json(422,{error:'use_separate_app_domain'});
   if (!app.local&&(!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(host) ||
       /\.(?:localhost|local|internal|test|example)$/i.test(host))) return json(422,{error:'public_domain_required'});
-  const check = app.local?[]:await resolver.resolveTxt('_xcenter-id.'+host).catch(() => []);
-  if (!app.local&&!check.some((pieces) => pieces.join('') === 'xcenter-id='+id)) return json(422,{error:'domain_proof_unavailable'});
+  const check = app.local||app.callbackApproved?[]:await resolver.resolveTxt('_xcenter-id.'+host).catch(() => []);
+  if (!app.local&&!app.callbackApproved&&!check.some((pieces) => pieces.join('') === 'xcenter-id='+id)) return json(422,{error:'domain_proof_unavailable'});
   const credentials = await provider.provision(app);
-  if (!registry.approve(id,credentials.clientId)) {
+  const latestOwner=accounts.current(req)?.owner;
+  if(latestOwner!==active.owner||((app.local||app.callbackApproved)&&!accounts.recentlyConfirmed(req))||
+     !registry.activateRegistration(app,credentials.clientId)) {
     await credentials.discard();
     return json(409,{error:'registration_changed'});
   }
@@ -244,16 +246,18 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   }
   const appIcon=/^\/public\/app-icons\/([0-9a-f-]{36})$/.exec(path)?.[1];
   if(appIcon){
+    res.setHeader('Access-Control-Allow-Origin','*');
     const icon=['GET','HEAD'].includes(req.method)?registry.icon(appIcon):null;
     res.writeHead(icon?200:404,{'Content-Type':'image/png','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'});
     res.end(icon&&req.method==='GET'?Buffer.from(icon,'base64'):undefined);
     return;
   }
   const publicAvatar=/^\/public\/profiles\/([a-z0-9._-]{3,24})\/avatar$/.exec(path)?.[1];
-  if(publicAvatar){const picture=req.method==='GET'?accounts.publicProfileAvatar(publicAvatar):null;
+  if(publicAvatar){res.setHeader('Access-Control-Allow-Origin','*');const picture=req.method==='GET'?accounts.publicProfileAvatar(publicAvatar):null;
     res.writeHead(picture?200:404,{'Content-Type':picture?'image/jpeg':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}).end(picture?Buffer.from(picture,'base64'):'{}');return;}
   const publicUser=/^\/public\/profiles\/([a-z0-9._-]{3,24})$/.exec(path)?.[1];
   if(publicUser){
+    res.setHeader('Access-Control-Allow-Origin','*');
     const person=req.method==='GET'?accounts.publicProfile(publicUser):null;
     res.writeHead(person?200:404,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}).end(JSON.stringify(person??{error:'Profile unavailable.'}));return;
   }
@@ -293,6 +297,14 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     return;
   }
   if (accountFiles && (/^\/account\/files\/(?:destinations|uploads(?:\/[0-9a-f-]{36})?)$/.test(path)||/^\/(?:account|v1)\/files(?:\/(?:folders|shared)(?:\/[0-9a-f-]{36})?|\/[0-9a-f-]{36})?$/.test(path))) {
+    if(path.startsWith('/v1/')){
+      res.setHeader('Access-Control-Allow-Origin','*');
+      res.setHeader('Access-Control-Expose-Headers','Content-Disposition');
+      if(req.method==='OPTIONS'){
+        const methods=path==='/v1/files/shared'||path.startsWith('/v1/files/shared/')?'GET, OPTIONS':'GET, POST, PATCH, DELETE, OPTIONS';
+        return res.writeHead(204,{'Access-Control-Allow-Methods':methods,'Access-Control-Allow-Headers':'Authorization, Content-Type'}).end();
+      }
+    }
     void accountFiles(req,res,path).catch(()=>{
       if(!res.headersSent) res.writeHead(500,{'Cache-Control':'no-store'});
       res.end();

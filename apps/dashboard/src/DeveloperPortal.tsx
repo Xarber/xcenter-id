@@ -5,13 +5,13 @@ import TrustBadges from './TrustBadges';
 import ApplicationStorage from './ApplicationStorage';
 import { getDocumentAsync } from 'expo-document-picker';
 import { File } from 'expo-file-system';
-import { accountHost } from './native-account';
+import { accountHost, nativeReauthenticate, nativeRequest } from './native-account';
 import { fileAsBase64 } from './web-account';
 import { useEffect, useState } from 'react';
 import { Image, Linking, Pressable, StyleSheet, Switch, Text, TextInput, useColorScheme, View } from 'react-native';
 import Animated, { Easing, FadeIn, ReduceMotion } from 'react-native-reanimated';
 
-type Registration = { id: string; name: string; callback: string; status: string; native?:boolean; client?: string; developerName?:string; icon?:string|null; verified?:boolean; requirements?:ClaimRequirements };
+type Registration = { id: string; name: string; callback: string; callbackApproved?:boolean; status: string; native?:boolean; client?: string; developerName?:string; icon?:string|null; verified?:boolean; requirements?:ClaimRequirements };
 const entering = FadeIn.duration(180).easing(Easing.bezier(0.23, 1, 0.32, 1)).reduceMotion(ReduceMotion.System);
 
 export default function DeveloperPortal({ back,token,colors }: { back: () => void;token?:string;colors?:{ink:string;accent:string;muted:string;soft:string} }) {
@@ -121,22 +121,23 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
     }
   }
 
-  async function activate(id: string) {
-    setNotice('Checking the DNS record…');
+  async function activate(id: string, callbackApproved=false) {
+    setNotice(callbackApproved?'Activating this registration…':'Checking the DNS record…');
     setSaving(true);
     try {
+      if(callbackApproved&&token&&!(await nativeRequest('session/access',token)).confirmed)await nativeReauthenticate(token);
       const result = await request('/'+id+'/verify', {
         method: 'POST',
         headers: { 'X-AuthNJS-Request': 'developer-portal' },
       });
-      if (!result.ok) throw new Error();
       const issued = await result.json();
+      if (!result.ok) throw new Error(issued.error??'Could not activate this registration.');
       setCredentials(issued);
       setApps((previous) => (previous ?? []).map((app) => app.id === id
         ? { ...app, status: 'active', client: issued.clientId } : app));
       setNotice('App activated.');
-    } catch {
-      setNotice('Verification failed. Confirm that the public TXT record matches and try again after thirty seconds.');
+    } catch(error) {
+      setNotice(error instanceof Error?error.message:'Could not activate this registration.');
     } finally { setSaving(false); }
   }
 
@@ -261,7 +262,12 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
           {action('Confirm app deletion', () => { void revoke(app.id); }, saving)}
           {action('Cancel', () => setRevoking(null), saving)}
         </> : action('Delete app', () => setRevoking(app.id), saving))}
-        {app.status === 'pending' && <>
+        {app.status==='pending'&&app.callbackApproved&&<>
+          <Text style={{color:ink,fontWeight:'700'}}>An administrator approved your callback URLs</Text>
+          <Text style={{color:ink}}>You can now activate this app and get its sign-in credentials.</Text>
+          {action(app.native?'Get client ID':'Get client ID and secret',()=>void activate(app.id,true),saving)}
+        </>}
+        {app.status === 'pending' && !app.callbackApproved && <>
           <Text selectable style={{ color: ink }}>Name: {'_xcenter-id.' + new URL(app.callback).hostname}</Text><CopyButton value={'_xcenter-id.'+new URL(app.callback).hostname} label="Copy DNS record name" color={accent}/>
           <Text selectable style={{ color: ink }}>TXT: {'xcenter-id=' + app.id}</Text><CopyButton value={'xcenter-id='+app.id} label="Copy DNS verification code" color={accent}/>
           {action('Verify domain and activate', () => { void activate(app.id); }, saving)}

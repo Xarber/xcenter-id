@@ -543,3 +543,8 @@ The 0.16.0 [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45
 | ID | Request | State | Evidence |
 | --- | --- | --- | --- |
 | AUTHN-150 | Deploy 0.16.0 to production and start a native build if needed | Verified | `308747c` is live for the website, API and mail. Staged mail passed with a punctuated handle and public 465/993 TLS checks passed. Reused the running [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45378307774) for the same revision. Build completion and installed checks remain open. |
+
+| ID | Request | State | Evidence |
+| --- | --- | --- | --- |
+| AUTHN-151 | Add browser CORS for delegated files and anonymous public profiles | Implemented | Scoped to public and delegated routes. Uses bearer grants for delegated files and preserves dashboard session boundaries. |
+| AUTHN-152 | Let admins approve callbacks without DNS and let the owner claim credentials | Implemented | Recent admin approval is scoped to pending HTTPS callback lists. The owner confirms identity before activation and credentials are returned only once. Registry regression checks stale and revoked approvals. |

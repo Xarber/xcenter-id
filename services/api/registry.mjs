@@ -14,6 +14,7 @@ export function openRegistry(path) {
     CREATE TABLE IF NOT EXISTS app_restrictions(id TEXT PRIMARY KEY, restricted INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS client_native(id TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS app_profiles(id TEXT PRIMARY KEY, description TEXT NOT NULL, repository TEXT NOT NULL, callbacks TEXT NOT NULL, verified INTEGER NOT NULL DEFAULT 0) STRICT;
+    CREATE TABLE IF NOT EXISTS app_callback_approvals(id TEXT PRIMARY KEY, callbacks TEXT NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS app_requirements(id TEXT PRIMARY KEY, email INTEGER NOT NULL, age_range INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS app_local_registrations(id TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS app_reader_trust(id TEXT PRIMARY KEY,mode TEXT NOT NULL CHECK(mode IN ('any','secure','verified'))) STRICT;
@@ -39,9 +40,11 @@ export function openRegistry(path) {
     developer_name=excluded.developer_name,icon=excluded.icon`);
   const readRequirements=db.prepare("SELECT email,age_range FROM app_requirements WHERE id=?");
   const isLocal=db.prepare("SELECT 1 FROM app_local_registrations WHERE id=?");
+  const reviewed=db.prepare('SELECT callbacks FROM app_callback_approvals WHERE id=?');
+  const matchesReview=(id,callbacks)=>reviewed.get(id)?.callbacks===JSON.stringify(callbacks);
   const iconPath=(id,icon)=>'/public/app-icons/'+id+'?v='+createHash('sha256').update(icon).digest('hex').slice(0,16);
   const appView=row=>row?{...row,...(row.status==='active'&&row.icon?{iconUrl:iconPath(row.id,row.icon)}:{}),description:row.description??'',repository:row.repository??'',
-    callbacks:row.callbacks?JSON.parse(row.callbacks):[row.callback],verified:!!row.verified,...(row.id?{requirements:requirements(row.id),local:!!isLocal.get(row.id)}:{})}:undefined;
+    callbacks:row.callbacks?JSON.parse(row.callbacks):[row.callback],verified:!!row.verified,...(row.id?{requirements:requirements(row.id),local:!!isLocal.get(row.id),callbackApproved:row.status==='pending'&&matchesReview(row.id,row.callbacks?JSON.parse(row.callbacks):[row.callback])}:{})}:undefined;
   const requirements=id=>{const row=readRequirements.get(id);return {email:!!row?.email,age_range:!!row?.age_range};};
   const detailByClient=db.prepare(`SELECT c.id,c.name,c.callback,p.callbacks FROM clients c LEFT JOIN app_profiles p ON p.id=c.id
     WHERE c.client=? AND c.status='active' AND c.id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)`);
@@ -56,6 +59,7 @@ export function openRegistry(path) {
   const developerView=owner=>({...readDeveloper.get(owner)??{name:'',status:'unverified'},githubProfile:githubProfile.get(owner)?.url??''});
   const setAppName=db.prepare('UPDATE clients SET name=?,callback=? WHERE id=? AND developer=?');
   function saveProfile(owner,id,profile){
+    if(!matchesReview(id,profile.callbacks))db.prepare('DELETE FROM app_callback_approvals WHERE id=?').run(id);
     setAppName.run(profile.name,profile.callbacks[0],id,owner);
     const oldBrand=db.prepare('SELECT developer_name FROM client_brand WHERE id=?').get(id);
     setBrand.run(id,oldBrand?.developer_name??'',profile.icon);
@@ -183,10 +187,40 @@ export function openRegistry(path) {
         return {...appView(lookup.get(id,owner)),icon:profile.icon};
       }catch(error){db.exec('ROLLBACK');throw error;}
     },
+    approveCallbacks(id,callbacks){
+      const row=db.prepare("SELECT c.callback,p.callbacks FROM clients c LEFT JOIN app_profiles p USING(id) WHERE c.id=? AND c.status='pending'").get(id);
+      if(!row||isLocal.get(id)||!Array.isArray(callbacks))return false;
+      const exact=row.callbacks?JSON.parse(row.callbacks):[row.callback];
+      if(JSON.stringify(callbacks)!==JSON.stringify(exact)||!exact.every(value=>{
+        try {
+          const url=new URL(value);
+          return url.protocol==='https:'&&!url.username&&!url.password&&!url.search&&!url.hash&&url.pathname!=='/';
+        } catch {return false;}
+      }))return false;
+      return !!db.prepare('INSERT INTO app_callback_approvals VALUES(?,?) ON CONFLICT(id) DO UPDATE SET callbacks=excluded.callbacks').run(id,JSON.stringify(exact)).changes;
+    },
+    revokeCallbackApproval(id){
+      return !!db.prepare('DELETE FROM app_callback_approvals WHERE id=?').run(id).changes;
+    },
+    activateRegistration(application,client){
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const latest=this.lookup(application.developer,application.id);
+        if(latest?.status!=='pending'||JSON.stringify(latest.callbacks)!==JSON.stringify(application.callbacks)||
+            (application.callbackApproved&&!latest.callbackApproved)){
+          db.exec('ROLLBACK');
+          return false;
+        }
+        const activated=approve.run(client,application.id).changes===1;
+        if(activated)db.prepare('DELETE FROM app_callback_approvals WHERE id=?').run(application.id);
+        db.exec('COMMIT');
+        return activated;
+      } catch(error){ db.exec('ROLLBACK');throw error; }
+    },
     administration:()=>({
-      apps:db.prepare(`SELECT c.id,c.name,c.callback,c.status,p.description,p.repository,p.verified,b.icon,d.name AS developerName
+      apps:db.prepare(`SELECT c.id,c.name,c.callback,c.status,p.description,p.repository,p.callbacks,p.verified,b.icon,d.name AS developerName
         FROM clients c LEFT JOIN app_profiles p ON p.id=c.id LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN developer_profiles d ON d.owner=c.developer
-        ORDER BY c.status,c.name LIMIT 300`).all().map(app=>({...app,icon:app.status==='active'&&app.icon?iconPath(app.id,app.icon):app.icon,verified:!!app.verified})),
+        ORDER BY c.status,c.name LIMIT 300`).all().map(app=>({...appView(app),icon:app.status==='active'&&app.icon?iconPath(app.id,app.icon):app.icon,verified:!!app.verified})),
       developers:db.prepare(`WITH developer_owners(owner) AS (
           SELECT owner FROM developer_profiles UNION SELECT developer FROM clients WHERE status<>'revoked'
         )

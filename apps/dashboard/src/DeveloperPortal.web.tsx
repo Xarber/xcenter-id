@@ -125,14 +125,15 @@ export default function DeveloperPortal({back}:{back:()=>void}){
         <button className="xc-button xc-secondary" disabled={busy||(requirements.email===!!existing.requirements?.email&&requirements.age_range===!!existing.requirements?.age_range)}>Save permissions</button>
       </fieldset>
     </form>}
-    {existing?.status==='pending'&&<div className="xc-info"><strong>{existing.local?'Activate unsecure app':'Verify your callback domain'}</strong>
-      {!existing.local&&<><div className="xc-code-row"><code>{'_xcenter-id.'+new URL(existing.callback).hostname}</code><CopyButton value={'_xcenter-id.'+new URL(existing.callback).hostname} label="Copy DNS record name"/></div><div className="xc-code-row"><code>{'xcenter-id='+existing.id}</code><CopyButton value={'xcenter-id='+existing.id} label="Copy DNS verification code"/></div></>}
+    {existing?.status==='pending'&&<div className="xc-info"><strong>{existing.callbackApproved?'An administrator approved your callback URLs':existing.local?'Activate unsecure app':'Verify your callback domain'}</strong>
+      {existing.callbackApproved&&<p>You can now activate this app and get its sign-in credentials.</p>}
+      {!existing.local&&!existing.callbackApproved&&<><div className="xc-code-row"><code>{'_xcenter-id.'+new URL(existing.callback).hostname}</code><CopyButton value={'_xcenter-id.'+new URL(existing.callback).hostname} label="Copy DNS record name"/></div><div className="xc-code-row"><code>{'xcenter-id='+existing.id}</code><CopyButton value={'xcenter-id='+existing.id} label="Copy DNS verification code"/></div></>}
       <button className="xc-button xc-secondary" disabled={busy} onClick={()=>work(async()=>{
-        if(existing.local&&!(await api('session/access')).confirmed)await confirmIdentity();
+        if((existing.local||existing.callbackApproved)&&!(await api('session/access')).confirmed)await confirmIdentity();
         const result=await developerApi('apps/'+existing.id+'/verify',{});
         setSecret(result);
         setSelection({...existing,status:'active',client:result.clientId});await load();setNotice('App activated.');
-      })}>{existing.local?'Activate local registration':'Verify domain and activate'}</button>
+      })}>{existing.callbackApproved?(existing.native?'Get client ID':'Get client ID and secret'):existing.local?'Activate local registration':'Verify domain and activate'}</button>
     </div>}
     {secret&&<div className="xc-info" role="status"><strong>Save the credentials securely</strong><div className="xc-code-row"><code>{secret.clientId}</code><CopyButton value={secret.clientId} label="Copy client ID"/></div>
       {secret.clientSecret&&<div className="xc-code-row"><code>{secret.clientSecret}</code><CopyButton value={secret.clientSecret} label="Copy client secret"/></div>}<button className="xc-button xc-secondary" onClick={()=>setSecret(null)}>Hide credentials</button></div>}

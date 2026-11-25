@@ -1,3 +1,4 @@
+import CallbackApproval,{type ReviewedRegistration} from './CallbackApproval.web';
 import AppIcon from './AppIcon.web';
 import type {AppFileContainer as Container} from './account-file-containers';
 import TrustBadges from './TrustBadges.web';
@@ -21,7 +22,7 @@ export function AdminAvatar({username,hasPicture}:{username:string;hasPicture?:b
     <UserRound size={24} aria-hidden="true"/>}</span>;
 }
 type Details=ManagedAccount&{developerVerified?:boolean;externalMailLimits?:{daily:number|null;monthly:number|null;usedToday:number;usedMonth:number};admin:boolean;rootAdmin:boolean;verified:boolean;name:string;created:number;devices:number;passkeys:number;apps:{client:string;label:string;icon?:string|null;verified?:boolean}[]};
-type Registered={icon?:string|null;verified:boolean;id:string;name:string;status:string;restricted:boolean;callback:string};
+type Registered=ReviewedRegistration&{icon?:string|null;verified:boolean;id:string;name:string;status:string;restricted:boolean;callback:string};
 export function AdminAccounts(){
   const [users,setUsers]=useState<ManagedAccount[]>([]);
   const [details,setDetails]=useState<{account:Details;registered:Registered[];containers?:Container[]}|null>(null);
@@ -103,7 +104,7 @@ export function AdminAccounts(){
         {!registrations.length&&<p>No registered apps.</p>}
         {registrations.map(app=><div key={app.id} className="xc-list-row xc-permission-row">
           <div className="xc-row-head"><AppIcon icon={app.icon}/><div><strong className="xc-identity-label">{app.name}<TrustBadges compact kind="app" verified={app.verified}/></strong><p>{app.status}{app.restricted?' · Restricted':''}</p><p>{new URL(app.callback).hostname}</p></div></div>
-          <div className="xc-actions xc-registration-actions"><IconAction label={app.verified?'Remove app verification':'Verify app'} disabled={busy} onClick={()=>run(()=>mutate('admin/apps',{type:'app',id:app.id,verified:!app.verified}))}><ShieldCheck size={20}/></IconAction>{app.status==='active'&&app.verified&&!app.restricted&&<a className="xc-button xc-secondary" href={'/developer/storage/'+app.id+'?from=admin&account='+user.username}><Database size={17}/> Manage app storage</a>}
+          <div className="xc-actions xc-registration-actions"><CallbackApproval app={app} disabled={busy} save={body=>run(()=>mutate('admin/apps',body))}/><IconAction label={app.verified?'Remove app verification':'Verify app'} disabled={busy} onClick={()=>run(()=>mutate('admin/apps',{type:'app',id:app.id,verified:!app.verified}))}><ShieldCheck size={20}/></IconAction>{app.status==='active'&&app.verified&&!app.restricted&&<a className="xc-button xc-secondary" href={'/developer/storage/'+app.id+'?from=admin&account='+user.username}><Database size={17}/> Manage app storage</a>}
             {app.status==='active'&&<IconAction label={app.restricted?'Restore app':'Restrict app'} disabled={busy} onClick={()=>run(()=>mutate('admin/users/'+user.username,
               {action:app.restricted?'restore':'restrict',app:app.id}))}>{app.restricted?<Unlock size={20}/>:<LockKeyhole size={20}/>}</IconAction>}
             <IconAction label="Delete registered app" disabled={busy} onClick={()=>{setAction('app-'+app.id);setConfirmation('');}}><Trash2 size={20}/></IconAction>

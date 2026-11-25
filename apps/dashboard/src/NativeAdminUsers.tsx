@@ -13,7 +13,7 @@ import type {ManagedAccount} from './support-model';
 
 type Colors=DashboardTheme;
 type User=ManagedAccount&{developerVerified?:boolean;admin:boolean;rootAdmin:boolean;verified:boolean;externalMailLimits?:{daily:number|null;monthly:number|null};name:string;devices:number;passkeys:number;apps:{client:string;label:string;icon?:string|null;verified?:boolean}[]};
-type App={icon?:string|null;verified:boolean;id:string;name:string;status:string;restricted:boolean};
+type App={icon?:string|null;verified:boolean;id:string;name:string;status:string;restricted:boolean;callback?:string;callbacks?:string[];callbackApproved?:boolean;local?:boolean};
 function Avatar({user,token,colors}:{user:ManagedAccount;token:string;colors:Colors}){
   const [failed,setFailed]=useState(false);
   return user.hasPicture&&!failed?<Image accessibilityLabel="Profile photo" onError={()=>setFailed(true)} source={{
@@ -135,7 +135,17 @@ export default function NativeAdminUsers({token,colors,onDetail}:{token:string;c
         {!registered.length&&<Text style={{color:colors.muted}}>No registered apps.</Text>}
         {registered.map(app=><View key={app.id} style={[divider,{gap:8}]}>
           <View style={{flexDirection:'row',alignItems:'center',gap:8}}><AppIcon icon={app.icon} color={colors.accent}/><Text style={{color:colors.ink,flex:1}}>{app.name} · {app.status}{app.restricted?' · Restricted':''}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View>
-          <View style={{flexDirection:'row',gap:8,flexWrap:'wrap'}}>{icon(app.verified?'Remove app verification':'Verify app','checkmark-circle-outline',()=>run(async()=>{await api('admin/apps',{type:'app',id:app.id,verified:!app.verified});}))}{app.status==='active'&&app.verified&&!app.restricted&&icon('Manage app storage','server-outline',()=>setStorageApp(app.id))}</View>
+          <View style={{flexDirection:'row',gap:8,flexWrap:'wrap'}}>{app.status==='pending'&&!app.local&&app.callback&&icon(app.callbackApproved?'Remove callback approval':'Approve callback URLs','key-outline',()=>{
+            const callbacks=app.callbacks??[app.callback!];
+            const approved=!!app.callbackApproved;
+            const title=approved?'Remove callback approval':'Approve callback URLs';
+            showDialog(title+'?',approved?'The developer will need DNS verification or a new approval.'
+              :'Approve only URLs whose ownership you verified independently. '+callbacks.join(' · '),[
+              {text:'Cancel',style:'cancel'},{text:title,onPress:()=>run(async()=>{
+                await api('admin/apps',{type:'callback',id:app.id,callbacks,verified:!approved});
+              })},
+            ]);
+          })}{icon(app.verified?'Remove app verification':'Verify app','checkmark-circle-outline',()=>run(async()=>{await api('admin/apps',{type:'app',id:app.id,verified:!app.verified});}))}{app.status==='active'&&app.verified&&!app.restricted&&icon('Manage app storage','server-outline',()=>setStorageApp(app.id))}</View>
           {<View style={{flexDirection:'row',gap:10,flexWrap:'wrap'}}>
             {app.status==='active'&&icon(app.restricted?'Restore app':'Restrict app',app.restricted?'lock-open-outline':'lock-closed-outline',()=>run(async()=>{
               await api('admin/users/'+user.username,{action:app.restricted?'restore':'restrict',app:app.id});

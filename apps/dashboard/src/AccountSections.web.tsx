@@ -1,3 +1,4 @@
+import CallbackApproval,{type ReviewedRegistration} from './CallbackApproval.web';
 import {useConfirmDialog} from './dialog-model';
 import {useFileTransfers} from './file-transfers';
 import {destinationLabels,type FolderDestination} from './file-destinations';
@@ -445,7 +446,7 @@ export function MailPage({ account }:{account:Account}) {
   </section>;
 }
 
-type AdminApp={icon?:string|null;id:string;name:string;status:string;callback:string;developerName?:string;repository?:string;verified:boolean};
+type AdminApp=ReviewedRegistration&{icon?:string|null;id:string;name:string;status:string;callback:string;developerName?:string;repository?:string;verified:boolean};
 type AdminDeveloper={owner:string;name:string;status:string;githubProfile?:string};
 function AdminContent() {
   const [apps,setApps]=useState<AdminApp[]>([]);
@@ -481,6 +482,7 @@ function AdminContent() {
         <div className="xc-row-head"><AppIcon icon={app.icon}/><div><strong className="xc-identity-label">{app.name}<TrustBadges compact kind="app" verified={app.verified}/></strong><p>{app.developerName??'Developer'} · {app.status}</p>
           <p>{new URL(app.callback).hostname}</p>{app.repository&&<a href={app.repository} rel="noreferrer" target="_blank">Review repository</a>}</div></div>
         <div className="xc-actions xc-registration-actions">{app.status==='active'&&app.verified&&<a className="xc-button xc-secondary" href={'/developer/storage/'+app.id+'?from=admin'}><Database size={17}/> Manage app storage</a>}
+        <CallbackApproval app={app} disabled={busy} save={body=>save('admin/apps',body,'Callback approval updated.')}/>
         {app.status!=='revoked'&&<IconAction label={app.verified?'Remove verification':'Verify app'} disabled={busy}
           onClick={()=>save('admin/apps',{type:'app',id:app.id,verified:!app.verified},'App verification updated.')}><BadgeCheck size={20}/></IconAction>}</div>
       </div>)}

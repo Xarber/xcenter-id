@@ -14,13 +14,19 @@ export function createAdminAppRoutes({accounts,registry}){
       let body='';
       for await(const chunk of req.iterator({destroyOnReturn:false})){
         body+=chunk.toString();
-        if(body.length>2048){req.resume();return answer(413,{error:'Request too large.'});}
+        if(body.length>8192){req.resume();return answer(413,{error:'Request too large.'});}
       }
-      const {type,id,verified}=JSON.parse(body);
-      if(!['app','developer'].includes(type)||typeof id!=='string'||id.length>100||typeof verified!=='boolean'){
+      const {type,id,verified,callbacks}=JSON.parse(body);
+      if(!['app','developer','callback'].includes(type)||typeof id!=='string'||id.length>100||typeof verified!=='boolean'){
         return answer(422,{error:'Choose an app or developer.'});
       }
       if(accounts.adminStatus(req,true)!==200)return answer(403,{error:'Confirm administrator access.'});
+      if(type==='callback'){
+        const updated=verified?registry.approveCallbacks(id,callbacks):registry.revokeCallbackApproval(id);
+        if(!updated)return answer(409,{error:'Callback review changed or the registration is no longer pending.'});
+        accounts.auditAdmin?.(req,id,verified?'approve-app-callbacks':'revoke-app-callback-approval');
+        return answer(200,{ok:true});
+      }
       if(type==='developer'&&accounts.available&&!accounts.available(id))return answer(404,{error:'Developer account unavailable.'});
       const updated=type==='app'?registry.verifyApp(id,verified):registry.verifyDeveloper(id,verified,accounts.username?.(id));
       return updated?answer(200,{ok:true}):answer(409,{error:'This app or request cannot be verified.'});

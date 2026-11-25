@@ -296,3 +296,4 @@ input:is([type=checkbox],[type=radio]){inline-size:1.2rem;block-size:1.2rem;min-
 .xc-permission-editor-grid label{min-width:0}
 .xc-permission-editor-grid small{color:var(--muted)}
 .xc-config-code{max-width:100%;width:100%;max-height:65dvh;resize:vertical;tab-size:2;font-family:ui-monospace,monospace}
+.xc-action-dialog p{overflow-wrap:anywhere}
