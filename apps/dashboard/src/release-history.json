@@ -1,5 +1,25 @@
 [
   {
+    "version": "0.17.0",
+    "date": "2026-11-25",
+    "revision": "6acb662acd29684ca5c67f6a53d1939ab661f706",
+    "title": "Administrator callback approval",
+    "status": "Development",
+    "features": [
+      [
+        "key",
+        "Get sign-in credentials after callback approval",
+        "An administrator can approve your exact HTTPS callback URLs. Confirm your identity in Developer Apps to activate the registration and claim its credentials."
+      ],
+      [
+        "storage",
+        "Access files from browser integrations",
+        "Registered apps can make authorized file requests from the browser. Public profiles and icons can be read without signing in."
+      ]
+    ],
+    "fixes": []
+  },
+  {
     "version": "0.16.0",
     "date": "2026-11-24",
     "revision": "a36fd3f9bd2663b4b89df9b0f46e4f265bbb8b94",

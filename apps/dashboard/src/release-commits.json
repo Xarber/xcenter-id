@@ -1,4 +1,34 @@
 {
+  "0.17.0": {
+    "revision": "6acb662acd29684ca5c67f6a53d1939ab661f706",
+    "commits": [
+      {
+        "id": "b703d05f6a2efe008533bb3700f158a191ea17b1",
+        "title": "chore(release): refresh 0.16.0 source notes",
+        "detail": "Changed areas: apps/dashboard."
+      },
+      {
+        "id": "308747cd8ed9d4649955bf6bd66125966ca1ae25",
+        "title": "docs(testing): record profile and configuration browser verification",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/reports."
+      },
+      {
+        "id": "785983605bb9a2d656b4d1d993a03188c44b4793",
+        "title": "docs(release): record dashboard 0.16.0 native preview",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/reports."
+      },
+      {
+        "id": "b55fe9d5d90cf15d8c0d7797d270e0fe9d2cb59c",
+        "title": "docs(ops): record dashboard 0.16.0 production rollout",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations, docs/reports."
+      },
+      {
+        "id": "6acb662acd29684ca5c67f6a53d1939ab661f706",
+        "title": "feat(identity): approve exact app callbacks from administration",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/IDENTITY.md, docs/SECURITY.md, services/api, skills/integrate-xcenter-id."
+      }
+    ]
+  },
   "0.16.0": {
     "revision": "a36fd3f9bd2663b4b89df9b0f46e4f265bbb8b94",
     "commits": [

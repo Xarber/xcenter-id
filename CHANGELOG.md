@@ -3,6 +3,15 @@
 This archive covers the original AuthNJS source and the X-Center ID rewrite. Earlier entries reconstruct source milestones. Development entries identify unreleased work. There are no published GitHub releases in this history.
 Deployment and native build evidence are recorded in [release documentation](docs/RELEASES.md).
 
+## 0.17.0 · 2026-11-25
+
+Development
+
+### Administrator callback approval
+
+- **Get sign-in credentials after callback approval**. An administrator can approve your exact HTTPS callback URLs. Confirm your identity in Developer Apps to activate the registration and claim its credentials.
+- **Access files from browser integrations**. Registered apps can make authorized file requests from the browser. Public profiles and icons can be read without signing in.
+
 ## 0.16.0 · 2026-11-24
 
 Development
