@@ -17,10 +17,11 @@
 .xid-doc-main{min-width:0}
 .xid-doc-hero{display:flex;align-items:center;gap:22px;justify-content:space-between;background:linear-gradient(125deg,#22387f,#3b46a3);color:white;border-radius:24px;padding:clamp(21px,4vw,40px);margin-bottom:20px}
 .xid-doc-hero h1{margin:0 0 10px}
-.xid-doc-hero p{color:#ecf1ff;max-width:56ch}
+.xid-doc-hero .xc-page-title p{color:#ecf1ff;max-width:56ch}
 .xid-doc-hero-icon{flex:none;color:#d9e4ff;margin-inline:10px}
 .xid-doc-search{display:flex;gap:9px;align-items:center;padding:0 13px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:12px;margin-bottom:15px}
-.xid-doc-search input[type=search]{border:0;background:transparent;padding-inline:4px}
+.xid-doc-search:focus-within{box-shadow:0 0 0 2px var(--blue)}
+.xid-doc-search input[type=search]{border:0;background:transparent;padding-inline:4px;outline:none;box-shadow:none}
 .xid-feature-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:30px}
 .xid-feature-links a,.xid-related{display:flex;align-items:center;gap:10px;min-height:48px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);padding:9px 12px;text-decoration:none;font-weight:650;font-size:.9rem}
 .xid-feature-links a>svg,.xid-related>svg{flex:none;margin-left:auto;color:var(--blue)}
@@ -61,7 +62,7 @@
 .xid-code-head h2{margin:0}
 .xid-code-head>div{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:.8rem}
 .xid-code-head button{padding:0;width:38px;min-height:36px}
-.xid-code pre{background:var(--nav);border-top:1px solid var(--line);margin:0;padding:15px;overflow:auto;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:2}
+.xid-code pre{background:var(--nav);border-top:1px solid var(--line);margin:0;padding:15px;overflow:auto;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:2;white-space:pre-wrap;overflow-wrap:anywhere}
 .xid-code pre:focus-visible,.xid-doc-sidebar summary:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
 .xid-related span{display:grid;gap:2px}
 .xid-doc-footer{margin-top:34px;border-top:1px solid var(--line);padding:15px 0;font-size:.83rem}

@@ -233,7 +233,7 @@ for(const namespace of ['user','service','shared','public'] as const){
     const variants=isPublic||isShared?'Swift and Kotlin use listRecords or getRecord with RecordSpace. Dart uses sharedFrom for cross-app and listPublicRecords or getPublicRecord for public data. '+platformData
       :isService?'The Swift, Kotlin and Dart service clients expose list, get, put and delete. Their mutating calls take the revision directly. '+platformData
       :'Swift, Kotlin and Dart name these listRecords, getRecord, putRecord and deleteRecord. Their write APIs use a typed value or explicit data and visibility. '+platformData;
-    data.push({group:'data',id:namespace+'-records-'+action,title:action[0].toUpperCase()+action.slice(1)+' '+label+' '+(list?'records':'record'),signature,
+    data.push({group:'data',id:namespace+'-records-'+action,title:(put?'Write':action[0].toUpperCase()+action.slice(1))+' '+label+' '+(list?'records':'record'),signature,
       description:actionText+' '+boundary,access,flow:[isPublic?'Public reader':isShared?'Granted source collection':isService?'Backend database key':'Signed-in app session',
         {list:'Read collection page',get:'Resolve record ID',put:'Validate revision and write',delete:'Validate revision and delete'}[action],
         {list:'Records and next cursor',get:'Data with revision',put:'New record revision',delete:'Deletion acknowledgment'}[action]],
