@@ -157,3 +157,9 @@ Local Chromium verified admin approval and the developer's one-time credential c
 The public website serves revision `48a38859f10024bd0d26092b38435c9e4c69c3f3` from loopback 18827. The documentation update adds `/docs/sdk` and individual guide URLs. The deployed service retains the 0.17.0 API and dashboard compatibility. The staged candidate passed documentation routes, discovery, delegated-file CORS and access denial checks. The production container reported zero restarts.
 
 The retained website process on 18825 and the saved `id.xcenter.it.conf` under `/srv/xcenter/infra/changes/pre-dashboard-48a3885` provide rollback. To restore it, copy the saved site file back, validate Nginx and reload. Pre-cutover SQLite snapshots passed integrity checks under `/srv/xcenter/data/.xcenter-id-rollbacks/pre-dashboard-48a3885.KKO4e6`. The first staging launch needed an empty mount point for the read-only dependency bind. The corrected attempt reused the installed dependencies and image. The sample app and SMTP/IMAP processes retained their existing deployments.
+
+## 25 November SDK language views rollout
+
+The public website serves `d6527c0c8df4dc8ccf88de344c2efe75386bcf22` on loopback 18829. The 82 SDK guides have JavaScript, TypeScript, Swift, Kotlin and Dart views with language-specific APIs or an explicit availability explanation. Staged and public checks passed for the docs, issuer discovery, and delegated-file access boundaries. The website process reported zero restarts at cutover.
+
+The previous web process remains on 18827. Restore the saved `id.xcenter.it.conf` from `/srv/xcenter/infra/changes/pre-dashboard-d6527c0`, validate Nginx, and reload to roll back. Pre-cutover SQLite snapshots passed quick checks under `/srv/xcenter/data/.xcenter-id-rollbacks/pre-dashboard-d6527c0.a5cmc7`.
