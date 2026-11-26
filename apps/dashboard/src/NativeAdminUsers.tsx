@@ -1,3 +1,5 @@
+import ListPages from './ListPages';
+import {useListPage} from './list-page';
 import {useDialog} from './dialog-model';
 import AppIcon from './AppIcon';
 import type {AppFileContainer as Container} from './account-file-containers';
@@ -21,7 +23,7 @@ function Avatar({user,token,colors}:{user:ManagedAccount;token:string;colors:Col
     headers:{Authorization:'Bearer '+token,'X-AuthNJS-Native':'account-manager'},
   }} style={{width:44,height:44,borderRadius:22}}/>:<View style={{width:44,height:44,borderRadius:22,alignItems:'center',justifyContent:'center',backgroundColor:colors.soft}}><Ionicons accessible={false} name="person-outline" size={23} color={colors.accent}/></View>;
 }
-export default function NativeAdminUsers({token,colors,onDetail}:{token:string;colors:Colors;onDetail:(open:boolean)=>void}){
+export default function NativeAdminUsers({token,colors,onDetail,requested}:{token:string;colors:Colors;onDetail:(open:boolean)=>void;requested?:{username:string;app?:string}}){
   const showDialog=useDialog();
   const [users,setUsers]=useState<ManagedAccount[]>([]);
   const [capacity,setCapacity]=useState<string|null>(null);
@@ -29,9 +31,9 @@ export default function NativeAdminUsers({token,colors,onDetail}:{token:string;c
   const [storageApp,setStorageApp]=useState('');
   const [mailLimits,setMailLimits]=useState<{daily:string;monthly:string}|null>(null);
   const [filter,setFilter]=useState('');
-  const [visibleLimit,setVisibleLimit]=useState(40);
   const [loading,setLoading]=useState(true);
   const [selected,setSelected]=useState('');
+  useEffect(()=>{if(requested)setSelected(requested.username);},[requested]);
   const [details,setDetails]=useState<{account:User;registered:App[];containers?:Container[]}|null>(null);
   const [busy,setBusy]=useState(false);
   const [status,setStatus]=useState('');
@@ -65,12 +67,20 @@ export default function NativeAdminUsers({token,colors,onDetail}:{token:string;c
       style={({pressed})=>({minHeight:44,paddingHorizontal:10,paddingVertical:8,flexDirection:'row',gap:6,borderWidth:1,borderColor:colors.line,alignItems:'center',justifyContent:'center',borderRadius:10,
         backgroundColor:pressed?colors.soft:colors.panel,opacity:disabled?0.6:1})}><Ionicons accessible={false} name={name} size={17} color={label.startsWith('Delete')?colors.danger:colors.accent}/><Text style={{color:label.startsWith('Delete')?colors.danger:colors.ink,fontSize:13,fontWeight:'600',flexShrink:1}}>{label}</Text></Pressable>;
   }
-  if(storageApp)return <ApplicationStorage id={storageApp} token={token} colors={colors} admin back={()=>setStorageApp('')}/>;
   const user=details?.account;
   const input={color:colors.ink,borderColor:colors.line,borderWidth:1,borderRadius:10,paddingHorizontal:12,minHeight:48};
   const divider={borderTopWidth:1,borderColor:colors.line,paddingTop:12};
   const registered=details?.registered.filter(app=>app.status!=='revoked')??[];
   const visible=users.filter(user=>user.username.includes(filter.trim().toLowerCase()));
+  const userPage=useListPage(visible.length,filter.trim());
+  const appPage=useListPage(registered.length,selected);
+  useEffect(()=>{
+    if(requested?.app&&details){
+      const index=registered.findIndex(app=>app.id===requested.app);
+      if(index>=0)appPage.go(Math.floor(index/appPage.size)+1);
+    }
+  },[requested,details]);
+  if(storageApp)return <ApplicationStorage id={storageApp} token={token} colors={colors} admin back={()=>setStorageApp('')}/>;
   return <Surface colors={colors}>
     {selected?<>{icon('All accounts','arrow-back',()=>{setSelected('');onDetail(false);setDetails(null);setDeleting(false);setWarning(null);setCapacity(null);setMailLimits(null);})}
       {loading&&<Text accessibilityRole="progressbar" style={{color:colors.muted}}>Loading account…</Text>}
@@ -133,7 +143,7 @@ export default function NativeAdminUsers({token,colors,onDetail}:{token:string;c
         {user.apps.map(app=><View key={app.client} style={[divider,{gap:8,flexDirection:'row',alignItems:'center'}]}><AppIcon icon={app.icon} color={colors.accent}/><Text style={{color:colors.ink}}>{app.label}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View>)}
         <View style={divider}><SurfaceTitle colors={colors} title="Registered apps" icon="ribbon-outline" tint="mint"/></View>
         {!registered.length&&<Text style={{color:colors.muted}}>No registered apps.</Text>}
-        {registered.map(app=><View key={app.id} style={[divider,{gap:8}]}>
+        {registered.slice(appPage.start,appPage.end).map(app=><View key={app.id} style={[divider,{gap:8}]}>
           <View style={{flexDirection:'row',alignItems:'center',gap:8}}><AppIcon icon={app.icon} color={colors.accent}/><Text style={{color:colors.ink,flex:1}}>{app.name} · {app.status}{app.restricted?' · Restricted':''}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View>
           <View style={{flexDirection:'row',gap:8,flexWrap:'wrap'}}>{app.status==='pending'&&!app.local&&app.callback&&icon(app.callbackApproved?'Remove callback approval':'Approve callback URLs','key-outline',()=>{
             const callbacks=app.callbacks??[app.callback!];
@@ -157,19 +167,20 @@ export default function NativeAdminUsers({token,colors,onDetail}:{token:string;c
             ]))}
           </View>}
         </View>)}
+        <ListPages state={appPage} label="Registered apps" colors={colors}/>
       </>}
     </>:<><SurfaceTitle colors={colors} title="Accounts" icon="people-outline"/>
-      <TextInput accessibilityLabel="Find an account" autoCapitalize="none" value={filter} onChangeText={value=>{setFilter(value);setVisibleLimit(40);}}
+      <TextInput accessibilityLabel="Find an account" autoCapitalize="none" value={filter} onChangeText={setFilter}
       placeholder="Find an account" placeholderTextColor={colors.muted} style={input}/>
       {loading&&<Text accessibilityRole="progressbar" style={{color:colors.muted}}>Loading accounts…</Text>}
       {!loading&&!status&&!visible.length&&<Text style={{color:colors.muted}}>No accounts found.</Text>}
-      {visible.slice(0,visibleLimit).map(user=>
+      {visible.slice(userPage.start,userPage.end).map(user=>
         <Pressable accessibilityRole="button" key={user.username} onPress={()=>{setSelected(user.username);onDetail(true);setDetails(null);}}
           style={({pressed})=>[divider,{minHeight:60,flexDirection:'row',alignItems:'center',gap:12,backgroundColor:pressed?colors.soft:colors.panel}]}>
           <Avatar user={user} token={token} colors={colors}/><View style={{flex:1,gap:4}}><Text style={{color:colors.ink}}>@{user.username}</Text><TrustBadges verified={user.verified} admin={user.admin} color={colors.ink}/></View>
           {user.locked?<Ionicons accessibilityLabel="Locked" name="lock-closed-outline" size={20} color={colors.danger}/>:<Ionicons accessible={false} name="chevron-forward" size={19} color={colors.muted}/>}
         </Pressable>)}
-      {visible.length>visibleLimit&&icon('Show more accounts','chevron-down',()=>setVisibleLimit(limit=>limit+40))}</>}
+      <ListPages state={userPage} label="Accounts" colors={colors}/></>}
     {status&&<Text accessibilityRole="alert" style={{color:colors.ink}}>{status}</Text>}
   </Surface>;
 }

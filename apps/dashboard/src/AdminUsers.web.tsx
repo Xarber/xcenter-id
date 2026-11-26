@@ -1,3 +1,5 @@
+import ListPages from './ListPages.web';
+import {useListPage} from './list-page';
 import CallbackApproval,{type ReviewedRegistration} from './CallbackApproval.web';
 import AppIcon from './AppIcon.web';
 import type {AppFileContainer as Container} from './account-file-containers';
@@ -50,6 +52,18 @@ export function AdminAccounts(){
   }
   const user=details?.account;
   const registrations=details?.registered.filter(app=>app.status!=='revoked')??[];
+  const visibleUsers=users.filter(user=>user.username.includes(filter.toLowerCase().trim()));
+  const userPage=useListPage(visibleUsers.length,filter.trim());
+  const targeted=window.location.hash.startsWith('#app-')?window.location.hash.slice(5):'';
+  const registeredPage=useListPage(registrations.length,name??'');
+  useEffect(()=>{
+    if(!targeted||!details)return;
+    const index=registrations.findIndex(app=>app.id===targeted);
+    if(index>=0){
+      registeredPage.go(Math.floor(index/registeredPage.size)+1);
+      requestAnimationFrame(()=>document.getElementById('app-'+targeted)?.scrollIntoView({block:'center'}));
+    }
+  },[targeted,details]);
   return <><section className="xc-card xc-pad xc-stack">
     {name?<><a className="xc-button xc-secondary xc-self-start" href="/admin" aria-label="All accounts" title="All accounts"><ArrowLeft size={20}/></a>
       {user&&<>
@@ -102,7 +116,7 @@ export function AdminAccounts(){
         {user.apps.map(app=><div className="xc-list-row" key={app.client}><div className="xc-row-head"><AppIcon icon={app.icon}/><span className="xc-identity-label">{app.label}<TrustBadges compact kind="app" verified={app.verified}/></span></div></div>)}
         <section className="xc-stack"><div className="xc-row-head"><BadgeCheck size={21}/><h2>Registered apps</h2></div>
         {!registrations.length&&<p>No registered apps.</p>}
-        {registrations.map(app=><div key={app.id} className="xc-list-row xc-permission-row">
+        {registrations.slice(registeredPage.start,registeredPage.end).map(app=><div id={'app-'+app.id} key={app.id} className="xc-list-row xc-permission-row">
           <div className="xc-row-head"><AppIcon icon={app.icon}/><div><strong className="xc-identity-label">{app.name}<TrustBadges compact kind="app" verified={app.verified}/></strong><p>{app.status}{app.restricted?' · Restricted':''}</p><p>{new URL(app.callback).hostname}</p></div></div>
           <div className="xc-actions xc-registration-actions"><CallbackApproval app={app} disabled={busy} save={body=>run(()=>mutate('admin/apps',body))}/><IconAction label={app.verified?'Remove app verification':'Verify app'} disabled={busy} onClick={()=>run(()=>mutate('admin/apps',{type:'app',id:app.id,verified:!app.verified}))}><ShieldCheck size={20}/></IconAction>{app.status==='active'&&app.verified&&!app.restricted&&<a className="xc-button xc-secondary" href={'/developer/storage/'+app.id+'?from=admin&account='+user.username}><Database size={17}/> Manage app storage</a>}
             {app.status==='active'&&<IconAction label={app.restricted?'Restore app':'Restrict app'} disabled={busy} onClick={()=>run(()=>mutate('admin/users/'+user.username,
@@ -112,14 +126,14 @@ export function AdminAccounts(){
           {action==='app-'+app.id&&<div className="xc-stack xc-registration-confirm"><p>Delete this registration and stop its future sign-ins?</p>
             <IconAction label="Confirm app deletion" disabled={busy} onClick={()=>run(()=>mutate('admin/users/'+user.username,{action:'delete',app:app.id,confirmation:app.id}))}><Check size={20}/></IconAction>
             <IconAction label="Cancel app deletion" disabled={busy} onClick={()=>setAction('')}><X size={20}/></IconAction></div>}
-        </div>)}</section>
+        </div>)}<ListPages state={registeredPage} label="Registered apps"/></section>
       </>}
     </>:<><h2>Accounts</h2><label>Find an account<input type="search" value={filter} onChange={event=>setFilter(event.target.value)}/></label>
-      {users.filter(user=>user.username.includes(filter.toLowerCase().trim())).map(user=>
+      {visibleUsers.slice(userPage.start,userPage.end).map(user=>
         <a className="xc-list-row" key={user.username} href={'/admin/users/'+user.username}>
           <span className="xc-row-head"><AdminAvatar username={user.username} hasPicture={user.hasPicture}/><span className="xc-identity-label"><strong>@{user.username}</strong><TrustBadges compact verified={user.verified} admin={user.admin}/></span></span>
           {user.locked&&<LockKeyhole size={18} aria-label="Locked"/>}
-        </a>)}</>}
+        </a>)}<ListPages state={userPage} label="Accounts"/></>}
     {status&&<p role="status">{status}</p>}
   </section></>;
 }

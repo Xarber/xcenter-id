@@ -340,6 +340,21 @@ test('native confirmation verifies the app account passkey independently of the 
   const post=(route,data,headers)=>fetch(base+route,{method:'POST',body:JSON.stringify(data),
     headers:{'content-type':'application/json',...headers}});
   try{
+    db.exec(`INSERT INTO verified_emails VALUES('native','verified@example.test',1);
+      INSERT INTO account_email_addresses VALUES('native','pending@example.test',1);`);
+    const remove=address=>post('email/remove',{email:address},nativeHeaders);
+    assert.equal((await remove('verified@example.test')).status,403);
+    assert.equal((await remove('pending@example.test')).status,403);
+    const start=await post('device/browser',{code:'ABCD23'},nativeHeaders);
+    assert.equal(start.status,200);
+    const handoff=new URL((await start.json()).url);
+    const exchange=key=>post('device/browser/exchange',{key},{origin,'x-authnjs-request':'device-review',cookie:browserCookie});
+    const redeemed=await exchange(handoff.hash.slice(1));
+    assert.equal(redeemed.status,200);
+    const deviceCookie=redeemed.headers.getSetCookie()[0].split(';')[0];
+    assert.equal(service.deviceBrowserSession({headers:{cookie:deviceCookie}}).owner,'native');
+    assert.equal(service.current({headers:{cookie:deviceCookie}}),undefined);
+    assert.equal((await exchange(handoff.hash.slice(1))).status,401);
     const admin=async()=> (await(await fetch(base+'admin/access',{headers:nativeHeaders})).json()).authorized;
     assert.equal(await admin(),false);
     const {state}=await(await post('reauth/native',{},nativeHeaders)).json();
@@ -361,6 +376,11 @@ test('native confirmation verifies the app account passkey independently of the 
     assert.equal(success.status,200,await success.clone().text());
     assert.equal((await success.json()).returnTo,'authnjs-dashboard://reauth?state='+state);
     assert.equal(await admin(),true);
+    assert.equal((await remove('verified@example.test')).status,200);
+    assert.equal((await remove('pending@example.test')).status,200);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM verified_emails WHERE owner=?').get('native').n,0);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM account_email_addresses WHERE owner=?').get('native').n,0);
+
     assert.equal(db.prepare('SELECT 1 AS found FROM session_confirmations WHERE hash=?').get(browserHash),undefined);
     assert.equal((await open(browserCookie)).status,403);
   }finally{await new Promise(resolve=>server.close(resolve));db.close();rmSync(dir,{recursive:true,force:true});}

@@ -1,3 +1,5 @@
+import ListPages from './ListPages';
+import {useListPage} from './list-page';
 import AppIcon from './AppIcon';
 import { useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -5,16 +7,18 @@ import ApplicationStorage from './ApplicationStorage';
 import TrustBadges from './TrustBadges';
 import { nativeRequest } from './native-account';
 import { Surface, SurfaceTitle, type DashboardTheme } from './native-surfaces';
+import { useDialog } from './dialog-model';
 import { formatBytes } from './storage-summary';
 
 type Developer = { owner: string; name: string; status: string; githubProfile?: string };
-type Registration = { icon?:string|null; id: string; name: string; status: string; callback: string; developerName?: string; repository?: string; verified: boolean };
+type Registration = { icon?:string|null; id: string; name: string; status: string; callback: string; developerName?: string; repository?: string; verified: boolean; administration?:boolean; local?:boolean };
 type Volume = { id: string; label: string; status: 'available' | 'unavailable' | 'read-only' | 'full'; free?: number; total?: number; freeFiles?: number };
 const volumeStatus = { available: 'Available', unavailable: 'Temporarily unavailable', 'read-only': 'Read-only', full: 'Full' };
 
 export default function NativeAdminInventory({ token, colors, onDetail }: {
   token: string; colors: DashboardTheme; onDetail: (open: boolean) => void;
 }) {
+  const showDialog=useDialog();
   const [inventory, setInventory] = useState<{ apps: Registration[]; developers: Developer[] }>();
   const [volumes, setVolumes] = useState<Volume[]>();
   const [inventoryError, setInventoryError] = useState('');
@@ -22,6 +26,9 @@ export default function NativeAdminInventory({ token, colors, onDetail }: {
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(false);
   const [storage, setStorage] = useState('');
+  const registered=inventory?.apps.filter(app=>app.status!=='revoked');
+  const appPage=useListPage(registered?.length??0);
+  const developerPage=useListPage(inventory?.developers.length??0);
   const api = (path: string, payload?: object) => nativeRequest(path, token, payload);
 
   async function refreshStorage() {
@@ -43,7 +50,7 @@ export default function NativeAdminInventory({ token, colors, onDetail }: {
     return () => { active = false; };
   }, [token]);
 
-  async function verify(type: 'app' | 'developer', id: string, verified: boolean) {
+  async function verify(type: 'app' | 'developer' | 'administration', id: string, verified: boolean) {
     setBusy(true);
     setInventoryError('');
     try {
@@ -68,7 +75,7 @@ export default function NativeAdminInventory({ token, colors, onDetail }: {
   if (storage) return <Surface colors={colors}><ApplicationStorage id={storage} token={token} colors={colors} admin
     back={() => { setStorage(''); onDetail(false); }} /></Surface>;
   const line = [styles.row, { borderColor: colors.line }];
-  const registered = inventory?.apps.filter(app => app.status !== 'revoked');
+
   return <>
     <Surface colors={colors}>
       <SurfaceTitle colors={colors} title="Server storage" icon="server-outline" tint="mint" />
@@ -86,7 +93,7 @@ export default function NativeAdminInventory({ token, colors, onDetail }: {
     <Surface colors={colors}>
       <SurfaceTitle colors={colors} title="Developer verification" icon="shield-checkmark-outline" tint="lavender" />
       {inventory?.developers.length === 0 && <Text style={{ color: colors.muted }}>No developer reviews.</Text>}
-      {inventory?.developers.map(developer => {
+      {inventory?.developers.slice(developerPage.start,developerPage.end).map(developer => {
         const verified = developer.status === 'verified';
         return <View key={developer.owner} style={line}>
           <Text style={{ color: colors.ink, fontWeight: '700' }}>{developer.name}</Text>
@@ -98,11 +105,12 @@ export default function NativeAdminInventory({ token, colors, onDetail }: {
           </View>
         </View>;
       })}
+      <ListPages state={developerPage} label="Developers" colors={colors}/>
     </Surface>
     <Surface colors={colors}>
       <SurfaceTitle colors={colors} title="Registered apps" icon="apps-outline" />
       {registered?.length === 0 && <Text style={{ color: colors.muted }}>No registered developer apps.</Text>}
-      {registered?.map(app => <View key={app.id} style={line}>
+      {registered?.slice(appPage.start,appPage.end).map(app => <View key={app.id} style={line}>
         <View style={{flexDirection:'row',alignItems:'center',gap:10}}>
           <AppIcon icon={app.icon} color={colors.accent}/>
           <Text style={{ color: colors.ink, fontWeight: '700',flex:1 }}>{app.name}</Text>
@@ -112,9 +120,15 @@ export default function NativeAdminInventory({ token, colors, onDetail }: {
         <View style={styles.actions}>
           {app.repository && review('Review repository', app.repository)}
           {app.status === 'active' && app.verified && action('Manage app storage', () => { setStorage(app.id); onDetail(true); })}
+          {!app.local&&app.status==='active'&&(app.verified||app.administration)&&action(
+            app.administration?'Remove Administration app trust':'Enable Administration app',()=>showDialog(
+              app.administration?'Remove Administration app trust?':'Enable Administration app?',
+              'Users must separately approve access to account overview or settings.',
+              [{text:'Cancel',style:'cancel'},{text:'Confirm',onPress:()=>void verify('administration',app.id,!app.administration)}]))}
           {action(app.verified ? 'Remove verification' : 'Verify app', () => void verify('app', app.id, !app.verified))}
         </View>
       </View>)}
+      <ListPages state={appPage} label="Registered apps" colors={colors}/>
     </Surface>
     {!!inventoryError && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{inventoryError}</Text>}
   </>;

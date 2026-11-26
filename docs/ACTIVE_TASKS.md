@@ -597,3 +597,20 @@ When usage permits, start by verifying AUTHN-155, then add regression coverage f
 | AUTHN-162 | Search across Administration from one search bar | Queued | Query authorized users, registered apps and support requests across all pages. Inventory other searchable Administration sections. Group results by section and link to each result's existing detail view. Verify access controls and paged search beyond the first page. |
 
 26 November, 06:35 CET. Five-hour usage is exhausted and resets at 09:58 CET. Weekly usage has 41% remaining and resets 2 December at 15:33 CET. Under UADS §0, only this queue checkpoint was made. Continue the earlier account and SDK verification first, then AUTHN-161 and AUTHN-162.
+
+### 26 November implementation checkpoint
+
+The weekly threshold was waived for this assignment. The five-hour window still applies. The provider and dashboard were checked locally using isolated fixtures. The SDK changes are on `testing` at `b595357`.
+
+| ID | State | Evidence and next action |
+| --- | --- | --- |
+| AUTHN-155 | Implemented | Account confirmation opens when needed. Provider tests enforce confirmation before removing either kind of email. Check the real dashboard cancellation and passkey interaction on installed clients. |
+| AUTHN-156 | Implemented | Native QR zoom and an in-app approval sheet use a one-use handoff tied to the current native session. Tests cover replay and isolation from ordinary web sessions. Verify on a physical mobile device and a second screen. |
+| AUTHN-157 | Implemented | Delegated chunk routes and all SDK adapters use remaining quota. Provider regression uploads more than 2 MiB and verifies isolation, resume, quota and byte integrity. Run the native-language CI matrix and verify a deployed transfer. |
+| AUTHN-158 | Implemented | Active verified registrations explicitly designated by an administrator can request **Administrative App Permissions**. The user may grant and revoke scopes individually. Sensitive grants require a file-delete-style confirmation in the linked-app UI and issuer consent. Device and browser authorization regressions cover ineligible apps, consent, and revocation. Chrome on a 390×844 viewport exercised cancel, confirm, Escape and turning the switch back off. Verify native rendering and authenticated end-to-end application requests. |
+| AUTHN-159 | In Progress | Updated provider, published-repository checkout and installed skill instructions. Added language-switchable guides for overview, management, resumable upload and peer registration. Add individual references with exact arguments and outputs for the remaining transfer and peer operations, then verify deployment. |
+| AUTHN-160 | Implemented | Verified-app WebRTC signaling with namespace-bound opaque IDs and optional discovery. Tests cover policy enforcement, app isolation, visibility and expiry. Verify signaling between two real WebRTC clients and document dataset limits and TURN dependencies. |
+| AUTHN-161 | Implemented | Added shared page-size presets and editable page numbers on web and native for connected apps, devices, and long Administration lists. Existing list endpoints retain their server limits. Verify rendered navigation and extend server-side pagination where those limits can hide results. |
+| AUTHN-162 | Implemented | Unified Administration search across users, apps, developers, support, username requests and storage. An isolated regression verifies permission denial, normalization, paging and grouped results. Verify real result navigation on both platforms. |
+
+Local checks passed for 54 API tests, 20 dashboard tests, dashboard TypeScript, 12 SDK tests including Chrome, and Swift OAuth/data-client type checking. No native application build or production deployment was started. Keep AUTHN-159 and native/production evidence open.

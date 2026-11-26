@@ -44,3 +44,29 @@ test('email sign-in is delivery-dependent, rate-limited, channel-bound and singl
   assert.equal((await openEmailSignIn(db,{secret:randomBytes(32)}).start('account','qa@example.test','web')).status,503);
   db.close();
 });
+
+test('native device browser handoff is single use, expires and depends on the upstream session',async()=>{
+  const {openNativeDeviceHandoff}=await import('./native-device.mjs');
+  const db=database();
+  let time=1000;
+  const flow=openNativeDeviceHandoff(db,()=>time);
+  try{
+    assert.equal(flow.issue('browser','INVALID'),null);
+    const revoked=flow.issue('browser','ABCD23');
+    assert.equal(flow.exchange(revoked,()=>false),null);
+    assert.equal(flow.exchange(revoked,()=>true),null);
+    const proof=flow.issue('browser','ABCD23');
+    assert.equal(flow.exchange('invalid',()=>true),null);
+    const session=flow.exchange(proof,hash=>hash==='browser');
+    assert.equal(session.code,'ABCD23');
+    assert.equal(flow.browserSession(session.key),'browser');
+    assert.equal(flow.exchange(proof,()=>true),null);
+    time+=61_000;
+    assert.equal(flow.browserSession(session.key),'browser');
+    const next=flow.issue('browser','ABCD23');
+    time+=61_000;
+    assert.equal(flow.exchange(next,()=>true),null);
+    db.prepare('DELETE FROM account_sessions WHERE hash=?').run('browser');
+    assert.equal(flow.browserSession(session.key),null);
+  }finally{db.close();}
+});

@@ -17,7 +17,7 @@ export default function AdminStorageVolumes(){
     finally{setBusy(false);}
   }
   useEffect(()=>{void refresh();},[]);
-  return <section className="xc-card xc-pad xc-stack">
+  return <section id="storage-volumes" className="xc-card xc-pad xc-stack">
     <div className="xc-row-head"><HardDrive size={21}/><h2>Server storage</h2></div>
     <p>View the capacity and health of storage connected to X-Center ID.</p>
     {volumes.map(volume=><div className="xc-list-row" key={volume.id}>

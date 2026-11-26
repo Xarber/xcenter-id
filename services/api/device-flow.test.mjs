@@ -109,7 +109,9 @@ test('registered device flow confirms linking and issues a single nonce-bound to
       assert.equal(stage.status,200);
       return {stage,device};
     }
-    const requestedScopes='openid app_data files_read files_write shared_files_read';
+    assert.ok(registry.setAdministrationTrust(destinationRegistration.id,true));
+    const requestedScopes='openid app_data files_read files_write shared_files_read account_overview account_manage';
+    assert.equal((await begin(other,'openid account_manage')).status,400);
     const unlinked=await authorizeDevice(readingApp,requestedScopes);
     assert.match(await unlinked.stage.text(),/Velunivo fixture<\/h2><p>Access declined/);
     await http(unlinked.stage.url,{browser:true,form:{action:'deny'}});
@@ -122,8 +124,13 @@ test('registered device flow confirms linking and issues a single nonce-bound to
     assert.match(destinationHtml,/<body class="consent">/);
     assert.match(destinationHtml,/position:fixed/);
     assert.match(destinationHtml,/class="source-permissions"[\s\S]*Velunivo fixture[\s\S]*Recent neighborhoods[\s\S]*Ride insights/);
-    assert.match(destinationHtml,/value="files_write" aria-label="Read and write account files">/);
+    assert.match(destinationHtml,/value="files_write" aria-label="Read and write account files" data-confirm-permission>/);
+    assert.match(destinationHtml,/<h2>Administrative App Permissions<\/h2>[\s\S]*value="account_manage" aria-label="Manage account settings" data-confirm-permission>/);
+    assert.equal((await http(destination.stage.url,{browser:true,form:{action:'approve',permission:'account_manage'}})).status,400);
     const approvedScopes=new URLSearchParams({action:'approve'});
+    approvedScopes.append('permission','account_overview');
+    approvedScopes.append('permission','account_manage');
+    approvedScopes.append('confirm-permission','account_manage');
     approvedScopes.append('permission','files_read');
     approvedScopes.append('permission','shared_files_read');
     approvedScopes.append('data-permission',velunivo.clientId+'/recent-neighborhoods');
@@ -132,6 +139,16 @@ test('registered device flow confirms linking and issues a single nonce-bound to
     const issued=await (await http('/token',{credentials:readingApp,form:{
       grant_type:'urn:ietf:params:oauth:grant-type:device_code',device_code:destination.device.device_code,
     }})).json();
+    assert.equal(await provider.overviewAccess(issued.access_token),current.owner);
+    assert.equal(await provider.overviewAccess(issued.access_token,'account_manage'),current.owner);
+    await provider.connectedPermissions(current.owner,readingApp.clientId,{scope:'account_manage',enabled:false});
+    assert.equal(await provider.overviewAccess(issued.access_token,'account_manage'),null);
+    assert.equal(await provider.connectedPermissions(current.owner,readingApp.clientId,{scope:'account_manage',enabled:true}),false);
+    await provider.connectedPermissions(current.owner,readingApp.clientId,{scope:'account_manage',enabled:true,confirmed:true});
+    assert.equal(await provider.overviewAccess(issued.access_token,'account_manage'),current.owner);
+    assert.ok(registry.setAdministrationTrust(destinationRegistration.id,false));
+    assert.equal(await provider.overviewAccess(issued.access_token),null);
+    assert.equal(await provider.overviewAccess(issued.access_token,'account_manage'),null);
     assert.ok(await provider.fileAccess(issued.access_token,['files_read']));
     assert.ok(await provider.fileAccess(issued.access_token,['shared_files_read']));
     assert.equal(await provider.fileAccess(issued.access_token,['files_write']),null);
@@ -248,10 +265,13 @@ test('registered device flow confirms linking and issues a single nonce-bound to
     const verifier=randomBytes(32).toString('base64url');
     const state=randomBytes(32).toString('base64url');
     const callback='https://tv.example.test/callback';
-    let web=await http('/auth?'+new URLSearchParams({
+    const browserParams=new URLSearchParams({
       client_id:webClient.clientId,redirect_uri:callback,response_type:'code',scope:'openid',state,nonce,
       code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',
-    }),{browser:true});
+    });
+    const deniedBrowser=await http('/auth?'+new URLSearchParams({...Object.fromEntries(browserParams),scope:'openid account_manage'}),{browser:true});
+    assert.equal(new URL(deniedBrowser.headers.get('location')).searchParams.get('error'),'invalid_scope');
+    let web=await http('/auth?'+browserParams,{browser:true});
     for(let step=0;step<6&&web.status===303;step++)web=await http(web.headers.get('location'),{browser:true});
     const webHtml=await web.text();
     assert.match(webHtml,/Link Browser switching to X-Center ID/);

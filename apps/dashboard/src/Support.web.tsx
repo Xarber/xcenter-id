@@ -1,3 +1,5 @@
+import ListPages from './ListPages.web';
+import {useListPage} from './list-page';
 import { IconAction } from './AdminUsers.web';
 import { ArrowLeft, Check, RefreshCw, Send, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -29,6 +31,7 @@ export function SupportPage() {
 
 export function AdminSupport() {
   const [requests,setRequests]=useState<SupportRequest[]>([]);
+  const page=useListPage(requests.length);
   const [open,setOpen]=useState<{id:string;message:SupportMessage}|null>(null);
   const [text,setText]=useState('');
   const [status,setStatus]=useState('');
@@ -39,8 +42,17 @@ export function AdminSupport() {
     setBusy(true);setStatus('');
     void work().catch(error=>setStatus(error.message)).finally(()=>setBusy(false));
   }
-  useEffect(()=>{run(load);},[]);
-  return <section className="xc-card xc-pad xc-stack">
+  useEffect(()=>{
+    const id=new URLSearchParams(location.search).get('support');
+    run(async()=>{
+      await load();
+      if(id&&/^[0-9a-f-]{36}$/.test(id)){
+        setOpen({id,message:await api('admin/support/'+id)});
+        requestAnimationFrame(()=>document.getElementById('support-inbox')?.scrollIntoView());
+      }
+    });
+  },[]);
+  return <section id="support-inbox" className="xc-card xc-pad xc-stack">
     <h2>Support inbox</h2>
     {open?<article className="xc-stack">
       <IconAction label="All requests" disabled={busy} onClick={()=>{setOpen(null);setConfirm(false);}}><ArrowLeft size={20}/></IconAction>
@@ -62,10 +74,11 @@ export function AdminSupport() {
     </article>:<>
       <IconAction label="Refresh requests" disabled={busy} onClick={()=>run(load)}><RefreshCw size={20}/></IconAction>
       {requests.length===0&&!busy&&<p>No support requests.</p>}
-      {requests.map(request=><button type="button" className="xc-button xc-secondary xc-self-start" key={request.id} disabled={busy}
+      {requests.slice(page.start,page.end).map(request=><button type="button" className="xc-button xc-secondary xc-self-start" key={request.id} disabled={busy}
         onClick={()=>run(async()=>{setOpen({id:request.id,message:await api('admin/support/'+request.id)});setText('');setConfirm(false);})}>
         {request.external?'Incoming email':request.replied?'Answered request':'Account request'} · {new Date(request.received).toLocaleString()}
       </button>)}
+      <ListPages state={page} label="Support requests"/>
     </>}
     {status&&<p role="status">{status}</p>}
   </section>;

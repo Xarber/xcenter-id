@@ -1,6 +1,8 @@
 import {openMailCredentials} from './mail-credentials.mjs';
 import { openInboundVerification } from './inbound-verification.mjs';
 import { openEmailSignIn } from './email-signin.mjs';
+import {matchAdminQuery} from './admin-search.mjs';
+import {deviceCodePattern,deviceCookie,openNativeDeviceHandoff} from './native-device.mjs';
 import { openNativeSession } from './native-session.mjs';
 import { createPasskeyLabelResolver, passkeyLabel } from './passkey-label.mjs';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -174,6 +176,15 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       apps:bytes('SELECT total(length(client)+length(CAST(label AS BLOB))+8) AS bytes FROM connected_apps WHERE owner=?'),
     };
   }
+  const visibility=owner=>JSON.parse(q('SELECT public_fields FROM account_flags WHERE owner=?').get(owner)?.public_fields??'[]');
+  function updateVisibility(owner,fields){
+    requireCondition(available(owner),403,'Account unavailable.');
+    requireCondition(Array.isArray(fields)&&fields.length<=4&&fields.every(f=>['username','givenName','surname','picture'].includes(f)),422,'Choose public profile fields.');
+    q('INSERT OR IGNORE INTO account_flags(owner) VALUES(?)').run(owner);
+    const next=[...new Set(fields)];
+    q('UPDATE account_flags SET public_fields=? WHERE owner=?').run(JSON.stringify(next),owner);
+    return next;
+  }
   const usernameOwner = q('SELECT owner FROM identity_profiles WHERE username=?');
   const reservedOwner = q('SELECT owner FROM signup_usernames WHERE username=? AND expires>?');
   const reservedUsername = q('SELECT username FROM signup_usernames WHERE owner=? AND expires>?');
@@ -206,6 +217,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     owner NOT IN (SELECT owner FROM account_restrictions WHERE status='deleted')`);
   const insertSession = q('INSERT INTO account_sessions VALUES (?,?,?,?)');
   const removeSession = q('DELETE FROM account_sessions WHERE hash=?');
+  const deviceHandoff=openNativeDeviceHandoff(db,now);
   const challenges = new Map();
   let windowStart = 0;
   let attempts = 0;
@@ -419,7 +431,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     }
     if(req.method==='GET'&&pathname==='/account/profile/visibility'){
       requireCondition(active,401,'Sign in first.');
-      return {fields:JSON.parse(q('SELECT public_fields FROM account_flags WHERE owner=?').get(active.owner)?.public_fields??'[]')};
+      return {fields:visibility(active.owner)};
     }
     if (req.method === 'GET' && pathname === '/account/connected-apps') {
       requireCondition(active,401,'Sign in first.');
@@ -502,6 +514,22 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       const browser=source && lookupPreservedSession.get(source,now());
       requireCondition(browser,401,'The app sign-in expired. Start again.');
       return {token:login(req,res,browser.owner,browser,true)};
+    }
+    if(pathname==='/account/device/browser'){
+      requireCondition(active&&nativeRequest(req),401,'Use the signed-in account manager.');
+      const {code}=await body(req);
+      requireCondition(typeof code==='string'&&deviceCodePattern.test(code),422,'Enter a valid device code.');
+      const current=session(req);
+      requireCondition(current?.hash===active.hash,401,'Sign in first.');
+      return {url:origin+'/device/native#'+deviceHandoff.issue(active.hash,code)};
+    }
+    if(pathname==='/account/device/browser/exchange'){
+      requireCondition(req.headers.origin===origin&&req.headers['x-authnjs-request']==='device-review',403,'Invalid device request.');
+      const {key}=await body(req);
+      const result=deviceHandoff.exchange(key,hash=>native.accepts(hash)&&!!lookupSession.get(hash,now()));
+      requireCondition(result,401,'The device review expired.');
+      res.setHeader('Set-Cookie',deviceCookie+'='+result.key+'; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age='+result.maxAge);
+      return {code:result.code};
     }
     requireCondition(allowsMutation(req)||(pathname==='/account/logout'&&nativeRequest(req)&&session(req,true)),403,'Invalid origin.');
     if (pathname === '/account/mail/send') requireCondition(active,401,'Sign in first.');
@@ -626,10 +654,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     }
     if(pathname==='/account/profile/visibility'){
       requireCondition(active&&allowsMutation(req),403,'Sign in first.');
-      const fields=input.fields;
-      requireCondition(Array.isArray(fields)&&fields.length<=4&&fields.every(f=>['username','givenName','surname','picture'].includes(f)),422,'Choose public profile fields.');
-      q('INSERT OR IGNORE INTO account_flags(owner) VALUES(?)').run(active.owner);
-      q('UPDATE account_flags SET public_fields=? WHERE owner=?').run(JSON.stringify([...new Set(fields)]),active.owner);
+      updateVisibility(active.owner,input.fields);
       return {ok:true};
     }
     if(pathname==='/account/admin/storage'){
@@ -949,6 +974,10 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       q('UPDATE account_flags SET '+flag+'=? WHERE owner=?').run(Number(value),owner);
     },
     recentlyConfirmed:req=>confirmed(session(req)),
+    deviceBrowserSession(req){
+      const key=deviceHandoff.browserSession(cookie(req,deviceCookie));
+      return key&&native.accepts(key)?lookupSession.get(key,now()):null;
+    },
     profileBadges:owner=>available(owner)?badges(owner):{verified:false,admin:false},
     badgeForAddress(address) {
       const user=q('SELECT owner FROM verified_emails WHERE address=?').get(address?.toLowerCase());
@@ -977,6 +1006,36 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     ownerForUsername:username=>usernameOwner.get(username)?.owner,
     username: (owner) => q('SELECT username FROM identity_profiles WHERE owner=?').get(owner)?.username,
     allowsMutation,
+    searchAdminUsers(query){
+      const found=[];
+      for(const row of q(`SELECT p.owner,p.username FROM identity_profiles p
+        WHERE p.owner NOT IN (SELECT owner FROM account_restrictions WHERE status='deleted')
+        ORDER BY p.username`).iterate()){
+        const person=profile(row.owner);
+        const name=[person?.givenName,person?.surname].filter(Boolean).join(' ');
+        if(matchAdminQuery(query,row.username,'@'+row.username,name)){
+          found.push({id:row.username,title:name||'@'+row.username,description:'@'+row.username,username:row.username});
+        }
+      }
+      return found;
+    },
+    searchAdminUsernameChanges(query){
+      return q(`SELECT id,previous,proposed FROM username_change_requests WHERE confirmed=1 AND expires>?
+        AND owner NOT IN (SELECT owner FROM account_restrictions) ORDER BY expires,id`).all(now())
+        .filter(item=>matchAdminQuery(query,item.previous,item.proposed))
+        .map(item=>({id:item.id,title:'@'+item.previous+' → @'+item.proposed,username:item.previous}));
+    },
+    visibility,
+    updateVisibility,
+    accountApps(owner){
+      return q('SELECT client,label,updated FROM connected_apps WHERE owner=? ORDER BY updated DESC,client')
+        .all(owner).map(linkedAppBrand).map(({client,label,verified})=>({client,label,verified}));
+    },
+    overview(owner){
+      if(!available(owner))return null;
+      return {storage:{used:extraStorage(owner)+Object.values(accountUsage(owner)).reduce((sum,value)=>sum+value,0),capacity:storageCapacity(owner)},
+        connectedApps:q('SELECT count(*) AS total FROM connected_apps WHERE owner=?').get(owner).total};
+    },
     storageCapacity,
     adminStatus(req,write=false){
       const active=session(req);

@@ -1,3 +1,4 @@
+import {matchAdminQuery} from './admin-search.mjs';
 import { createHash,randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -12,8 +13,9 @@ export function openRegistry(path) {
     CREATE TABLE IF NOT EXISTS client_brand(id TEXT PRIMARY KEY,developer_name TEXT NOT NULL,icon TEXT)
       STRICT;
     CREATE TABLE IF NOT EXISTS app_restrictions(id TEXT PRIMARY KEY, restricted INTEGER NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS app_administration_trust(id TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS app_peer_policy (
-      id TEXT PRIMARY KEY,enabled INTEGER NOT NULL,discovery INTEGER NOT NULL
+      id TEXT PRIMARY KEY,enabled INTEGER NOT NULL,discovery INTEGER NOT NULL,generation INTEGER NOT NULL DEFAULT 1
     ) STRICT;
     CREATE TABLE IF NOT EXISTS client_native(id TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS app_profiles(id TEXT PRIMARY KEY, description TEXT NOT NULL, repository TEXT NOT NULL, callbacks TEXT NOT NULL, verified INTEGER NOT NULL DEFAULT 0) STRICT;
@@ -30,6 +32,10 @@ export function openRegistry(path) {
     CREATE TABLE IF NOT EXISTS developer_github_profiles(owner TEXT PRIMARY KEY, url TEXT NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS developer_profiles(owner TEXT PRIMARY KEY,name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unverified') STRICT;
   `);
+  if(!db.prepare('PRAGMA table_info(app_peer_policy)').all().some(column=>column.name==='generation')){
+    db.exec('ALTER TABLE app_peer_policy ADD COLUMN generation INTEGER NOT NULL DEFAULT 1');
+  }
+  const trustedApp=db.prepare('SELECT 1 FROM app_administration_trust WHERE id=?');
   const add = db.prepare("INSERT INTO clients (id, developer, name, callback) SELECT ?, ?, ?, ? WHERE (SELECT count(*) FROM clients WHERE developer = ? AND status <> 'revoked') < 30");
   const list = db.prepare(`SELECT c.id,c.name,c.callback,c.client,c.status,b.developer_name AS developerName,b.icon,p.description,p.repository,p.callbacks,p.verified,EXISTS(SELECT 1 FROM client_native n WHERE n.id=c.id) AS native FROM clients c
     LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN app_profiles p ON p.id=c.id WHERE c.developer=? ORDER BY c.name,c.id`);
@@ -51,6 +57,7 @@ export function openRegistry(path) {
   const requirements=id=>{const row=readRequirements.get(id);return {email:!!row?.email,age_range:!!row?.age_range};};
   const detailByClient=db.prepare(`SELECT c.id,c.name,c.callback,p.callbacks FROM clients c LEFT JOIN app_profiles p ON p.id=c.id
     WHERE c.client=? AND c.status='active' AND c.id NOT IN (SELECT id FROM app_restrictions WHERE restricted=1)`);
+  const removeAdministration=db.prepare('DELETE FROM app_administration_trust WHERE id=?');
   const writeAppProfile=db.prepare(`INSERT INTO app_profiles(id,description,repository,callbacks) VALUES(?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET description=excluded.description,repository=excluded.repository,callbacks=excluded.callbacks,verified=0`);
   const readDeveloper=db.prepare('SELECT name,status FROM developer_profiles WHERE owner=?');
@@ -66,6 +73,7 @@ export function openRegistry(path) {
     setAppName.run(profile.name,profile.callbacks[0],id,owner);
     const oldBrand=db.prepare('SELECT developer_name FROM client_brand WHERE id=?').get(id);
     setBrand.run(id,oldBrand?.developer_name??'',profile.icon);
+    removeAdministration.run(id);
     writeAppProfile.run(id,profile.description,profile.repository,JSON.stringify(profile.callbacks));
   }
   const accessByClient=db.prepare("SELECT c.id,c.developer,p.private,p.requests FROM clients c LEFT JOIN app_access_policy p ON p.id=c.id WHERE c.client=? AND c.status='active'");
@@ -126,17 +134,34 @@ export function openRegistry(path) {
       return !!db.prepare('INSERT OR IGNORE INTO app_access_members SELECT ?,?,0 WHERE (SELECT count(*) FROM app_access_members WHERE id=?) < 500')
         .run(id,owner,id).changes||membership.get(id,owner)?.approved===0;
     },
+    trustedAdministration(client){
+      const app=detailByClient.get(client);
+      return !!app&&!isLocal.get(app.id)&&!!db.prepare('SELECT verified FROM app_profiles WHERE id=?').get(app.id)?.verified&&!!trustedApp.get(app.id);
+    },
+    setAdministrationTrust(id,enabled){
+      const app=db.prepare(`SELECT c.client,c.status,p.verified FROM clients c
+        LEFT JOIN app_profiles p ON c.id=p.id WHERE c.id=?`).get(id);
+      if(!app)return false;
+      if(!enabled){
+        db.prepare('DELETE FROM app_administration_trust WHERE id=?').run(id);
+        return true;
+      }
+      if(app.status!=='active'||!app.verified||!detailByClient.get(app.client)||isLocal.get(id))return false;
+      db.prepare('INSERT OR IGNORE INTO app_administration_trust VALUES(?)').run(id);
+      return true;
+    },
     peerPolicy(client){
       const app=detailByClient.get(client);
       if(!app||!db.prepare('SELECT verified FROM app_profiles WHERE id=?').get(app.id)?.verified)return null;
-      const policy=db.prepare('SELECT enabled,discovery FROM app_peer_policy WHERE id=?').get(app.id);
-      return {enabled:!!policy?.enabled,discovery:!!policy?.enabled&&!!policy.discovery};
+      const policy=db.prepare('SELECT enabled,discovery,generation FROM app_peer_policy WHERE id=?').get(app.id);
+      return {enabled:!!policy?.enabled,discovery:!!policy?.enabled&&!!policy.discovery,generation:policy?.generation??0};
     },
     ownedPeerPolicy(owner,id,change){
       const app=lookup.get(id,owner);
       if(!app||app.status!=='active'||!this.peerPolicy(app.client))return null;
-      if(change)db.prepare(`INSERT INTO app_peer_policy VALUES(?,?,?) ON CONFLICT(id)
-        DO UPDATE SET enabled=excluded.enabled,discovery=excluded.discovery`)
+      if(change)db.prepare(`INSERT INTO app_peer_policy(id,enabled,discovery) VALUES(?,?,?) ON CONFLICT(id)
+        DO UPDATE SET enabled=excluded.enabled,discovery=excluded.discovery,
+        generation=app_peer_policy.generation+(app_peer_policy.enabled<>excluded.enabled)`)
         .run(id,Number(change.enabled),Number(change.enabled&&change.discovery));
       return this.peerPolicy(app.client);
     },
@@ -234,10 +259,28 @@ export function openRegistry(path) {
         return activated;
       } catch(error){ db.exec('ROLLBACK');throw error; }
     },
+    searchAdminApps(query,usernameForOwner){
+      return db.prepare(`SELECT c.id,c.client,c.developer,c.name,c.status,c.callback,p.repository,
+        coalesce(nullif(d.name,''),b.developer_name) AS developerName FROM clients c
+        LEFT JOIN app_profiles p ON c.id=p.id LEFT JOIN client_brand b ON c.id=b.id
+        LEFT JOIN developer_profiles d ON d.owner=c.developer WHERE c.status<>'revoked'
+        ORDER BY c.name,c.id`).all()
+        .filter(item=>matchAdminQuery(query,item.name,item.client,item.callback,item.repository,item.developerName))
+        .map(item=>({id:item.id,title:item.name,description:item.developerName||item.status,username:usernameForOwner(item.developer)}));
+    },
+    searchAdminDevelopers(query,usernameForOwner){
+      return db.prepare(`WITH developer_owners(owner) AS (
+        SELECT owner FROM developer_profiles UNION SELECT developer FROM clients WHERE status<>'revoked'
+      ) SELECT o.owner,d.name,g.url,d.status FROM developer_owners o LEFT JOIN developer_profiles d ON d.owner=o.owner
+        LEFT JOIN developer_github_profiles g ON g.owner=o.owner ORDER BY d.name,o.owner`).all()
+        .map(item=>({...item,username:usernameForOwner(item.owner)}))
+        .filter(item=>matchAdminQuery(query,item.name,item.url,item.username,item.status))
+        .map(item=>({id:item.owner,title:item.name||item.username||'Developer',description:item.status??'unverified',username:item.username}));
+    },
     administration:()=>({
       apps:db.prepare(`SELECT c.id,c.name,c.callback,c.status,p.description,p.repository,p.callbacks,p.verified,b.icon,d.name AS developerName
         FROM clients c LEFT JOIN app_profiles p ON p.id=c.id LEFT JOIN client_brand b ON b.id=c.id LEFT JOIN developer_profiles d ON d.owner=c.developer
-        ORDER BY c.status,c.name LIMIT 300`).all().map(app=>({...appView(app),icon:app.status==='active'&&app.icon?iconPath(app.id,app.icon):app.icon,verified:!!app.verified})),
+        ORDER BY c.status,c.name LIMIT 300`).all().map(app=>({...appView(app),icon:app.status==='active'&&app.icon?iconPath(app.id,app.icon):app.icon,verified:!!app.verified,local:!!isLocal.get(app.id),administration:!!trustedApp.get(app.id)})),
       developers:db.prepare(`WITH developer_owners(owner) AS (
           SELECT owner FROM developer_profiles UNION SELECT developer FROM clients WHERE status<>'revoked'
         )
@@ -253,6 +296,7 @@ export function openRegistry(path) {
       if(verified&&isLocal.get(id))return false;
       const item=db.prepare("SELECT callback FROM clients WHERE id=? AND status IN ('pending','active')").get(id);
       if(!item)return false;
+      if(!verified)db.prepare('DELETE FROM app_administration_trust WHERE id=?').run(id);
       db.prepare(`INSERT INTO app_profiles VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET verified=excluded.verified`)
         .run(id,'','',JSON.stringify([item.callback]),Number(verified));
       return true;
@@ -269,6 +313,7 @@ export function openRegistry(path) {
       if(!item||item.status==='revoked')return false;
       setBrand.run(id,brand.developerName,brand.icon);
       db.prepare('UPDATE app_profiles SET verified=0 WHERE id=?').run(id);
+      removeAdministration.run(id);
       return true;
     },
     submit(developer, name, callback, brand, native = false, profile, local = false) {
@@ -296,7 +341,7 @@ export function openRegistry(path) {
         .run(id,Number(action==='restrict'));
       return true;
     },
-    managed: owner=>list.all(owner).map(row=>({...appView(row),restricted:
+    managed: owner=>list.all(owner).map(row=>({...appView(row),administration:!!trustedApp.get(row.id),restricted:
       db.prepare('SELECT restricted FROM app_restrictions WHERE id=?').get(row.id)?.restricted===1})),
     lookup: (owner,id) => appView(lookup.get(id,owner)),
     lookupWithBrand(owner,id){

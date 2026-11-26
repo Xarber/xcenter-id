@@ -4,9 +4,9 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef, useState, type ComponentRef } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { deviceSignInUrl, isDeviceCode, normalizeDeviceCode } from './device-link';
-import { accountHost } from './native-account';
+import { accountHost, nativeRequest } from './native-account';
 
-export default function DeviceSignIn({colors,back}: {colors:{ink:string;accent:string;muted:string;soft:string;line:string};back:()=>void}) {
+export default function DeviceSignIn({token,colors,back}: {token:string;colors:{ink:string;accent:string;muted:string;soft:string;line:string};back:()=>void}) {
   const showDialog=useDialog();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
@@ -26,7 +26,14 @@ export default function DeviceSignIn({colors,back}: {colors:{ink:string;accent:s
     opening.current = true;
     setScanning(false);
     setStatus('');
-    try { await openBrowserAsync(url, {presentationStyle: WebBrowserPresentationStyle.PAGE_SHEET}); }
+    try {
+      const code=new URL(url).searchParams.get('code');
+      const session=await nativeRequest('device/browser',token,{code});
+      const entry=new URL(session.url);
+      if(entry.origin!==accountHost||entry.pathname!=='/device/native'||entry.search||
+        !/^#[A-Za-z0-9_-]{43}$/.test(entry.hash))throw new Error('Invalid device review URL.');
+      await openBrowserAsync(entry.href,{presentationStyle:WebBrowserPresentationStyle.PAGE_SHEET});
+    }
     catch { setStatus('Could not open the sign-in page.'); }
     finally { opening.current = false; }
   }

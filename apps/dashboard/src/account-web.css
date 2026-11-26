@@ -297,3 +297,10 @@ input:is([type=checkbox],[type=radio]){inline-size:1.2rem;block-size:1.2rem;min-
 .xc-permission-editor-grid small{color:var(--muted)}
 .xc-config-code{max-width:100%;width:100%;max-height:65dvh;resize:vertical;tab-size:2;font-family:ui-monospace,monospace}
 .xc-action-dialog p{overflow-wrap:anywhere}
+
+.xc-list-pages,.xc-list-page-stepper{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.xc-list-pages{justify-content:space-between;margin-block:12px;color:var(--muted);font-size:.86rem}
+.xc-list-pages label{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.xc-list-pages select,.xc-list-pages input[type=text],.xc-list-pages input:not([type]){width:auto;min-width:3.8rem}
+.xc-list-pages input:not([type]){width:4.25rem;text-align:center}
+.xc-list-page-stepper button{width:44px;padding-inline:0}

@@ -1,3 +1,6 @@
+import AdminSearch from './AdminSearch.web';
+import ListPages from './ListPages.web';
+import {useListPage} from './list-page';
 import CallbackApproval,{type ReviewedRegistration} from './CallbackApproval.web';
 import {useConfirmDialog} from './dialog-model';
 import {useFileTransfers} from './file-transfers';
@@ -15,7 +18,7 @@ import { accountMessage } from './account-locale';
 import type { Friend } from './friends-model';
 import type { MailMessage, PrivateAddress } from './mail-message';
 import { formatBytes, storageCategories } from './storage-summary';
-import { Database, Bold, Italic, Paperclip, UserRound, Grid2X2, BadgeCheck, File, FileUp, Folder, FolderInput, FolderPlus, Pencil, Check, HardDrive, Laptop, Mail, MailPlus, Monitor, ShieldCheck, Trash2, X } from 'lucide-react';
+import { Database, Bold, Italic, Paperclip, UserRound, Grid2X2, BadgeCheck, File, FileUp, Folder, FolderInput, FolderPlus, Pencil, Check, HardDrive, Laptop, Mail, MailPlus, Monitor, Shield, ShieldCheck, Trash2, X } from 'lucide-react';
 import { Fragment as FileTableRows, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { api, fileAsBase64, type Account } from './web-account';
 
@@ -33,12 +36,13 @@ export function DevicesPage() {
   const [status,setStatus]=useState('');
   const [busy,setBusy]=useState(false);
   const [confirm,setConfirm]=useState('');
+  const page=useListPage(devices.length);
   async function load(){setDevices((await api('devices')).devices);}
   useEffect(()=>{void load().catch(error=>setStatus(notice(error)));},[]);
   return <section className="xc-card xc-pad">
     <div className="xc-row-head"><span className="xc-symbol xc-sky"><Monitor size={21}/></span><div><h2>Signed-in devices</h2><p>Review and end active browser sessions.</p></div></div>
     <p><a className="xc-button xc-secondary" href="/device">Enter a device code</a></p>
-    {devices.map(device=><div className="xc-list-row" key={device.id}>
+    {devices.slice(page.start,page.end).map(device=><div className="xc-list-row" key={device.id}>
       <div className="xc-row-head"><Laptop size={20}/><div><strong>{device.label}</strong><p>Signed in {date(device.created)}</p></div></div>
       {device.current?<span className="xc-pill">This device</span>:<button type="button" className="xc-button xc-secondary" disabled={busy}
         onClick={()=>{if(confirm!==device.id){setConfirm(device.id);return;}setBusy(true);void api('devices/revoke',{id:device.id}).then(load)
@@ -46,6 +50,7 @@ export function DevicesPage() {
         {confirm===device.id?'Confirm sign-out':'Sign out'}</button>}
     </div>)}
     {status && <p role="status">{status}</p>}
+    <ListPages state={page} label="Devices"/>
   </section>;
 }
 
@@ -446,11 +451,15 @@ export function MailPage({ account }:{account:Account}) {
   </section>;
 }
 
-type AdminApp=ReviewedRegistration&{icon?:string|null;id:string;name:string;status:string;callback:string;developerName?:string;repository?:string;verified:boolean};
+type AdminApp=ReviewedRegistration&{icon?:string|null;id:string;name:string;status:string;callback:string;developerName?:string;repository?:string;verified:boolean;administration?:boolean};
 type AdminDeveloper={owner:string;name:string;status:string;githubProfile?:string};
 function AdminContent() {
+  const confirm=useConfirmDialog();
   const [apps,setApps]=useState<AdminApp[]>([]);
   const [developers,setDevelopers]=useState<AdminDeveloper[]>([]);
+  const registered=apps.filter(app=>app.status!=='revoked');
+  const appPage=useListPage(registered.length);
+  const developerPage=useListPage(developers.length);
   const [status,setStatus]=useState('');
   const [busy,setBusy]=useState(false);
   async function refresh(){
@@ -463,29 +472,40 @@ function AdminContent() {
       .catch(error=>setStatus(notice(error))).finally(()=>setBusy(false));
   }
   return <>
+    <AdminSearch/>
     <AdminAccounts/>
     <AdminUsernameChanges refreshAccounts={refresh}/>
     <AdminSupport/>
     <AdminStorageVolumes/>
     <section className="xc-card xc-pad"><div className="xc-row-head"><BadgeCheck size={21}/><h2>Developer verification</h2></div>
       {developers.length===0&&<p className="xc-empty">No developer reviews.</p>}
-      {developers.map(developer=><div className="xc-list-row xc-permission-row" key={developer.owner}>
+      {developers.slice(developerPage.start,developerPage.end).map(developer=><div className="xc-list-row xc-permission-row" key={developer.owner}>
         <div><strong>{developer.name}</strong><p>{developer.status==='verified'?'Verified':developer.status==='requested'?'Review requested':'Unverified'}</p>
           {developer.githubProfile&&<a href={developer.githubProfile} target="_blank" rel="noreferrer">Review GitHub profile</a>}</div>
         <IconAction label={developer.status==='verified'?'Remove verification':'Verify developer'} disabled={busy} onClick={()=>
           save('admin/apps',{type:'developer',id:developer.owner,verified:developer.status!=='verified'},'Developer verification updated.')}><BadgeCheck size={20}/></IconAction>
       </div>)}
+      <ListPages state={developerPage} label="Developers"/>
     </section>
     <section className="xc-card xc-pad"><div className="xc-row-head"><BadgeCheck size={21}/><h2>Registered apps</h2></div>
       {apps.length===0&&<p className="xc-empty">No registered developer apps.</p>}
-      {apps.filter(app=>app.status!=='revoked').map(app=><div className="xc-list-row xc-permission-row" key={app.id}>
+      {registered.slice(appPage.start,appPage.end).map(app=><div className="xc-list-row xc-permission-row" key={app.id}>
         <div className="xc-row-head"><AppIcon icon={app.icon}/><div><strong className="xc-identity-label">{app.name}<TrustBadges compact kind="app" verified={app.verified}/></strong><p>{app.developerName??'Developer'} · {app.status}</p>
           <p>{new URL(app.callback).hostname}</p>{app.repository&&<a href={app.repository} rel="noreferrer" target="_blank">Review repository</a>}</div></div>
         <div className="xc-actions xc-registration-actions">{app.status==='active'&&app.verified&&<a className="xc-button xc-secondary" href={'/developer/storage/'+app.id+'?from=admin'}><Database size={17}/> Manage app storage</a>}
+        {!app.local&&app.status==='active'&&(app.verified||app.administration)&&<IconAction
+          label={app.administration?'Remove Administration app trust':'Enable Administration app'} disabled={busy}
+          onClick={async()=>{
+            const label=app.administration?'Remove Administration app trust':'Enable Administration app';
+            if(await confirm(label+'?',label,'Users must separately approve account access. Trusted apps can request storage totals and manage public profile visibility and optional linked permissions.',!!app.administration)){
+              save('admin/apps',{type:'administration',id:app.id,verified:!app.administration},'Administration app trust updated.');
+            }
+          }}><Shield size={20}/></IconAction>}
         <CallbackApproval app={app} disabled={busy} save={body=>save('admin/apps',body,'Callback approval updated.')}/>
         {app.status!=='revoked'&&<IconAction label={app.verified?'Remove verification':'Verify app'} disabled={busy}
           onClick={()=>save('admin/apps',{type:'app',id:app.id,verified:!app.verified},'App verification updated.')}><BadgeCheck size={20}/></IconAction>}</div>
       </div>)}
+      <ListPages state={appPage} label="Registered apps"/>
     </section>
     {status&&<p className="xc-notice" role="status">{status}</p>}
   </>;
@@ -493,6 +513,7 @@ function AdminContent() {
 
 export function ConnectedApps() {
   const [apps,setApps]=useState<{client:string;label:string;updated:number;icon?:string;verified?:boolean}[]|null>(null);
+  const page=useListPage(apps?.length??0);
   const [status,setStatus]=useState('');
   const [confirm,setConfirm]=useState('');
   const [busy,setBusy]=useState(false);
@@ -500,7 +521,7 @@ export function ConnectedApps() {
   return <div className="xc-pad">
     <h2>Authorized apps</h2>
     {apps?.length===0 && <div className="xc-empty">No apps have been authorized yet.</div>}
-    {apps?.map(item=><div className="xc-list-row" key={item.client}><div className="xc-row-head"><AppIcon key={item.icon} icon={item.icon}/><div><strong className="xc-identity-label">{item.label}<TrustBadges compact kind="app" verified={item.verified}/></strong><p>Last authorized {date(item.updated)}</p></div></div>
+    {apps?.slice(page.start,page.end).map(item=><div className="xc-list-row" key={item.client}><div className="xc-row-head"><AppIcon key={item.icon} icon={item.icon}/><div><strong className="xc-identity-label">{item.label}<TrustBadges compact kind="app" verified={item.verified}/></strong><p>Last authorized {date(item.updated)}</p></div></div>
       <div className="xc-actions"><a href={'/permissions/'+encodeURIComponent(item.client)}>Manage data access</a>
         {confirm===item.client?<><span>This ends the app’s access and permanently deletes the copies it saved in your X-Center ID account.</span><button className="xc-button xc-secondary" disabled={busy} onClick={()=>{
           setBusy(true);
@@ -511,6 +532,7 @@ export function ConnectedApps() {
         }}>Confirm unlink</button><button className="xc-button xc-secondary" disabled={busy} onClick={()=>setConfirm('')}>Cancel</button></>
           :<button className="xc-button xc-secondary" disabled={busy} onClick={()=>setConfirm(item.client)}>Unlink app</button>}
       </div></div>)}
+    <ListPages state={page} label="Authorized apps"/>
     {status&&<p role="status">{status}</p>}
   </div>;
 }

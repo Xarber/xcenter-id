@@ -1,3 +1,5 @@
+import {createAdminSearch} from './admin-search.mjs';
+import {nativeDeviceEntry} from './native-device.mjs';
 import {createPeerSignaling} from './peer-signaling.mjs';
 import {appConfiguration} from './application-configuration.mjs';
 import {isUsername} from './identity-profile.mjs';
@@ -103,6 +105,7 @@ function notifyAppChange(owner,client,kind){
   }).catch(()=>console.warn('Account activity notice could not be generated.'));
 }
 const support = createSupportRoutes({accounts,mail,sendExternal:createSupportMailer(mailConfig?.submission,mailLimits)});
+const adminSearch=createAdminSearch({accounts,registry,mail,volumes:()=>storageVolumeStatus(state,storageVolumes)});
 const adminUsers=createAdminUsers({accounts,registry,mail,containers:owner=>applicationData?.containers(owner)??[]});
 let provider;
 const applicationData=configuration?openApplicationData({path:join(state,'app-data.sqlite'),registry,accounts,
@@ -240,6 +243,43 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     return;
   }
   const externalSample=sampleOrigins.has(forwardedOrigin)&&req.headers['x-forwarded-proto']==='https';
+  if(path==='/account/admin/search'){
+    void adminSearch(req,res,target).catch(()=>{if(!res.headersSent)res.writeHead(503,{'Cache-Control':'no-store'});res.end();});
+    return;
+  }
+  const accountApi=/^\/v1\/account\/(overview|profile-visibility|apps|apps\/([A-Za-z0-9_-]{1,100})\/permissions)$/.exec(path);
+  if(accountApi){
+    const headers={'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json','X-Content-Type-Options':'nosniff'};
+    const answer=(status,value)=>res.writeHead(status,headers).end(JSON.stringify(value));
+    const view=accountApi[1],client=accountApi[2];
+    const modifiable=view==='profile-visibility'||!!client;
+    if(req.method==='OPTIONS')return res.writeHead(204,{...headers,
+      'Access-Control-Allow-Methods':modifiable?'GET, PUT, OPTIONS':'GET, OPTIONS',
+      'Access-Control-Allow-Headers':'Authorization, Content-Type'}).end();
+    if(req.method!=='GET'&&!(req.method==='PUT'&&modifiable))return answer(405,{error:'Method unavailable.'});
+    const token=/^Bearer ([A-Za-z0-9._~-]{1,512})$/i.exec(req.headers.authorization??'')?.[1];
+    const scope=view==='overview'?'account_overview':'account_manage';
+    const authorize=()=>token&&provider?.overviewAccess(token,scope);
+    void (async()=>{
+      const owner=await authorize();
+      if(!owner)return answer(403,{error:'Account access is not granted.'});
+      const change=req.method==='PUT'?await readJson(req,1024):undefined;
+      if(change&&await authorize()!==owner)return answer(403,{error:'Account access changed.'});
+      if(view==='overview'){
+        const value=accounts.overview(owner);
+        return answer(value?200:403,value??{error:'Account unavailable.'});
+      }
+      if(view==='profile-visibility')return answer(200,{fields:change?accounts.updateVisibility(owner,change.fields):accounts.visibility(owner)});
+      if(view==='apps')return answer(200,{apps:accounts.accountApps(owner)});
+      if(change&&(typeof change.scope!=='string'||change.enabled!==false)){
+        return answer(422,{error:'A trusted app can turn off optional access. New access requires consent.'});
+      }
+      const permissions=await provider.connectedPermissions(owner,client,change);
+      return permissions===null?answer(404,{error:'Linked app unavailable.'}):
+        permissions===false?answer(422,{error:'This permission cannot be turned off here.'}):answer(200,{permissions});
+    })().catch(error=>{if(!res.headersSent)answer(error.status??503,{error:error.status?error.message:'Account controls unavailable.'});});
+    return;
+  }
   if(path==='/v1/peers'||path.startsWith('/v1/peers/')){
     void peerSignaling(req,res,target).catch(()=>{if(!res.headersSent)res.writeHead(503,{'Cache-Control':'no-store'});res.end();});
     return;
@@ -506,6 +546,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     void developer(req, res);
     return;
   }
+  if(provider&&path==='/device/native'&&req.method==='GET')return nativeDeviceEntry(res);
   if (provider && path.startsWith('/interaction/')) {
     void provider.interaction(req, res, path).catch(() => {
       if (!res.headersSent) res.writeHead(500, { 'Cache-Control': 'no-store' });

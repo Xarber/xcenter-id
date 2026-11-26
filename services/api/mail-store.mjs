@@ -1,3 +1,4 @@
+import {matchAdminQuery} from './admin-search.mjs';
 import { createCipheriv, createDecipheriv, randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { simpleParser } from 'mailparser';
@@ -226,6 +227,18 @@ export function openMailStore({ accountsPath, mailPath, configuration,accountSer
         FROM inbox i LEFT JOIN support_requests r ON i.id=r.id
         WHERE i.owner=? ORDER BY r.replied IS NOT NULL,i.received DESC,i.id LIMIT 100`);
       return [...listRequests.all(supportOwner),...listRequests.all(externalSupportOwner)];
+    },
+    async searchSupport(query,aborted){
+      const list=db.prepare(`SELECT id,received FROM inbox WHERE owner IN (?,?) ORDER BY received DESC,id`).all(supportOwner,externalSupportOwner);
+      const result=[];
+      for(const row of list){
+        if(aborted())break;
+        const item=await this.readSupport(row.id);
+        if(item&&matchAdminQuery(query,item.subject,item.sender,item.text)){
+          result.push({id:row.id,title:item.subject||'(No subject)',description:item.sender});
+        }
+      }
+      return result;
     },
     async readSupport(id) {
       const raw=retrieve(supportOwner,id)??retrieve(externalSupportOwner,id);

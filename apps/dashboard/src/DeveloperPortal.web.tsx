@@ -1,3 +1,5 @@
+import ListPages from './ListPages.web';
+import {useListPage} from './list-page';
 import AppConfiguration from './AppConfiguration.web';
 import {useConfirmDialog} from './dialog-model';
 import CopyButton from './CopyButton.web';
@@ -46,6 +48,7 @@ function PeerSettings({registration}:{registration:string}){
 export default function DeveloperPortal({back}:{back:()=>void}){
   const confirmAction=useConfirmDialog();
   const [apps,setApps]=useState<AppRegistration[]|null>(null);
+  const page=useListPage(apps?.length??0);
   const [selection,setSelection]=useState<AppRegistration|'create'|null>(null);
   const [draft,setDraft]=useState<Draft>(blank);
   const [requirements,setRequirements]=useState(optionalClaims);
@@ -87,11 +90,12 @@ export default function DeveloperPortal({back}:{back:()=>void}){
     <div className="xc-portal-toolbar"><h2>Registered apps</h2>
       <button className="xc-button xc-primary" onClick={()=>edit('create')} disabled={!apps}><Plus size={18}/> Register an app</button></div>
     <a href="/profile/developer">Manage your developer profile</a>
-    {apps?.map(item=><button type="button" className="xc-card xc-permission-link xc-portal-app" onClick={()=>edit(item)} key={item.id}>
+    {apps?.slice(page.start,page.end).map(item=><button type="button" className="xc-card xc-permission-link xc-portal-app" onClick={()=>edit(item)} key={item.id}>
       <span className="xc-symbol xc-lavender">{item.icon?<img src={'data:image/png;base64,'+item.icon} alt=""/>:<Grid2X2 size={20}/>}</span>
       <span className="xc-permission-name"><strong className="xc-identity-label">{item.name}<TrustBadges compact kind="app" verified={item.verified}/></strong><span>{item.local?'Unsecure local app':item.native?'Native app':'Website'} · {item.status}</span></span>
       <ChevronRight className="xc-permission-chevron" size={20}/>
     </button>)}
+    <ListPages state={page} label="Registered apps"/>
     {apps?.length===0&&<p className="xc-empty">You haven’t registered any apps yet.</p>}
     {!apps&&!notice&&<p role="status">Loading apps…</p>}
     {notice&&<p role="alert">{notice}</p>}

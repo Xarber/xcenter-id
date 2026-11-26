@@ -239,3 +239,52 @@ test('parallel uploads reserve quota, retain encrypted chunk order, and move wit
     assert.equal(handle.fileBytes('owner'),0);
   }finally{await new Promise(resolve=>server.close(resolve));}
 });
+
+test('delegated chunked uploads are quota-limited, resumable and bound to the initiating app and account',async()=>{
+  let allowed=true;
+  const identities={
+    writer:{owner:'owner',client:'writer',scope:'files_write'},
+    reader:{owner:'owner',client:'writer',scope:'files_read'},
+    otherApp:{owner:'owner',client:'other',scope:'files_write'},
+    otherUser:{owner:'other',client:'writer',scope:'files_write'},
+  };
+  const handle=createAccountFiles({database:':memory:',key:randomBytes(32),accounts:{...accounts,storageCapacity:()=>3*1024*1024},origin,
+    fileAccess:async(token,scopes)=>allowed&&scopes.includes(identities[token]?.scope)?identities[token]:null});
+  const server=createServer((req,res)=>void handle(req,res,new URL(req.url,origin).pathname)).listen(0,'127.0.0.1');
+  await once(server,'listening');
+  const endpoint='http://127.0.0.1:'+server.address().port+'/v1/files';
+  const call=(method,path,body,token='writer')=>fetch(endpoint+path,{method,
+    headers:{authorization:'Bearer '+token,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+  try{
+    const bytes=randomBytes(2*1024*1024+17);
+    const file={name:'larger.bin',size:bytes.length};
+    assert.equal((await call('POST','/uploads',file,'reader')).status,401);
+    const start=await call('POST','/uploads',file);
+    assert.equal(start.status,201);
+    const {id,chunkSize}=await start.json();
+    const path='/uploads/'+id;
+    assert.equal((await call('POST','/uploads',{name:'oversized.bin',size:1024*1024},'otherApp')).status,409);
+    for(const token of ['otherApp','otherUser']){
+      assert.equal((await call('GET',path,undefined,token)).status,404);
+      assert.equal((await call('DELETE',path,undefined,token)).status,404);
+    }
+    assert.equal((await call('GET',path,undefined,'reader')).status,401);
+    for(let position=0;position<bytes.length;position+=chunkSize){
+      const content=bytes.subarray(position,position+chunkSize).toString('base64');
+      const result=await call('PUT',path,{position,content});
+      assert.equal(result.status,200);
+      assert.equal((await result.json()).received,Math.min(position+chunkSize,bytes.length));
+      if(position===0){
+        allowed=false;
+        assert.equal((await call('POST',path,{})).status,401);
+        allowed=true;
+        assert.equal((await (await call('GET',path)).json()).received,chunkSize);
+        assert.equal((await call('PUT',path,{position,content})).status,200);
+      }
+    }
+    assert.equal((await call('POST',path,{})).status,201);
+    assert.equal((await call('POST',path,{})).status,200);
+    assert.equal((await (await call('GET',path)).json()).committed,true);
+    assert.deepEqual(Buffer.from(await (await call('GET','/'+id)).arrayBuffer()),bytes);
+  }finally{await new Promise(resolve=>server.close(resolve));}
+});

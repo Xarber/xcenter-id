@@ -175,7 +175,7 @@ export default function SdkReference({slug}:{slug?:string}){
             })}
           </div>
         </>}
-        <footer className="xid-doc-footer"><a href={sdkSource}>SDK source · 0a03c74</a><a href="/docs#manual">Manual OpenID Connect guide</a></footer>
+        <footer className="xid-doc-footer"><a href={sdkSource}>SDK source</a><a href="/docs#manual">Manual OpenID Connect guide</a></footer>
       </main>
     </div>
   </div>;

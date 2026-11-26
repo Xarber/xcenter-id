@@ -17,10 +17,15 @@ export function createAdminAppRoutes({accounts,registry}){
         if(body.length>8192){req.resume();return answer(413,{error:'Request too large.'});}
       }
       const {type,id,verified,callbacks}=JSON.parse(body);
-      if(!['app','developer','callback'].includes(type)||typeof id!=='string'||id.length>100||typeof verified!=='boolean'){
+      if(!['app','developer','callback','administration'].includes(type)||typeof id!=='string'||id.length>100||typeof verified!=='boolean'){
         return answer(422,{error:'Choose an app or developer.'});
       }
       if(accounts.adminStatus(req,true)!==200)return answer(403,{error:'Confirm administrator access.'});
+      if(type==='administration'){
+        if(!registry.setAdministrationTrust(id,verified))return answer(409,{error:'Choose an active verified app with an HTTPS callback.'});
+        accounts.auditAdmin?.(req,id,verified?'enable-administration-app':'disable-administration-app');
+        return answer(200,{ok:true});
+      }
       if(type==='callback'){
         const updated=verified?registry.approveCallbacks(id,callbacks):registry.revokeCallbackApproval(id);
         if(!updated)return answer(409,{error:'Callback review changed or the registration is no longer pending.'});

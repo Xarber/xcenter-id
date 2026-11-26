@@ -585,7 +585,7 @@ const typescript: Partial<Record<string,LanguageExample>> = {
     argument('@xcenter-id/client','Package','Shared typed HTTP and OAuth APIs for JavaScript and TypeScript.'),
     argument('@authnjs/expo','Package','Expo system-browser OAuth and React Native account components.'),
     argument('@xcenter-id/server','Package','Node-only API with type declarations. Keep its secrets on the backend.'),
-  ],'npm pack ./packages/client ./packages/expo\n# In the Expo application, install both tarballs from the SDK checkout.\nnpm install /path/to/xcenter-id-client-0.3.0.tgz /path/to/authnjs-expo-0.5.0.tgz\nnpx expo install expo-auth-session expo-crypto expo-web-browser',
+  ],'npm pack ./packages/client ./packages/expo\n# In the Expo application, install both tarballs from the SDK checkout.\nnpm install /path/to/xcenter-id-client-0.4.0.tgz /path/to/authnjs-expo-0.6.0.tgz\nnpx expo install expo-auth-session expo-crypto expo-web-browser',
   'import {createUserClient} from "@authnjs/expo/client";'),
   'create-user-client':snippet('createUserClient(options: { clientId: string; getAccessToken: () => string | Promise<string>; fetch?: typeof fetch }): UserClient',[
     argument('clientId','string','Client ID assigned in Developer Apps.'),
@@ -600,6 +600,26 @@ const typescript: Partial<Record<string,LanguageExample>> = {
     argument('options.signal','AbortSignal | undefined','Optional request cancellation.'),
   ],'import type {RecordWrite} from "@xcenter-id/client";\n\ntype Note = {title: string};\nconst body: RecordWrite<Note> = {data: {title: "First note"}, public: false};\nconst saved = await user.records.put<Note>("notes", "first_note", body, {revision: 0});'),
 };
+
+dataExamples('account-overview-api','user',
+  ['accountOverview()','accountOverview()','accountOverview()'],[],
+  ['accountOverview()','accountOverview()','accountOverview()']);
+dataExamples('administrative-app-permissions','user',
+  ['updateProfileVisibility(_ fields: [String])','updateProfileVisibility(fields: List<String>)','updateProfileVisibility(List<String> fields)'],
+  [argument('fields','List of field names','Replace the entire selection with names from username, givenName, surname and picture.')],
+  ['updateProfileVisibility(["username", "picture"])','updateProfileVisibility(listOf("username", "picture"))',"updateProfileVisibility(['username', 'picture'])"]);
+dataExamples('resumable-uploads','user',
+  ['startUpload(name: String, size: Int64, folder: String? = nil)','startUpload(name: String, size: Long, folder: String? = null)','startUpload(String name, int size, {String? folder})'],
+  [argument('name','String','The uploaded file’s display name.'),argument('size','64-bit integer','Size of the input in bytes.'),argument('folder','Optional String','Account folder ID. Omit to use the root.')],
+  ['startUpload(name: "video.mp4", size: 4000000)','startUpload("video.mp4", 4000000L)','startUpload("video.mp4", 4000000)'],
+  'The start request returns id and chunkSize. Call uploadStatus(id) to resume, appendUpload with the next byte offset and chunk bytes, completeUpload to commit, or cancelUpload to discard the transfer.');
+native['resumable-uploads']!.swift!.output='{"id":"3aa33912-a1b8-4c39-ab4a-ac63d15adf71","chunkSize":524288}';
+native['resumable-uploads']!.kotlin!.output=native['resumable-uploads']!.swift!.output;
+native['resumable-uploads']!.dart!.output=native['resumable-uploads']!.swift!.output;
+dataExamples('peer-signaling','user',
+  ['openPeer(discoverable: Bool = false)','openPeer(discoverable: Boolean = false)','openPeer({bool discoverable = false})'],
+  [argument('discoverable','Boolean','Defaults to false. App-wide discovery must also be enabled.')],
+  ['openPeer(discoverable: false)','openPeer(discoverable = false)','openPeer(discoverable: false)']);
 
 export function parseLanguage(value:unknown):Language|undefined{
   return typeof value==='string'&&Object.hasOwn(languages,value)?value as Language:undefined;

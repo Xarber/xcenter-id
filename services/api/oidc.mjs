@@ -11,7 +11,15 @@ const filePermissions = {
   shared_files_read: ['Read files shared with you','List and download files other people currently share with you.'],
 };
 const fileScopes=Object.keys(filePermissions);
-const accountPermissions = ['profile','app_data','email','age_range','friends','offline_access',...fileScopes];
+const overviewScope='account_overview';
+const manageScope='account_manage';
+const trustedPermissions={
+  [overviewScope]:['Account overview','See account storage usage and the number of connected apps.'],
+  [manageScope]:['Manage account settings','Read linked app permissions, turn off optional grants, and change which parts of your profile are public.'],
+};
+const trustedScopes=Object.keys(trustedPermissions);
+const sensitiveScopes=[manageScope,'files_write'];
+const accountPermissions = ['profile','app_data','email','age_range','friends','offline_access',...fileScopes,...trustedScopes];
 
 function approveScopes(grant, scopes) {
   if(grant.rejected?.openid?.scope){
@@ -31,8 +39,8 @@ function pageHeaders(callbackOrigin = '', scriptNonce = '') {
   };
 }
 
-function html(res, content, status = 200, callbackOrigin = '', consent = false) {
-  res.writeHead(status, pageHeaders(callbackOrigin)).end(page(content, consent));
+function html(res, content, status = 200, callbackOrigin = '', consent = false, scriptNonce = '') {
+  res.writeHead(status, pageHeaders(callbackOrigin, scriptNonce)).end(page(content, consent));
 }
 
 function page(content, consent = false) {
@@ -75,6 +83,10 @@ function page(content, consent = false) {
     label{display:flex;gap:.7em;align-items:baseline;padding:.5em 0;overflow-wrap:anywhere}input{accent-color:var(--action)}
     button,.action{display:inline-block;font:inherit;font-weight:700;padding:.6em 1em;margin:.45rem .4rem 0 0;border-radius:.65rem;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer}
     button[value=approve],.action{background:var(--action);color:#fff;text-decoration:none;border-color:transparent}
+    .permission-confirmation{max-width:min(25rem,calc(100% - 2rem));border:1px solid var(--border);border-radius:1.45rem;padding:1.35rem;background:var(--card);color:var(--text);box-shadow:0 20px 60px #060b1755}
+    .permission-confirmation::backdrop{background:#060b1780}
+    .permission-confirmation .warning-icon{display:grid;place-items:center;width:2.5rem;height:2.5rem;border-radius:.75rem;background:var(--soft);color:var(--action);font-weight:800}
+    .permission-confirmation button[data-allow]{background:#ae243c;border-color:transparent;color:#fff}
     .connection{display:flex;align-items:center;gap:.9rem;margin:1.2rem 0}
     .connection .avatar{width:56px;height:56px;display:grid;place-items:center;overflow:hidden;border-radius:.8rem;background:var(--soft);color:var(--text);font-weight:800}
     .connection img{width:100%;height:100%;object-fit:cover}.permission-list{list-style:none;padding:0;display:grid;gap:.65rem}
@@ -180,7 +192,13 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
   }));
   const canUse=(owner,client)=>registry?.access(owner,client).allowed!==false;
   const knownClient=(client)=>clients.some(item=>item.client_id===client)||!!registry?.has(client);
+  const canRequestTrusted=(client,scopes)=>!trustedScopes.some(scope=>scopes.has(scope))||registry?.trustedAdministration?.(client)===true;
+  const trustError='This app is not approved to request Administrative App Permissions.';
   const policy=interactionPolicy.base();
+  policy.get('login').checks.add(new interactionPolicy.Check('administration_permission_eligibility','Check administrative app eligibility',ctx=>{
+    if(!canRequestTrusted(ctx.oidc.client.clientId,ctx.oidc.requestParamOIDCScopes))throw new errors.InvalidScope(trustError);
+    return false;
+  }));
   policy.get('login').checks.add(new interactionPolicy.Check('account_session','Sign in to X-Center ID',ctx=>{
     const client=ctx.oidc.client;
     if(registry?.brand(client.clientId)?.local&&ctx.oidc.params.redirect_uri&&!client.redirectUris.includes(ctx.oidc.params.redirect_uri)){
@@ -220,7 +238,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     clients, adapter: Adapter, jwks: configuration.jwks,
     cookies: { keys: configuration.cookieKeys, short: { secure: true, httpOnly: true, sameSite: 'lax' },
       long: { secure: true, httpOnly: true, sameSite: 'lax' } },
-    claims: scopeClaims, scopes: ['openid','profile','email','age_range','app_data','friends','offline_access',...fileScopes], subjectTypes: ['pairwise','public'],
+    claims: scopeClaims, scopes: ['openid','profile','email','age_range','app_data','friends','offline_access',...fileScopes,...trustedScopes], subjectTypes: ['pairwise','public'],
     pkce: { required: () => true },
     ttl: { AccessToken:600, AuthorizationCode:90, DeviceCode:300, Interaction:300, RefreshToken:refreshIdleSeconds, Grant:refreshIdleSeconds },
     async issueRefreshToken(ctx,client,source) {
@@ -247,6 +265,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
           const brand=registry?.brand(client.clientId);
           const requested=new Set(String(params.scope??'').split(' '));
           if(!brand||client.clientAuthMethod!=='client_secret_basic')throw new errors.UnauthorizedClient('Device sign-in requires an active confidential registration.');
+          if(!canRequestTrusted(client.clientId,requested))throw new errors.InvalidScope(trustError);
           if(brand.requiresEmail&&!requested.has('email')||brand.requiresAgeRange&&!requested.has('age_range'))throw new errors.InvalidScope('Request the required app permissions.');
           if(!/^[A-Za-z0-9_-]{22,128}$/.test(params.nonce??''))throw new errors.InvalidRequest('Supply a transaction nonce.');
           const minute=Math.floor(Date.now()/60_000);
@@ -352,7 +371,10 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     try { details = await provider.interactionDetails(req,res); }
     catch { return html(res, '<h1>Sign-in request expired</h1><p>Return to the app and start again.</p>', 400); }
     if (path !== '/interaction/' + details.uid) return html(res, '<h1>Sign-in request expired</h1>', 400);
-    const active = accounts.current(req);
+    const device=!!details.deviceCode;
+    const nativeDevice=device&&accounts.deviceBrowserSession?.(req);
+    const activeAccount=()=>device&&(accounts.deviceBrowserSession?.(req))||accounts.current(req);
+    const active=activeAccount();
     const person = active && accounts.identity(active.owner);
     const { prompt, params } = details;
     const found = await provider.Client.find(params.client_id);
@@ -369,11 +391,11 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const signIn=(adding=false)=>'/signin?continue='+encodeURIComponent(path)+(adding?'&addAccount=1':'');
     const title=brand?.name??client.client_name??client.client_id;
     const redirect=(location)=>res.writeHead(303,{Location:location,'Cache-Control':'no-store'}).end();
-    const accountRow=(selected,avatar)=>`<span class="avatar">${selected.hasPicture?`<img alt="" src="${avatar}">`:glyph('user')}</span>
+    const accountRow=(selected,avatar)=>`<span class="avatar">${selected.hasPicture&&avatar?`<img alt="" src="${avatar}">`:glyph('user')}</span>
       <span class="account-text"><strong>${escape(selected.givenName)} ${escape(selected.surname)}</strong><span class="account-handle">@${escape(selected.username)}</span></span>
       <span aria-hidden="true">›</span>`;
-    const accountPicker=person?`<a class="account-choice" href="${chooser}" aria-label="Switch account">${accountRow(person,'/account/avatar')}</a>`:'';
-    if(choose){
+    const accountPicker=person&&nativeDevice?`<span class="account-choice">${accountRow(person,null)}</span>`:person?`<a class="account-choice" href="${chooser}" aria-label="Switch account">${accountRow(person,'/account/avatar')}</a>`:'';
+    if(choose&&!nativeDevice){
       if(req.method==='POST'){
         if(req.headers.origin!==issuer)return html(res,'<h1>Could not verify the request</h1>',403);
         let input;
@@ -394,7 +416,6 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         <a class="device-back" href="${path}">Back</a></div>`,200,callbackOrigin,true);
     }
     if(!person)return redirect(signIn());
-    const device=!!details.deviceCode;
     if(req.method==='GET'&&(prompt.name==='login'||details.session?.accountId!==active.owner)){
       const authTime=Math.floor(active.created/1000);
       const wantsFresh=String(params.prompt??'').split(' ').includes('login')&&authTime<(details.iat??0);
@@ -412,7 +433,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         if(req.headers.origin!==issuer)return html(res,'<h1>Could not verify the request</h1>',403);
         let input;
         try{input=await form(req);}catch{return html(res,'<h1>Invalid request</h1>',400);}
-        if(input.get('action')==='request'&&access.canRequest&&accounts.current(req)?.owner===active.owner){
+        if(input.get('action')==='request'&&access.canRequest&&activeAccount()?.owner===active.owner){
           if(!registry.requestAccess(active.owner,client.client_id))return html(res,'<h1>Request unavailable</h1>',409);
           return html(res,`<h1>Access requested</h1><p>Return to the app after its developer approves your request.</p>${accountPicker}<p><a href="/dashboard">Open dashboard</a></p>`,200,callbackOrigin,true);
         }
@@ -438,6 +459,16 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const appData=scopes.has('app_data');
     const ownsStorage=appData;
     const showFriends=scopes.has('friends')&&(missing.has('friends')||explicitConsent);
+    const requestTrusted=trustedScopes.filter(scope=>scopes.has(scope));
+    const showTrusted=registry?.trustedAdministration?.(client.client_id)
+      ? trustedScopes.filter(scope=>scopes.has(scope)||existingScopes.has(scope)) : [];
+    if(!canRequestTrusted(client.client_id,scopes)){
+      if(req.method==='GET'||req.headers.origin===issuer){
+        await provider.interactionFinished(req,res,{error:'invalid_scope',error_description:trustError},{mergeWithLastSubmission:false});
+        return;
+      }
+      return html(res,'<h1>Could not verify the request</h1>',403);
+    }
     const requestedFileScopes=fileScopes.filter(scope=>scopes.has(scope));
     const previouslyAllowed=scope=>existingScopes.has(scope);
     const showOffline=scopes.has('offline_access')&&(missing.has('offline_access')||explicitConsent);
@@ -449,12 +480,18 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         await provider.interactionFinished(req,res,{ error:'access_denied', error_description:'The user declined.' },{mergeWithLastSubmission:false});
         return;
       }
-      if (prompt.name !== 'consent' || details.session?.accountId !== active.owner || accounts.current(req)?.owner!==active.owner || !canUse(active.owner,client.client_id)) {
+      if (prompt.name !== 'consent' || details.session?.accountId !== active.owner || activeAccount()?.owner!==active.owner || !canUse(active.owner,client.client_id)) {
         return html(res,'<h1>The signed-in account changed</h1><p>Start again from the app.</p>',409);
       }
       if(emailUnavailable)return html(res,'<h1>Email permission unavailable</h1><p>Unlink this app from your account, then link it again to choose a verified address.</p><a href="/apps">Manage linked apps</a>',409);
       const selected=chooseEmail?input.get('email'):null;
       if(requiredEmail&&chooseEmail&&(!selected||selected==='current'&&!sharedEmail))return html(res,'<h1>Choose an email address</h1><p>This app requires this info to work. Go back to choose an address, or cancel the request.</p>',400);
+      const selectedPermissions=new Set(input.getAll('permission'));
+      if(!canRequestTrusted(client.client_id,scopes))return html(res,'<h1>Administrative app access changed</h1>',403);
+      const confirmed=new Set(input.getAll('confirm-permission'));
+      if(sensitiveScopes.some(scope=>scopes.has(scope)&&selectedPermissions.has(scope)&&!existingScopes.has(scope)&&!confirmed.has(scope))){
+        return html(res,'<h1>Confirm sensitive permissions</h1><p>Go back to confirm the permission or leave it turned off.</p>',400);
+      }
       const eligible = accounts.premiumEligible(active.owner);
       const premium = (selected === 'premium'||selected==='masked') && eligible && mail?.premiumAvailable ? mail?.premiumAlias(active.owner,client.client_id) : null;
       if(selected === 'premium' && !premium) return html(res,'<h1>Premium Hide My Email is unavailable</h1>',409);
@@ -466,14 +503,14 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       if (selected!=='current' && email && !alias && !premium && !primary && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
       if(appData&&brand?.local&&input.get('confirm-unsecure')!=='yes')return html(res,'<h1>Confirm unsecure app access</h1><p>Confirm the warning in the authorization form.</p>',400);
       const dataChanged=appData&&applicationData?.authorize(active.owner,client.client_id,input.getAll('data-permission'));
-      const selectedPermissions=new Set(input.getAll('permission'));
+      const trustedAllowed=requestTrusted.filter(scope=>selectedPermissions.has(scope));
       const fileAllowed=requestedFileScopes.filter(scope=>selectedPermissions.has(scope));
       const fileDenied=requestedFileScopes.filter(scope=>!selectedPermissions.has(scope));
       const keepSession=showOffline&&input.getAll('permission').includes('offline_access');
       const shareFriends=showFriends&&input.getAll('permission').includes('friends');
       const ageAllowed=scopes.has('age_range')&&showAge&&(requiredAge||input.getAll('permission').includes('age_range'));
-      const allowed=['openid','profile',...fileAllowed,...(ageAllowed?['age_range']:[]),...(appData?['app_data']:[]),...(shareFriends?['friends']:[]),...(keepSession?['offline_access']:[]),...(email||scopes.has('email')&&sharedEmail&&(!existingGrant||requiredEmail)?['email']:[])];
-      const denied=[...fileDenied,...(showAge&&!ageAllowed?['age_range']:[]),...((chooseEmail&&!email||linked&&scopes.has('email')&&!existingScopes.has('email')&&!allowed.includes('email'))?['email']:[]),...(showFriends&&!shareFriends?['friends']:[]),...(showOffline&&!keepSession?['offline_access']:[])];
+      const allowed=['openid','profile',...fileAllowed,...trustedAllowed,...(ageAllowed?['age_range']:[]),...(appData?['app_data']:[]),...(shareFriends?['friends']:[]),...(keepSession?['offline_access']:[]),...(email||scopes.has('email')&&sharedEmail&&(!existingGrant||requiredEmail)?['email']:[])];
+      const denied=[...fileDenied,...requestTrusted.filter(scope=>!selectedPermissions.has(scope)),...(showAge&&!ageAllowed?['age_range']:[]),...((chooseEmail&&!email||linked&&scopes.has('email')&&!existingScopes.has('email')&&!allowed.includes('email'))?['email']:[]),...(showFriends&&!shareFriends?['friends']:[]),...(showOffline&&!keepSession?['offline_access']:[])];
       const grant=existingGrant||new provider.Grant({accountId:active.owner,clientId:client.client_id});
       approveScopes(grant, allowed);
       if(denied.length)grant.rejectOIDCScope(denied);
@@ -523,6 +560,43 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       }).join('')}</ul>` : '<p>Access declined. Link this app to your account first.</p>';
       return `<section class="source-permissions">${title}${access}</section>`;
     }).join('');
+    const needsConfirmation=sensitiveScopes.filter(scope=>scopes.has(scope)&&!previouslyAllowed(scope));
+    const confirmationNonce=needsConfirmation.length?randomBytes(18).toString('base64'):'';
+    function permissionRow(scope,icon,[label,description]){
+      if(!scopes.has(scope))return fixed(icon,label,description);
+      const sensitive=needsConfirmation.includes(scope);
+      return `<li><label class="permission-toggle">${glyph(icon)}<span>${label}<small>${description}</small></span><input type="checkbox" role="switch" name="permission" value="${scope}" aria-label="${label}"${previouslyAllowed(scope)?' checked':''}${sensitive?' data-confirm-permission':''}></label></li>
+        ${sensitive?`<li id="confirm-${scope}"><label><input type="checkbox" name="confirm-permission" value="${scope}">Confirm access to ${label.toLowerCase()}.</label></li>`:''}`;
+    }
+    const confirmationDialog=confirmationNonce?`<dialog class="permission-confirmation" aria-labelledby="permission-confirm-title" aria-describedby="permission-confirm-description">
+        <span class="warning-icon" aria-hidden="true">!</span><h2 id="permission-confirm-title"></h2>
+        <p id="permission-confirm-description"></p>
+        <button type="button" data-cancel autofocus>Cancel</button><button type="button" data-allow>Allow access</button>
+      </dialog>
+      <script nonce="${confirmationNonce}">
+        const dialog = document.querySelector('.permission-confirmation');
+        if (typeof dialog.showModal === 'function') {
+          for (const toggle of document.querySelectorAll('[data-confirm-permission]')) {
+            const fallback = document.getElementById('confirm-' + toggle.value);
+            const confirmed = fallback.querySelector('input');
+            fallback.style.display = 'none';
+            toggle.addEventListener('change', () => {
+              confirmed.checked = false;
+              if (!toggle.checked) return;
+              toggle.checked = false;
+              dialog.querySelector('h2').textContent = toggle.getAttribute('aria-label') + '?';
+              dialog.querySelector('p').textContent = toggle.closest('label').querySelector('small').textContent;
+              dialog.querySelector('[data-allow]').onclick = () => {
+                confirmed.checked = true;
+                toggle.checked = true;
+                dialog.close();
+              };
+              dialog.showModal();
+            });
+          }
+          dialog.querySelector('[data-cancel]').onclick = () => dialog.close();
+        }
+      </script>`:'';
     return html(res,`<div class="connection" aria-hidden="true">
       <span class="avatar">${person.hasPicture?'<img alt="" src="/account/avatar">':glyph('user')}</span>${glyph('link')}
       <span class="avatar">${brand?.icon?`<img alt="" src="${escape(brand.iconUrl??'data:image/png;base64,'+brand.icon)}">`:visual?glyph(visual):escape(title.slice(0,2).toUpperCase())}</span></div>
@@ -548,15 +622,11 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         ${requiredAge||!showAge&&existingScopes.has('age_range')?fixed('age','Age range',requiredAge?requiredNote:''):''}
         ${showFriends?`<li><label class="permission-toggle">${glyph('user')}<span>Friends list<small>Share accepted friends and identify those who already use this app.</small></span><input type="checkbox" role="switch" name="permission" value="friends" aria-label="Friends list"${existingScopes.has('friends')?' checked':''}></label></li>`:existingScopes.has('friends')?fixed('user','Friends list'):''}
         ${showOffline?`<li><label class="permission-toggle">${glyph('id')}<span>Stay signed in<small>Let this app renew your session while you use it.</small></span><input type="checkbox" role="switch" name="permission" value="offline_access" aria-label="Stay signed in"${existingScopes.has('offline_access')||!incremental?' checked':''}></label></li>`:existingScopes.has('offline_access')?fixed('id','Stay signed in'):''}
-        ${fileScopes.filter(scope=>scopes.has(scope)||previouslyAllowed(scope)).map(scope=>{
-          const [label,description]=filePermissions[scope];
-          return scopes.has(scope)
-            ? `<li><label class="permission-toggle">${glyph('records')}<span>${label}<small>${description}</small></span><input type="checkbox" role="switch" name="permission" value="${scope}" aria-label="${label}"${previouslyAllowed(scope)?' checked':''}></label></li>`
-            : fixed('records',label,description);
-        }).join('')}
+        ${fileScopes.filter(scope=>scopes.has(scope)||previouslyAllowed(scope)).map(scope=>permissionRow(scope,'records',filePermissions[scope])).join('')}
         ${ownsStorage?fixed('records','Private app storage','This app can save and access your records in its own storage.'):''}
         ${!chooseEmail&&sharedEmail?fixed('mail','Email address',escape(sharedEmail)+(requiredEmail?` · ${requiredNote}`:'')):''}
       </ul>
+      ${showTrusted.length?`<h2>Administrative App Permissions</h2><ul class="permission-list">${showTrusted.map(scope=>permissionRow(scope,'id',trustedPermissions[scope])).join('')}</ul>`:''}
       ${appData&&brand?.local?'<p role="alert">Granting data access shares records with an unsecure app.</p><label><input type="checkbox" name="confirm-unsecure" value="yes">I understand the risk of granting this app access.</label>':''}
       ${sourceSections}
       <p>You can review app access in X-Center ID.</p>
@@ -568,7 +638,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       ${(mail?.maskedAvailable||mail?.premiumAvailable&&accounts.premiumEligible(active.owner)) ? '<label><input type="radio" name="email" value="masked">Hide my email</label>' : ''}
       ${person.emails.map(({address}) => `<label><input type="radio" name="email" value="${escape(address)}">${escape(address)}</label>`).join('')}
       </fieldset>` : ''}
-      <button name="action" value="approve"${(emailUnavailable||requiredEmail&&chooseEmail&&!hasEmailChoice)?' disabled':''}>${incremental?(missing.size||explicitConsent?'Authorize selected permissions':'Authorize sign-in'):'Link app'}</button><button name="action" value="deny">Cancel</button></form>`,200,callbackOrigin,true);
+      <button name="action" value="approve"${(emailUnavailable||requiredEmail&&chooseEmail&&!hasEmailChoice)?' disabled':''}>${incremental?(missing.size||explicitConsent?'Authorize selected permissions':'Authorize sign-in'):'Link app'}</button><button name="action" value="deny">Cancel</button></form>${confirmationDialog}`,200,callbackOrigin,true,confirmationNonce);
   }
 
   async function activeGrant(access) {
@@ -587,8 +657,9 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const required=scope=>scope==='profile'||scope==='app_data'||scope==='email'&&!!brand?.requiresEmail||scope==='age_range'&&!!brand?.requiresAgeRange;
     if(change){
       const {scope,enabled}=change;
-      if(!accountPermissions.includes(scope)||!encountered.has(scope)||required(scope)||enabled&&scope==='email'&&!email) return false;
+      if(!accountPermissions.includes(scope)||!encountered.has(scope)||required(scope)||enabled&&scope==='email'&&!email||enabled&&trustedScopes.includes(scope)&&!registry?.trustedAdministration?.(client)) return false;
       const changed=current.has(scope)!==enabled;
+      if(changed&&enabled&&sensitiveScopes.includes(scope)&&change.confirmed!==true)return false;
       if(enabled){approveScopes(grant,[scope]);current.add(scope);}
       else{grant.rejectOIDCScope([scope]);current.delete(scope);}
       if(!accounts.grantAllowed(owner,client,linked)) return null;
@@ -597,7 +668,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     }
     return accountPermissions.filter(scope=>scope==='profile'||encountered.has(scope)||scope!=='app_data'&&required(scope)).map(scope=>({
       scope,required:required(scope),enabled:scope==='profile'||current.has(scope)&&(scope!=='email'||!!email),
-      canEnable:scope!=='email'||!!email,...(scope==='email'&&current.has(scope)&&email?{address:email}:{}),
+      canEnable:(scope!=='email'||!!email)&&(!trustedScopes.includes(scope)||!!registry?.trustedAdministration?.(client)),...(scope==='email'&&current.has(scope)&&email?{address:email}:{}),
     }));
   }
 
@@ -639,6 +710,15 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const access = await provider.AccessToken.find(value);
       if (!access?.accountId || !registry?.has(access.clientId) || !accounts.linkedGrant(access.accountId,access.clientId) || (!native&&(await provider.Client.find(access.clientId))?.tokenEndpointAuthMethod!=='client_secret_basic') || !await activeGrant(access) || !access.scope?.split(' ').includes('app_data')) return null;
       return { owner:access.accountId, client:access.clientId, confidential:true };
+    },
+    async overviewAccess(token,scope=overviewScope){
+      if(!trustedScopes.includes(scope))return null;
+      const access=await provider.AccessToken.find(token);
+      if(!access?.accountId||!registry?.trustedAdministration?.(access.clientId)||
+        !access.scope?.split(' ').includes(scope)||accounts.linkedGrant(access.accountId,access.clientId)!==access.grantId)return null;
+      const grant=await activeGrant(access);
+      if(!grant?.getOIDCScope().split(' ').includes(scope)||!registry.trustedAdministration(access.clientId))return null;
+      return access.accountId;
     },
     async peerAccess(token){
       const access=await provider.AccessToken.find(token);

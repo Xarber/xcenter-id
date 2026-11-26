@@ -1,3 +1,6 @@
+import AdminSearch from './AdminSearch';
+import ListPages from './ListPages';
+import {useListPage} from './list-page';
 import {useDialog} from './dialog-model';
 import {useFileTransfers} from './file-transfers';
 import {destinationLabels,type FolderDestination} from './file-destinations';
@@ -87,6 +90,10 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [usernameRequest,setUsernameRequest]=useState<UsernameRequest|null>(null);
   const [usernameRequests,setUsernameRequests]=useState<UsernameRequest[]>([]);
   const [requests,setRequests]=useState<SupportRequest[]>([]);
+  const [adminTarget,setAdminTarget]=useState<{username:string;app?:string}>();
+  const [adminSection,setAdminSection]=useState<'usernames'|'storage'>();
+  const supportPage=useListPage(requests.length);
+
   const [request,setRequest]=useState<{id:string;message:SupportMessage}|null>(null);
   const [devices,setDevices]=useState<Device[]>([]);
   const [permissionClient,setPermissionClient]=useState('');
@@ -152,6 +159,9 @@ export default function NativeSections({ section,token,account,colors,reload,exp
   const [attachment,setAttachment]=useState<{name:string;content:string}|undefined>();
   const [busy,setBusy]=useState(false);
   const [status,setStatus]=useState('');
+  const appsPage=useListPage(apps.length,section);
+  const devicePage=useListPage(devices.length,section);
+  const usernamePage=useListPage(usernameRequests.length);
   const api=(path:string,data?:object,method?:string,signal?:AbortSignal)=>nativeRequest(path,token,data,method,signal);
   const filesPath='files'+(folder?'?folder='+encodeURIComponent(folder):'');
 
@@ -345,11 +355,11 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         {detailsPanel==='email'&&<IncomingEmail token={token} updated={reload} addresses={account.emails} colors={colors}/>}
         <PublicProfile token={token} colors={colors}/></>;
       break;
-    case 'device-signin':content=<DeviceSignIn colors={colors} back={()=>navigate('devices')}/>;break;
+    case 'device-signin':content=<DeviceSignIn token={token} colors={colors} back={()=>navigate('devices')}/>;break;
     case 'devices':
-      content=<>{button('Sign in on another device',()=>navigate('device-signin'))}{devices.map(device=>row(device.id,device.label,device.current?'This device':'Signed in '+date(device.created),
+      content=<>{button('Sign in on another device',()=>navigate('device-signin'))}{devices.slice(devicePage.start,devicePage.end).map(device=>row(device.id,device.label,device.current?'This device':'Signed in '+date(device.created),
         !device.current&&button('Sign out device',()=>confirm('Sign out this device?','It will need to sign in again.',
-          ()=>run(()=>mutate('devices/revoke',{id:device.id}),'Device signed out.')))))}</>;
+          ()=>run(()=>mutate('devices/revoke',{id:device.id}),'Device signed out.')))))}<ListPages state={devicePage} label="Devices" colors={colors}/></>;
       break;
     case 'security':
       content=<>{account.passkeys.map(key=>row(key.id,key.label,'Added '+date(key.created),<View style={styles.actions}>
@@ -364,12 +374,12 @@ export default function NativeSections({ section,token,account,colors,reload,exp
       break;
     case 'apps':
       content=<>{apps.length===0&&paragraph('No linked apps yet.')}
-        {apps.map(app=><View key={app.client} style={{gap:10,borderBottomWidth:1,borderColor:colors.soft,paddingVertical:12}}><View style={{flexDirection:'row',gap:12,alignItems:'center'}}>
+        {apps.slice(appsPage.start,appsPage.end).map(app=><View key={app.client} style={{gap:10,borderBottomWidth:1,borderColor:colors.soft,paddingVertical:12}}><View style={{flexDirection:'row',gap:12,alignItems:'center'}}>
           <AppIcon key={app.icon} icon={app.icon} color={colors.accent}/>
           <View style={{flexShrink:1,gap:4}}><Text style={{color:colors.ink,fontWeight:'700'}}>{app.label}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View></View>
           {button('Manage permissions',()=>{setPermissionClient(app.client);navigate('permissions');})}
           {button('Unlink app',()=>confirm('Unlink '+app.label+'?','This ends the app’s access and permanently deletes the copies it saved in your X-Center ID account.',()=>run(()=>mutate('connected-apps/unlink',{client:app.client}),'App unlinked.')))}</View>)}
-        {button('Manage developer apps',()=>navigate('developer'))}</>;
+        {button('Manage developer apps',()=>navigate('developer'))}<ListPages state={appsPage} label="Authorized apps" colors={colors}/></>;
       break;
     case 'developer':
       content=<DeveloperPortal back={()=>navigate('apps')} token={token} colors={colors}/>;
@@ -602,19 +612,31 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         break;
       }
       content=<>
-        {adminDetail!=='storage'&&<NativeAdminUsers token={token} colors={colors} onDetail={open=>setAdminDetail(open?'account':null)}/>}
+        {!adminDetail&&!request&&!adminSection&&<AdminSearch token={token} colors={colors} open={(category,item)=>{
+          if(category==='support'){
+            run(async()=>{setRequest({id:item.id,message:await api('admin/support/'+item.id)});setSupportText('');});
+          }else if(category==='storage'||category==='usernames'){
+            setAdminSection(category);
+          }else if(item.username){
+            setAdminTarget({username:item.username,app:category==='apps'?item.id:undefined});setAdminDetail('account');
+          }
+        }}/>}
+        {adminSection&&button('All Administration',()=>setAdminSection(undefined))}
+        {adminDetail!=='storage'&&!request&&!adminSection&&<NativeAdminUsers token={token} colors={colors} requested={adminTarget}
+          onDetail={open=>{if(!open)setAdminTarget(undefined);setAdminDetail(open?'account':null);}}/>}
         {!adminDetail&&<>
-        <Surface colors={colors}>
+        {!request&&adminSection!=='storage'&&<Surface colors={colors}>
         <SurfaceTitle colors={colors} title="Username requests" icon="id-card-outline" tint="lavender"/>
         {usernameRequests.length===0&&paragraph('No confirmed requests.')}
-        {usernameRequests.map(item=>row(item.id,'@'+item.previous+' → @'+item.proposed,'Confirmed by the account holder',
+        {usernameRequests.slice(usernamePage.start,usernamePage.end).map(item=>row(item.id,'@'+item.previous+' → @'+item.proposed,'Confirmed by the account holder',
           <View style={styles.actions}>{(['approve','reject'] as const).map(action=><View key={action}>
             {button(action==='approve'?'Approve change':'Decline request',()=>run(async()=>{
               await api('admin/username-changes',{id:item.id,action});await load();
             },action==='approve'?'Username changed.':'Request declined.'))}
           </View>)}</View>))}
-        </Surface>
-        <Surface colors={colors}>
+        <ListPages state={usernamePage} label="Username requests" colors={colors}/>
+        </Surface>}
+        {!adminSection&&<Surface colors={colors}>
         <SurfaceTitle colors={colors} title="Support inbox" icon="mail-open-outline" tint="mint"/>
         {request?<>{button('All requests',()=>{setRequest(null);setSupportText('');})}
           {row(request.id,request.message.subject||'(No subject)',request.message.sender)}
@@ -633,12 +655,13 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         </>:<>
           {button('Refresh requests',()=>run(load))}
           {!requests.length&&paragraph('No support requests.')}
-          {requests.map(item=><View key={item.id}>{button((item.external?'Incoming email':item.replied?'Answered request':'Account request')+' · '+new Date(item.received).toLocaleString(),
+          {requests.slice(supportPage.start,supportPage.end).map(item=><View key={item.id}>{button((item.external?'Incoming email':item.replied?'Answered request':'Account request')+' · '+new Date(item.received).toLocaleString(),
             ()=>run(async()=>{setRequest({id:item.id,message:await api('admin/support/'+item.id)});setSupportText('');}))}</View>)}
+          <ListPages state={supportPage} label="Support requests" colors={colors}/>
         </>}
-        </Surface>
+        </Surface>}
         </>}
-        {adminDetail!=='account'&&<NativeAdminInventory token={token} colors={colors} onDetail={open=>setAdminDetail(open?'storage':null)}/>}
+        {adminDetail!=='account'&&!request&&adminSection!=='usernames'&&<NativeAdminInventory token={token} colors={colors} onDetail={open=>setAdminDetail(open?'storage':null)}/>}
       </>;
       break;
     case 'mail':

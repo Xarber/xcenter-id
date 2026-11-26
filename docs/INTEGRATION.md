@@ -16,3 +16,9 @@ The public developer documentation route is `/docs`. The [SDK reference](https:/
 The integration skill supports non-Expo projects through the [manual OpenID Connect guide](https://id.xcenter.it/docs#manual). Use a library for your platform and choose a backend-owned confidential flow or a public native flow with a verified HTTPS callback. Expo is an optional adapter. Developers can delete pending and active registrations in the portal. Deletion revokes that registration and hides it from the inventory while retaining stored records and its identity tombstone.
 
 Request `files_read`, `files_write`, or `shared_files_read` only if issuer discovery advertises the scope and the product needs it. Use the [delegated Files contract](FRIENDS.md#file-permissions-for-registered-apps) for route and revocation behavior. Keep those permissions separate from private app sync. Cross-app requests appear under the linked source app. The user must first link that source to grant access.
+
+### Direct, user-consented account controls
+
+An administrator must enable **Administration app** for an eligible registration before it requests `account_overview` or `account_manage`. The user can allow each scope under **Administrative App Permissions** in the consent screen and change it later in Linked Apps. Management access requires a confirmation showing what the app can change. Once approved, use the app’s regular user access token with the [overview API](/docs/sdk/account-overview-api) and [account settings API](/docs/sdk/administrative-app-permissions). These calls run directly inside the app.
+
+Use the [resumable upload guide](/docs/sdk/resumable-uploads) for account files up to the available quota and the [WebRTC signaling guide](/docs/sdk/peer-signaling) for enabled, verified apps.
