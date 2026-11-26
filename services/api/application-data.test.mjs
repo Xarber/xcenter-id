@@ -111,7 +111,7 @@ test('hosted payload ciphertext authenticates publication and recipient flags at
  const {mkdtempSync,readFileSync,rmSync}=await import('node:fs');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {DatabaseSync}=await import('node:sqlite');
  const dir=mkdtempSync(join(tmpdir(),'xcenter-db-')),path=join(dir,'data.sqlite');
  const registry=openRegistry(':memory:');const app=registry.submit('developer','A','https://a.example.test/callback');registry.approve(app.id,'a');registry.verifyApp(app.id,true);
- const service=openApplicationData({path,key:Buffer.alloc(32,19),registry,accounts:{available:()=>true,isDisconnected:()=>false},authenticate:()=>({client:'a',owner:'user'})});
+ const service=openApplicationData({path,key:Buffer.alloc(32,19),registry,accounts:{available:()=>true,isDisconnected:()=>false,linkedGrant:()=> 'fixture',current:()=>({owner:'user'})},authenticate:()=>({client:'a',owner:'user'})});
  const server=createServer((req,res)=>void service.handle(req,res,new URL(req.url,'http://localhost'))).listen(0,'127.0.0.1');await once(server,'listening');const base='http://127.0.0.1:'+server.address().port;
  try{
   const secret='Sensitive private record '+Date.now();
@@ -119,6 +119,19 @@ test('hosted payload ciphertext authenticates publication and recipient flags at
   assert.equal(readFileSync(path).includes(Buffer.from(secret)),false);
   const db=new DatabaseSync(path);db.prepare('UPDATE app_records SET public=1').run();db.close();
   const response=await fetch(base+'/public/apps/a/data/posts');assert.equal(response.status,500);assert.equal((await response.text()).includes(secret),false);
+  const upload=base+'/v1/apps/a/files/uploads';
+  const headers={authorization:'Bearer '+'x'.repeat(25),'content-type':'application/json'};
+  const initiate=await fetch(upload,{method:'POST',headers,body:JSON.stringify({name:'private-backup.zip',size:0})});
+  assert.equal(initiate.status,201);
+  const {id}=await initiate.json();
+  assert.equal((await fetch(upload+'/'+id,{method:'POST',headers,body:'{}'})).status,201);
+  assert.equal(readFileSync(path).includes(Buffer.from('private-backup.zip')),false);
+  const changed=new DatabaseSync(path);
+  changed.prepare('UPDATE app_files SET browseable=1 WHERE id=?').run(id);
+  changed.close();
+  const binary=await fetch(base+'/account/app-files/a/'+id);
+  assert.equal(binary.status,500);
+  assert.doesNotMatch(await binary.text(),/private-backup/);
  }finally{await new Promise(resolve=>server.close(resolve));service.close();registry.close();rmSync(dir,{recursive:true,force:true});}
 });
 
