@@ -45,3 +45,9 @@ SDK source `73ac2ce` is on the SDK repository's `testing`, `beta`, and `main` br
 The [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45822837633) was dispatched from `testing` at `f376cfb` for iOS device, iOS Simulator, signed Android APK and signed Android AAB. Two subsequent server-only commits authenticated stored file visibility and added a regression. The web/API rollout at `2a8f51d` uses the same dashboard source. See [production and rollback verification](operations/XCENTER_ID_PRODUCTION.md#26-november-dashboard-0190-rollout). This preview does not publish native releases.
 
 Chrome against isolated fixtures verified the Files changes and captured representative web views at 390 px and 1,280 px. Installed iOS and Android behavior and native screenshots remain unverified. The prior 0.18.0 [preview run 45808671453](https://github.com/Xarber/xcenter-id/actions/runs/45808671453) completed successfully.
+
+## 26 November 0.20.0 peer update
+
+The [provider quality run](https://github.com/Xarber/xcenter-id/actions/runs/45838931269) passed at `c5beb38`. A [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45838931627) was started for the same commit. A native release and physical-device verification remain open. Isolated browser checks verified record ordering and repeated Developer Apps navigation at 390 px and 1,280 px.
+
+The [SDK quality matrix](https://github.com/Xarber/xcenter-id-sdk/actions/runs/45838776124) passed web, Swift, Android/JVM and Flutter/Dart at `7371295`. The browser peer tests used real Chromium WebRTC connections with fixtures for media and signaling. They exercised audio/video tracks, screen-track substitution, file transfer and independent parallel connections. Real capture selection, installed device checks and cross-network TURN are separate.
