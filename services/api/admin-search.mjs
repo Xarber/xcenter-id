@@ -9,7 +9,7 @@ export function createAdminSearch({accounts,registry,mail,volumes}){
     const headers={'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
     const answer=(status,value)=>res.writeHead(status,headers).end(JSON.stringify(value));
     if(req.method!=='GET')return answer(405,{error:'Method unavailable.'});
-    if(accounts.adminStatus(req,true)!==200)return answer(403,{error:'Confirm administrator access.'});
+    if(accounts.adminStatus(req)!==200)return answer(403,{error:'Confirm administrator access.'});
     const session=accounts.current(req);
     const query=(url.searchParams.get('q')??'').trim().toLowerCase();
     const section=url.searchParams.get('section');
@@ -40,7 +40,7 @@ export function createAdminSearch({accounts,registry,mail,volumes}){
         groups[key]={total,page:selected,items:entries.slice((selected-1)*size,selected*size)};
       }
       if(res.destroyed)return;
-      if(accounts.adminStatus(req,true)!==200||accounts.current(req)?.hash!==session.hash){
+      if(accounts.adminStatus(req)!==200||accounts.current(req)?.hash!==session.hash){
         return answer(403,{error:'The administrator session changed.'});
       }
       return answer(200,{groups});

@@ -8,7 +8,7 @@ test('only a confirmed administrator can search and page grouped results',async(
   let searched=0;
   const search=createAdminSearch({
     accounts:{
-      adminStatus:()=>status,
+      adminStatus:(req,write)=>write&&!req.headers.origin?403:status,
       current:()=>({hash:'synthetic-session'}),
       searchAdminUsers:query=>{assert.equal(query,'fixture');searched++;return users;},
       searchAdminUsernameChanges:()=>[],
@@ -20,7 +20,7 @@ test('only a confirmed administrator can search and page grouped results',async(
   async function get(query){
     let result;
     const res={writeHead(code){return {end(body){result={code,body:JSON.parse(body)};}};}};
-    await search({method:'GET'},res,new URL('https://example.test/admin-search?'+query));
+    await search({method:'GET',headers:{}},res,new URL('https://example.test/admin-search?'+query));
     return result;
   }
   assert.equal((await get('q=fixture')).code,403);
