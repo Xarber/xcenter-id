@@ -22,3 +22,7 @@ Request `files_read`, `files_write`, or `shared_files_read` only if issuer disco
 An administrator must enable **Administration app** for an eligible registration before it requests `account_overview` or `account_manage`. The user can allow each scope under **Administrative App Permissions** in the consent screen and change it later in Linked Apps. Management access requires a confirmation showing what the app can change. Once approved, use the app’s regular user access token with the [overview API](https://id.xcenter.it/docs/sdk/account-overview-api) and [account settings API](https://id.xcenter.it/docs/sdk/administrative-app-permissions). These calls run directly inside the app.
 
 Use the [resumable upload guide](https://id.xcenter.it/docs/sdk/resumable-uploads) for account files up to the available quota and the [WebRTC signaling guide](https://id.xcenter.it/docs/sdk/peer-signaling) for enabled, verified apps.
+
+### Stay signed in
+
+Request `offline_access` by default for ordinary account sign-in. The hosted X-Center ID consent screen provides the **Stay signed in** toggle, so skip any duplicate prompt in the app. For an intentionally short session or an app without secure refresh-token handling, omit the scope. If the issuer returns no refresh token, complete sign-in and end the app session by the issuer access token’s expiry. [SDK session setup](https://github.com/Xarber/xcenter-id-sdk/blob/main/docs/CONFIGURATION.md#ask-to-stay-signed-in)
