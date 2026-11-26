@@ -1,4 +1,39 @@
 {
+  "0.19.0": {
+    "revision": "0275094efc2ec7917a2bbde200572b16035c6ce8",
+    "commits": [
+      {
+        "id": "82db70d67585f120699316d7bfdd83b85d44a25a",
+        "title": "chore(release): prepare dashboard 0.18.0",
+        "detail": "Changed areas: CHANGELOG.md, apps/dashboard."
+      },
+      {
+        "id": "be221b024acaadba18263d07ac9b21cd780526da",
+        "title": "fix(admin): authorize same-origin browser searches without an origin header",
+        "detail": "Changed areas: services/api."
+      },
+      {
+        "id": "0a25042f21afb97409fb1dd7163fc9bbc8cae9c0",
+        "title": "docs(release): record 0.18.0 deployment and preview evidence",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/RELEASES.md, docs/operations."
+      },
+      {
+        "id": "3b6230710156367ba46d1132d470959415dc2584",
+        "title": "docs(auth): default to hosted stay signed in consent",
+        "detail": "Changed areas: apps/dashboard, docs/INTEGRATION.md, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "6ad528edc4d01a7c74cc1c030b66116c6d90395a",
+        "title": "docs(queue): record app container files and folder sizes",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "0275094efc2ec7917a2bbde200572b16035c6ce8",
+        "title": "feat(storage): add app container files and recursive folder sizes",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/APP_CONTAINER_FILES.md, docs/INDEX.md, docs/SECURITY.md, services/api and 1 more."
+      }
+    ]
+  },
   "0.18.0": {
     "revision": "c71f3e2b755255cd87d2d2d543f4b9f85d7988ee",
     "commits": [

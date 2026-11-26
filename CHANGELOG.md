@@ -3,6 +3,16 @@
 This archive covers the original AuthNJS source and the X-Center ID rewrite. Earlier entries reconstruct source milestones. Development entries identify unreleased work. There are no published GitHub releases in this history.
 Deployment and native build evidence are recorded in [release documentation](docs/RELEASES.md).
 
+## 0.19.0 · 2026-11-26
+
+Development
+
+### Backups in app folders
+
+- **Open backups from an app’s folder**. Apps can save files in their own branded account container and mark individual files as Browseable.
+- **See what folders contain by size**. Files shows the total bytes of nested files for each folder.
+- **Browse private service files**. Developers of verified apps can browse service files alongside their record collections.
+
 ## 0.18.0 · 2026-11-26
 
 Development

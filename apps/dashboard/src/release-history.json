@@ -1,5 +1,30 @@
 [
   {
+    "version": "0.19.0",
+    "date": "2026-11-26",
+    "revision": "0275094efc2ec7917a2bbde200572b16035c6ce8",
+    "title": "Backups in app folders",
+    "status": "Development",
+    "features": [
+      [
+        "storage",
+        "Open backups from an app’s folder",
+        "Apps can save files in their own branded account container and mark individual files as Browseable."
+      ],
+      [
+        "storage",
+        "See what folders contain by size",
+        "Files shows the total bytes of nested files for each folder."
+      ],
+      [
+        "shield",
+        "Browse private service files",
+        "Developers of verified apps can browse service files alongside their record collections."
+      ]
+    ],
+    "fixes": []
+  },
+  {
     "version": "0.18.0",
     "date": "2026-11-26",
     "revision": "c71f3e2b755255cd87d2d2d543f4b9f85d7988ee",
