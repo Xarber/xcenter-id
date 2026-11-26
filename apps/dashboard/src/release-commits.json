@@ -1,4 +1,39 @@
 {
+  "0.20.0": {
+    "revision": "f49a14ba859cfa015b19a27a177417ee74b8e3c3",
+    "commits": [
+      {
+        "id": "f376cfbf4e1db20d13cada617b6fdd3d2cb4a0aa",
+        "title": "chore(release): prepare app container files for 0.19.0",
+        "detail": "Changed areas: CHANGELOG.md, apps/dashboard."
+      },
+      {
+        "id": "4d8e1577eaa14cb6d74d7b4ed16a20fc5d1308c5",
+        "title": "fix(storage): authenticate file visibility at rest",
+        "detail": "Changed areas: services/api."
+      },
+      {
+        "id": "2a8f51dfe7b732b0234c6db9644796ab3f049345",
+        "title": "test(storage): deny files with tampered visibility",
+        "detail": "Changed areas: services/api."
+      },
+      {
+        "id": "99692364143c4e639281cd17ec9178c7e1014fd9",
+        "title": "docs(release): record live container file verification",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/APP_CONTAINER_FILES.md, docs/RELEASES.md, docs/operations, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "f5ece823568588842f6b566d20d918d573833beb",
+        "title": "docs(queue): record app browser and peer connection follow-ups",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "f49a14ba859cfa015b19a27a177417ee74b8e3c3",
+        "title": "feat(peers): improve scoped discovery and browser connection lifecycle",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/APP_CONTAINER_FILES.md, docs/INTEGRATION.md, docs/SECURITY.md, services/api and 1 more."
+      }
+    ]
+  },
   "0.19.0": {
     "revision": "0275094efc2ec7917a2bbde200572b16035c6ce8",
     "commits": [

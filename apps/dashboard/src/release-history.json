@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.20.0",
+    "date": "2026-11-26",
+    "revision": "f49a14ba859cfa015b19a27a177417ee74b8e3c3",
+    "title": "App folders and peer connections",
+    "status": "Development",
+    "features": [
+      [
+        "storage",
+        "Records appear above files",
+        "Browse record collections first in account and service app storage."
+      ],
+      [
+        "people",
+        "Connect with peers in the same app",
+        "Verified apps can use the browser SDK for calls, screen streams and files, with an optional app-only directory."
+      ]
+    ],
+    "fixes": [
+      "Peer connections settings close when you return to the registered app list."
+    ]
+  },
+  {
     "version": "0.19.0",
     "date": "2026-11-26",
     "revision": "0275094efc2ec7917a2bbde200572b16035c6ce8",

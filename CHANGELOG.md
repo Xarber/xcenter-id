@@ -3,6 +3,19 @@
 This archive covers the original AuthNJS source and the X-Center ID rewrite. Earlier entries reconstruct source milestones. Development entries identify unreleased work. There are no published GitHub releases in this history.
 Deployment and native build evidence are recorded in [release documentation](docs/RELEASES.md).
 
+## 0.20.0 · 2026-11-26
+
+Development
+
+### App folders and peer connections
+
+- **Records appear above files**. Browse record collections first in account and service app storage.
+- **Connect with peers in the same app**. Verified apps can use the browser SDK for calls, screen streams and files, with an optional app-only directory.
+
+### Fixes & Improvements
+
+- Peer connections settings close when you return to the registered app list.
+
 ## 0.19.0 · 2026-11-26
 
 Development
