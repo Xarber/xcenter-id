@@ -560,6 +560,7 @@ const platformOnly: Partial<Record<string,Language>> = {
   'swift-browser-sign-in':'swift','android-browser-sign-in':'kotlin','flutter-browser-sign-in':'dart','close-dart-clients':'dart','jvm-data-client':'kotlin','swift-config-data':'swift',
 };
 const unavailable: Record<string,string> = {
+  'stock-peerjs':'The stock PeerJS client is JavaScript or TypeScript. A compatible client can also request leases through POST, PUT and DELETE at /v1/peers/peerjs/session.',
   'browser-peer-connections':'The WebRTC browser adapter is available in JavaScript and TypeScript. Use the Peer signaling pages with your platform’s WebRTC and media APIs.',
   revoke:'The issuer currently supports revocation through Linked apps. There is no native revoke operation.',
   'server-user-info':'The separate subject-binding method belongs to the Node adapter. Native adapters validate the returned subject during code exchange and refresh.',
@@ -586,7 +587,7 @@ const typescript: Partial<Record<string,LanguageExample>> = {
     argument('@xcenter-id/client','Package','Shared typed HTTP and OAuth APIs for JavaScript and TypeScript.'),
     argument('@authnjs/expo','Package','Expo system-browser OAuth and React Native account components.'),
     argument('@xcenter-id/server','Package','Node-only API with type declarations. Keep its secrets on the backend.'),
-  ],'npm pack ./packages/client ./packages/expo\n# In the Expo application, install both tarballs from the SDK checkout.\nnpm install /path/to/xcenter-id-client-0.5.0.tgz /path/to/authnjs-expo-0.7.0.tgz\nnpx expo install expo-auth-session expo-crypto expo-web-browser',
+  ],'npm pack ./packages/client ./packages/expo\n# In the Expo application, install both tarballs from the SDK checkout.\nnpm install /path/to/xcenter-id-client-0.6.0.tgz /path/to/authnjs-expo-0.8.0.tgz\nnpx expo install expo-auth-session expo-crypto expo-web-browser',
   'import {createUserClient} from "@authnjs/expo/client";'),
   'create-user-client':snippet('createUserClient(options: { clientId: string; getAccessToken: () => string | Promise<string>; fetch?: typeof fetch }): UserClient',[
     argument('clientId','string','Client ID assigned in Developer Apps.'),

@@ -682,3 +682,11 @@ The user requested a queue-only checkpoint. Resume these items after usage reset
 The shared service derives the namespace from the live authenticated client registration for every operation. Each app receives the same feature surface within its namespace. Running a server process per app is unnecessary.
 
 Provider `c5beb38` is live as 0.20.0 after staged and public checks. The provider quality workflow passed. SDK source `7371295` passed all four quality jobs. The [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45838931627) remains pending. See [release evidence](RELEASES.md#26-november-0200-peer-update) for scope and remaining verification. No separate PeerServer processes were created.
+
+### Stock PeerJS interoperability
+
+| ID | State | Evidence and next action |
+| --- | --- | --- |
+| AUTHN-169 | Implemented | One WebSocket gateway supports stock PeerJS 1.5.5 with app-scoped session issuance, renewal, discovery, ID generation, candidate and offer/answer forwarding. One account in two apps used the same peer ID without cross-app discovery or signaling. A local Chrome test used the unmodified library for same-app listing, a data connection, and an audio/video call. Verify the production WebSocket upgrade and document rollback. |
+
+Existing X-Center HTTP peer sessions remain on their protocol. Stock PeerJS uses its own transport namespace within the same authenticated registration, with no per-app processes. The stock client's disconnect and reconnect use the open lease. Reissue a lease when it expires.

@@ -32,3 +32,7 @@ Request `offline_access` by default for ordinary account sign-in. The hosted X-C
 Enable **Peer connections** and **List discoverable peers in this app** for a verified registration. Pass `{discoverable: true}` when opening a peer that should appear in the directory. Call `user.peers.list(session)` to list other opted-in peers on the same registration. A different app cannot discover them, even if it is signed in as the same account.
 
 For browser voice calls, video calls, screen sharing and file transfer over WebRTC, use the [browser peer adapter](https://github.com/Xarber/xcenter-id-sdk/blob/73712952aa263ae091a5ca78001c592f3d11968f/docs/PEER_CONNECTIONS.md). The app handles invitations, media consent, and file acceptance. Native apps can connect their platform media implementation to the SDK signaling methods.
+
+### Stock PeerJS clients
+
+Use the existing Peer connections policy with the unmodified PeerJS client. A signed-in app requests a dedicated lease with `POST /v1/peers/peerjs/session` and `{discoverable, id?}`. The response contains `{id,key,token,path,connectWithin}`. Pass those values to PeerJS on `id.xcenter.it:443` with TLS. `PUT` renews and `DELETE` closes the session with `{key}` and a current user bearer. Discovery and signaling are scoped to the grant’s app. See the [SDK setup and examples](https://github.com/Xarber/xcenter-id-sdk/blob/main/docs/PEER_CONNECTIONS.md#unmodified-peerjs).

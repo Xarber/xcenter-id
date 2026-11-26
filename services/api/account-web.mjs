@@ -1,3 +1,4 @@
+import {createPeerJsGateway} from './peerjs-gateway.mjs';
 import {createAdminSearch} from './admin-search.mjs';
 import {nativeDeviceEntry} from './native-device.mjs';
 import {createPeerSignaling} from './peer-signaling.mjs';
@@ -125,10 +126,12 @@ const friendRecordRoutes = friends && store && createFriendRecordRoutes({ accoun
   publishers:new Map((configuration.friendRecordPublishers??[]).map(({id,name})=>[id,name])),
   allowed:(owner,source)=>registry.has(source)&&!accounts.isDisconnected(owner,source),
 }) });
-const peerSignaling=createPeerSignaling({
+const peerOptions={
   authenticate:token=>provider?.peerAccess(token),
   settings:client=>registry.peerPolicy(client),
-});
+};
+const peerSignaling=createPeerSignaling(peerOptions);
+const peerjsGateway=createPeerJsGateway({...peerOptions,origin});
 async function peerSettings(req,res,id){
   const answer=(status,value)=>res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(value));
   const owner=accounts.current(req)?.owner;
@@ -229,7 +232,7 @@ const consentTest=consentTestConfig&&createConsentTest({issuer:origin,...consent
 accounts.retryDeletions();
 setInterval(()=>accounts.retryDeletions(),5*60_000).unref();
 
-createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
+const accountServer=createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   const target = new URL(req.url, 'http://localhost');
   const path = target.pathname;
   const forwardedOrigin='https://'+req.headers['x-forwarded-host'];
@@ -278,6 +281,10 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
       return permissions===null?answer(404,{error:'Linked app unavailable.'}):
         permissions===false?answer(422,{error:'This permission cannot be turned off here.'}):answer(200,{permissions});
     })().catch(error=>{if(!res.headersSent)answer(error.status??503,{error:error.status?error.message:'Account controls unavailable.'});});
+    return;
+  }
+  if(path==='/v1/peers/peerjs/session'||path.startsWith('/peerjs/')){
+    void peerjsGateway.handle(req,res,target).catch(()=>{if(!res.headersSent)res.writeHead(503,{'Cache-Control':'no-store'});res.end();});
     return;
   }
   if(path==='/v1/peers'||path.startsWith('/v1/peers/')){
@@ -620,4 +627,6 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   });
   if (req.method === 'HEAD') res.end();
   else createReadStream(file).on('error', () => res.destroy()).pipe(res);
-}).listen(8080, '0.0.0.0');
+});
+peerjsGateway.attach(accountServer);
+accountServer.listen(8080, '0.0.0.0');
