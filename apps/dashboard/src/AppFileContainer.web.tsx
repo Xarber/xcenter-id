@@ -63,7 +63,7 @@ export default function AppFileContainer({ app, service, back }: { app: Containe
         {!collection&&files?.files.map(file=><tr key={file.id}><td>
           <a className="xc-file-name" href={'/account/'+filePath+'/'+file.id}><File size={18}/><strong>{file.name}</strong></a>
         </td><td>{formatBytes(file.size)}</td><td>
-          {!service&&file.browseable&&file.editable&&<div className="xc-file-actions">
+          {!service&&file.browseable&&file.editable&&<div className="xc-file-actions xc-app-file-actions">
             <button type="button" className="xc-file-icon" aria-label={'Rename '+file.name} disabled={edits.busy}
               onClick={()=>edits.setRename({file,name:file.name})}><Pencil size={16}/></button>
             <label className="xc-file-icon" title={'Replace '+file.name}><Replace size={16} aria-hidden/>
