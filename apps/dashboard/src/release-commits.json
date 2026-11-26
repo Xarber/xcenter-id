@@ -1,4 +1,44 @@
 {
+  "0.21.0": {
+    "revision": "7af31bb5dd8bd0c68ef029abf7036bb9af846942",
+    "commits": [
+      {
+        "id": "c5beb384dc730156c3c7a97422520b05218116f0",
+        "title": "chore(release): prepare dashboard 0.20.0",
+        "detail": "Changed areas: CHANGELOG.md, apps/dashboard."
+      },
+      {
+        "id": "e1792a1ce29eeed32d9f6c66fd90436ac6b0c632",
+        "title": "docs(release): record peer update deployment and verification",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/RELEASES.md, docs/operations."
+      },
+      {
+        "id": "bc98bb6dc189f8dfc4f97c9badad49323b90a253",
+        "title": "feat(peers): accept stock PeerJS clients through a scoped gateway",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/INTEGRATION.md, docs/SECURITY.md, services/api, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "8179c233503ff429b157226d0a14d751d709e3ed",
+        "title": "docs(release): record stock PeerJS rollout and checks",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations."
+      },
+      {
+        "id": "0558bbdc468bf4919266c2d8d076e3933bc2a276",
+        "title": "feat(files): allow account edits when both app file flags are set",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/APP_CONTAINER_FILES.md, docs/SECURITY.md, services/api, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "48b543a06c51ec8406117da6e8b4a33bcbd0facd",
+        "title": "feat(files): return SHA-256 hashes in file metadata and listings",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/APP_CONTAINER_FILES.md, services/api, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "7af31bb5dd8bd0c68ef029abf7036bb9af846942",
+        "title": "fix(dashboard): align Expo dependencies with SDK 58",
+        "detail": "Changed areas: apps/dashboard."
+      }
+    ]
+  },
   "0.20.0": {
     "revision": "f49a14ba859cfa015b19a27a177417ee74b8e3c3",
     "commits": [

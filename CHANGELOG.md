@@ -3,6 +3,15 @@
 This archive covers the original AuthNJS source and the X-Center ID rewrite. Earlier entries reconstruct source milestones. Development entries identify unreleased work. There are no published GitHub releases in this history.
 Deployment and native build evidence are recorded in [release documentation](docs/RELEASES.md).
 
+## 0.21.0 · 2026-11-26
+
+Development
+
+### File details and editable app files
+
+- **Recognize files by their contents**. Apps can read the SHA-256 hash in file lists and details to recognize files after a rename.
+- **Edit files an app has made editable**. When an app allows it, rename, replace, or delete files inside its folder.
+
 ## 0.20.0 · 2026-11-26
 
 Development

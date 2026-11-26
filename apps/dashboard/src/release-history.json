@@ -1,5 +1,25 @@
 [
   {
+    "version": "0.21.0",
+    "date": "2026-11-26",
+    "revision": "7af31bb5dd8bd0c68ef029abf7036bb9af846942",
+    "title": "File details and editable app files",
+    "status": "Development",
+    "features": [
+      [
+        "storage",
+        "Recognize files by their contents",
+        "Apps can read the SHA-256 hash in file lists and details to recognize files after a rename."
+      ],
+      [
+        "storage",
+        "Edit files an app has made editable",
+        "When an app allows it, rename, replace, or delete files inside its folder."
+      ]
+    ],
+    "fixes": []
+  },
+  {
     "version": "0.20.0",
     "date": "2026-11-26",
     "revision": "f49a14ba859cfa015b19a27a177417ee74b8e3c3",
