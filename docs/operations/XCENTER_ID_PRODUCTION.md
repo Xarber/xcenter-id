@@ -163,3 +163,9 @@ The retained website process on 18825 and the saved `id.xcenter.it.conf` under `
 The public website serves `d6527c0c8df4dc8ccf88de344c2efe75386bcf22` on loopback 18829. The 82 SDK guides have JavaScript, TypeScript, Swift, Kotlin and Dart views with language-specific APIs or an explicit availability explanation. Staged and public checks passed for the docs, issuer discovery, and delegated-file access boundaries. The website process reported zero restarts at cutover.
 
 The previous web process remains on 18827. Restore the saved `id.xcenter.it.conf` from `/srv/xcenter/infra/changes/pre-dashboard-d6527c0`, validate Nginx, and reload to roll back. Pre-cutover SQLite snapshots passed quick checks under `/srv/xcenter/data/.xcenter-id-rollbacks/pre-dashboard-d6527c0.a5cmc7`.
+
+## 26 November dashboard 0.18.0 rollout
+
+The public issuer serves `be221b024acaadba18263d07ac9b21cd780526da` on loopback 18832. The previous web upstream stays on 18829. Restore the site file saved under `/srv/xcenter/infra/changes/pre-dashboard-be221b0`, validate Nginx, and reload to roll back. Seven online SQLite snapshots passed `quick_check` under `/srv/xcenter/data/.xcenter-id-rollbacks/pre-dashboard-be221b0.nahqEA`. The sample origin, SMTP and mail-client services kept their existing containers.
+
+The [provider quality run](https://github.com/Xarber/xcenter-id/actions/runs/45808789065) passed on the deployed commit. The service reported zero restarts at cutover. Public checks verified the deployed revision, issuer discovery, the 0.18.0 changelog, SDK routes and anonymous denial for administrative search, account settings, uploads and peers. Chrome verified all five language examples on the public append-upload page. Authenticated Chrome verification used an isolated staging administrator. It verified paging, page entry, search and result navigation. The rollout did not designate or change trust for any production registration.

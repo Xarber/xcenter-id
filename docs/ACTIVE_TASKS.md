@@ -616,3 +616,18 @@ The weekly threshold was waived for this assignment. The five-hour window still 
 Local checks passed for 54 API tests, 20 dashboard tests, dashboard TypeScript, 12 SDK tests including Chrome, and Swift OAuth/data-client type checking. No native application build or production deployment was started. Keep AUTHN-159 and native/production evidence open.
 
 UADS §0 pause recorded at 9% five-hour usage remaining, resetting 26 November at 15:09 CET. Weekly usage had 27% remaining and resets 2 December at 15:33 CET. Provider implementation `e81fdca` and SDK implementation `b595357` were pushed to their respective `testing` branches. Next, complete AUTHN-159’s per-operation SDK pages, run the provider and SDK quality workflows, and exercise a two-client WebRTC exchange. Reconcile the native and deployment queues before any build-triggering promotion.
+
+### 26 November verification and rollout
+
+| ID | State | Evidence and remaining check |
+| --- | --- | --- |
+| AUTHN-155 | Implemented | Provider regression confirms authentication for verified and unverified email removal. Physical-device passkey and cancellation remain unverified. |
+| AUTHN-156 | Implemented | Native session handoff and QR parsing tests passed. Verify camera zoom, sheet reuse and second-screen approval on a physical device. |
+| AUTHN-157 | Implemented | Provider upload regression, SDK resume and commit regression, and the SDK platform source matrix passed. Authenticated production transfer remains unverified. |
+| AUTHN-158 | Implemented | Consent, revocation and trust regressions passed. Isolated Chrome verified the confirmation popup. Production discovery advertises both scopes and denies anonymous access. No production app trust was changed. Native rendering and a production trusted-app session remain unverified. |
+| AUTHN-159 | Verified | Every new account, resumable-upload and peer operation has a dedicated SDK page with exact calls and outputs. Catalog checks passed for every language, public Chrome validated all five examples for Append a file chunk, and the SDK skill and source are updated. |
+| AUTHN-160 | Verified | Two real Chrome WebRTC peers exchanged an offer and answer through the loopback API and delivered a data-channel payload. API regressions cover app isolation, visibility and invalidation. Production denies unsigned peer requests. TURN and cross-network behavior remain environment-dependent. |
+| AUTHN-161 | Implemented | Server-side account listing passed a 520-account fixture. Staging Chrome verified next-page and page entry against the server. Other lists paginate returned records. Server caps still apply to legacy app, developer, support and username lists. Unified Administration search can locate items outside those Administration list windows. Native interaction remains unverified. |
+| AUTHN-162 | Implemented | Fixed a same-origin GET rejection found before deploying. The search now uses recent administrator read authorization. Isolated staging Chrome verified a search and navigating to the matching user. Native navigation remains unverified. |
+
+Web and API 0.18.0 are live at `be221b0`. Provider quality passed and SDK source is available on `main`. The native [preview run 45808671453](https://github.com/Xarber/xcenter-id/actions/runs/45808671453) was submitted and is running. After completion, inspect the four jobs and verify APK/AAB signing, iOS package formats and native flows before recording a release. See [release status](RELEASES.md#26-november-0180-preview-and-deployment) and [production verification and rollback](operations/XCENTER_ID_PRODUCTION.md#26-november-dashboard-0180-rollout).
