@@ -39,3 +39,9 @@ Web onboarding captures are tracked under `apps/dashboard/public/assets/onboardi
 The [native preview run](https://github.com/Xarber/xcenter-id/actions/runs/45808671453) was submitted from `testing` at `82db70d` for iOS unsigned IPA, iOS Simulator, Android signed universal APK, and Android signed AAB. The subsequent deployment change fixes a server-only Administration search issue. Production serves `be221b0` with the same web and native client source. See the [deployment receipt](operations/XCENTER_ID_PRODUCTION.md#26-november-dashboard-0180-rollout). The preview workflow produces CI artifacts. Publication and physical-device verification are separate.
 
 SDK source `73ac2ce` is on the SDK repository's `testing`, `beta`, and `main` branches. The [quality matrix](https://github.com/Xarber/xcenter-id-sdk/actions/runs/45807687102) passed for the functional source `b595357`. The follow-up commit adds two tests only, and all 14 SDK tests passed locally with Chrome enabled. The npm package versions in source are 0.4.0 for client, server, and web and 0.6.0 for Expo.
+
+## 26 November 0.19.0 app container files
+
+The [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45822837633) was dispatched from `testing` at `f376cfb` for iOS device, iOS Simulator, signed Android APK and signed Android AAB. Two subsequent server-only commits authenticated stored file visibility and added a regression. The web/API rollout at `2a8f51d` uses the same dashboard source. See [production and rollback verification](operations/XCENTER_ID_PRODUCTION.md#26-november-dashboard-0190-rollout). This preview does not publish native releases.
+
+Chrome against isolated fixtures verified the Files changes and captured representative web views at 390 px and 1,280 px. Installed iOS and Android behavior and native screenshots remain unverified. The prior 0.18.0 [preview run 45808671453](https://github.com/Xarber/xcenter-id/actions/runs/45808671453) completed successfully.

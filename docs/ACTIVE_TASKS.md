@@ -651,3 +651,10 @@ Acceptance for AUTHN-163: a registered app with user consent can save a Beat Sab
 | AUTHN-164 | Implemented | Ordinary folder rows include recursive byte totals. Container and collection rows show scoped sizes. The API regression verifies nested sizes update after moving a subfolder. Verify both platform layouts. |
 
 The user authorized work despite the five-hour checkpoint. Provider API, dashboard TypeScript and tests, Node SDK tests, and Swift protocol source checks passed locally. The SDK scripts and app tests are linked from the [container file guide](APP_CONTAINER_FILES.md). Record CI and deployment evidence before marking the verification complete.
+
+### App container verification on 26 November
+
+- AUTHN-163 is verified for web and the API at `2a8f51d`. The [provider quality check](https://github.com/Xarber/xcenter-id/actions/runs/45822919661) passed for the functional source. All 56 local provider tests passed including visibility-tampering denial. Staging verified authenticated account and service transfers and subsequent visibility changes. Chrome verified a fixture backup download, absence of record controls in Browseable-only mode and service files alongside record collections. Physical native checks remain open.
+- AUTHN-164 is verified in the API and web. The nested-folder move regression passed, and Chrome verified recursive sizes at mobile and desktop widths. Physical native layout remains open.
+- Hosted SDK pages cover the new operations in five languages. SDK source `70c3b31` is on `testing`. All 15 JavaScript tests passed locally. The [SDK quality run](https://github.com/Xarber/xcenter-id-sdk/actions/runs/45822473099) passed web, Android/JVM and Flutter/Dart. Both changed Swift modules passed targeted compilation. The local full package build was blocked by the Command Line Tools installation’s missing SwiftUI macro plugin. The remote Swift job is pending. Promote the SDK after it passes.
+- [Native preview 45822837633](https://github.com/Xarber/xcenter-id/actions/runs/45822837633) is running. Review iOS device and Simulator artifacts and verify the Android APK and AAB. No native release was published.
