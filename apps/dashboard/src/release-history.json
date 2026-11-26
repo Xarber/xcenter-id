@@ -1,5 +1,47 @@
 [
   {
+    "version": "0.18.0",
+    "date": "2026-11-26",
+    "revision": "c71f3e2b755255cd87d2d2d543f4b9f85d7988ee",
+    "title": "Trusted apps and Administration search",
+    "status": "Development",
+    "features": [
+      [
+        "shield",
+        "Choose what trusted apps can manage",
+        "Grant overview or account settings access separately, with confirmation for sensitive permissions."
+      ],
+      [
+        "storage",
+        "Resume larger uploads from apps",
+        "Supported integrations can resume a transfer up to the remaining storage on your account."
+      ],
+      [
+        "people",
+        "Find records across Administration",
+        "Search users, registrations, developers, support requests, username requests and storage."
+      ],
+      [
+        "people",
+        "Connect app users over WebRTC",
+        "Verified apps can enable signaling and optionally make peers discoverable."
+      ],
+      [
+        "key",
+        "Approve device sign-in from the app",
+        "Zoom the QR scanner and approve with the account already selected in the native app."
+      ],
+      [
+        "storage",
+        "Browse long lists by page",
+        "Choose 10, 25, 50 or 100 rows per page, or enter a page number."
+      ]
+    ],
+    "fixes": [
+      "Email removal now opens identity confirmation when needed."
+    ]
+  },
+  {
     "version": "0.17.0",
     "date": "2026-11-25",
     "revision": "6acb662acd29684ca5c67f6a53d1939ab661f706",

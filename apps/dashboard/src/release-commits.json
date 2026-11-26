@@ -1,4 +1,89 @@
 {
+  "0.18.0": {
+    "revision": "c71f3e2b755255cd87d2d2d543f4b9f85d7988ee",
+    "commits": [
+      {
+        "id": "86395cea28f5547ed31849d5cc36554221ddee86",
+        "title": "docs(testing): record callback approval and CORS verification",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "db0c163f6ae651d116c4e18426d415ffef5e6b22",
+        "title": "docs(integration): link to the published SDK reference",
+        "detail": "Changed areas: skills/integrate-xcenter-id."
+      },
+      {
+        "id": "7124b6b1e1683bebfe2ff54e2f7a4e58fc08177a",
+        "title": "chore(release): prepare callback approval deployment",
+        "detail": "Changed areas: CHANGELOG.md, apps/dashboard."
+      },
+      {
+        "id": "07eb6db1d4b5e910687cbba6bcf4b983f49db249",
+        "title": "docs(ops): record X-Center ID 0.17.0 rollout",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations."
+      },
+      {
+        "id": "6c94c19c811cf1dd90fbe9d463f268cd0000ef1e",
+        "title": "docs(integration): explain SDK configuration and managed sign-in",
+        "detail": "Changed areas: docs/INTEGRATION.md, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "7cf130df65bd13e81c9b1c85f5674c6a920ebd13",
+        "title": "feat(docs): add a searchable SDK function reference",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/INTEGRATION.md, services/api."
+      },
+      {
+        "id": "48a38859f10024bd0d26092b38435c9e4c69c3f3",
+        "title": "fix(docs): improve guide contrast and code wrapping",
+        "detail": "Changed areas: apps/dashboard."
+      },
+      {
+        "id": "6528cae7cc74f2967030c3101a7beb89ef6d53f8",
+        "title": "docs(ops): record SDK reference publication and checks",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations."
+      },
+      {
+        "id": "d6527c0c8df4dc8ccf88de344c2efe75386bcf22",
+        "title": "feat(docs): add exact SDK language views",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/INTEGRATION.md."
+      },
+      {
+        "id": "aca981b250da9c9039205ed7381a35a995f82c07",
+        "title": "docs(ops): record SDK language coverage and deployment",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md, docs/operations."
+      },
+      {
+        "id": "a27574fc6335040ffb87105978e66efe48076b34",
+        "title": "docs(queue): checkpoint account and SDK follow-up",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "aafbc8d3d0332fe178f00f3abc6493dcbc75113c",
+        "title": "feat(account): checkpoint confirmation, uploads and peer signaling",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, services/api."
+      },
+      {
+        "id": "ed63412fbeb50f2070940e3e6a348e64fee25b18",
+        "title": "docs(queue): record pagination and admin search",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "e81fdca87089ea6248daa6863d2ec09a22676cf0",
+        "title": "feat(account): add trusted app consent and account SDK capabilities",
+        "detail": "Changed areas: apps/dashboard, docs/ACTIVE_TASKS.md, docs/INTEGRATION.md, docs/SECURITY.md, services/api, skills/integrate-xcenter-id."
+      },
+      {
+        "id": "70fedf7577d0f10268da78f8600f25216c965a56",
+        "title": "docs(queue): record five-hour checkpoint and verification gaps",
+        "detail": "Changed areas: docs/ACTIVE_TASKS.md."
+      },
+      {
+        "id": "c71f3e2b755255cd87d2d2d543f4b9f85d7988ee",
+        "title": "feat(dashboard): document SDK operations and page account listings",
+        "detail": "Changed areas: apps/dashboard, docs/API.md, docs/INTEGRATION.md, docs/SECURITY.md, docs/TESTING.md, services/api."
+      }
+    ]
+  },
   "0.17.0": {
     "revision": "6acb662acd29684ca5c67f6a53d1939ab661f706",
     "commits": [

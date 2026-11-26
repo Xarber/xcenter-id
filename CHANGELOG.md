@@ -3,6 +3,23 @@
 This archive covers the original AuthNJS source and the X-Center ID rewrite. Earlier entries reconstruct source milestones. Development entries identify unreleased work. There are no published GitHub releases in this history.
 Deployment and native build evidence are recorded in [release documentation](docs/RELEASES.md).
 
+## 0.18.0 · 2026-11-26
+
+Development
+
+### Trusted apps and Administration search
+
+- **Choose what trusted apps can manage**. Grant overview or account settings access separately, with confirmation for sensitive permissions.
+- **Resume larger uploads from apps**. Supported integrations can resume a transfer up to the remaining storage on your account.
+- **Find records across Administration**. Search users, registrations, developers, support requests, username requests and storage.
+- **Connect app users over WebRTC**. Verified apps can enable signaling and optionally make peers discoverable.
+- **Approve device sign-in from the app**. Zoom the QR scanner and approve with the account already selected in the native app.
+- **Browse long lists by page**. Choose 10, 25, 50 or 100 rows per page, or enter a page number.
+
+### Fixes & Improvements
+
+- Email removal now opens identity confirmation when needed.
+
 ## 0.17.0 · 2026-11-25
 
 Development
