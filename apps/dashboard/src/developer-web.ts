@@ -4,9 +4,9 @@ export const optionalClaims:ClaimRequirements={email:false,age_range:false};
 export type AppRegistration={id:string;name:string;description:string;repository:string;icon:string|null;callbacks:string[];
   callback:string;callbackApproved?:boolean;native?:boolean;local?:boolean;client?:string;status:'active'|'pending'|'revoked';verified?:boolean;requirements?:ClaimRequirements};
 
-export async function developerApi(path:string,body?:object,method=body?'POST':'GET'){
+export async function developerApi(path:string,body?:object,method=body?'POST':'GET',signal?:AbortSignal){
   const response=await fetch('/account/developer/'+path,{
-    method,cache:'no-store',headers:{'X-AuthNJS-Request':'developer-portal',...(body?{'Content-Type':'application/json'}:{})},
+    method,signal,cache:'no-store',headers:{'X-AuthNJS-Request':'developer-portal',...(body?{'Content-Type':'application/json'}:{})},
     ...(body?{body:JSON.stringify(body)}:{}),
   });
   const value=await response.json().catch(()=>null);

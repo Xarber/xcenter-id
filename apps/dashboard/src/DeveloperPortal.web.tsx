@@ -8,7 +8,7 @@ import {confirmIdentity} from './Reauthenticate.web';
 import {api} from './web-account';
 import TrustBadges from './TrustBadges.web';
 import { ArrowLeft, Braces, ChevronRight, Database, Grid2X2, ImagePlus, Plus, Trash2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { developerApi, optionalClaims, readAppIcon, type AppRegistration } from './developer-web';
 
 type Draft=Pick<AppRegistration,'name'|'description'|'repository'|'icon'|'callbacks'|'native'|'local'>;
@@ -19,17 +19,20 @@ function PeerSettings({registration}:{registration:string}){
   const [busy,setBusy]=useState(false);
   const [feedback,setFeedback]=useState('');
   const path='apps/'+registration+'/peers';
+  const requests=useRef<AbortController|null>(null);
   useEffect(()=>{
-    let active=true;
-    void developerApi(path).then(value=>{if(active)setPolicy(value);})
-      .catch(error=>{if(active)setFeedback(error.message);});
-    return ()=>{active=false;};
+    const controller=new AbortController();
+    requests.current=controller;
+    void developerApi(path,undefined,'GET',controller.signal).then(value=>{if(!controller.signal.aborted)setPolicy(value);})
+      .catch(error=>{if(!controller.signal.aborted)setFeedback(error.message);});
+    return ()=>{controller.abort();};
   },[path]);
   async function save(change:{enabled:boolean;discovery:boolean}){
     setBusy(true);setFeedback('');
-    try{setPolicy(await developerApi(path,change));}
-    catch(error){setFeedback(error instanceof Error?error.message:'Could not save peer settings.');}
-    finally{setBusy(false);}
+    const signal=requests.current?.signal;
+    try{const saved=await developerApi(path,change,'POST',signal);if(!signal?.aborted)setPolicy(saved);}
+    catch(error){if(!signal?.aborted)setFeedback(error instanceof Error?error.message:'Could not save peer settings.');}
+    finally{if(!signal?.aborted)setBusy(false);}
   }
   return <section className="xc-card xc-pad xc-stack">
     <h2>Peer connections</h2>
@@ -37,9 +40,10 @@ function PeerSettings({registration}:{registration:string}){
     {policy&&<>
       <label className="xc-list-row"><span>Enable peer signaling</span><input type="checkbox" role="switch"
         checked={policy.enabled} disabled={busy} onChange={event=>void save({...policy,enabled:event.target.checked})}/></label>
-      <label className="xc-list-row"><span>Allow apps to list discoverable peers</span><input type="checkbox" role="switch"
+      <label className="xc-list-row"><span>List discoverable peers in this app</span><input type="checkbox" role="switch"
         checked={policy.discovery} disabled={busy||!policy.enabled} onChange={event=>void save({...policy,discovery:event.target.checked})}/></label>
-      <a href="/docs/sdk/peer-signaling">Signaling reference</a>
+      <p>Only peers using this registration can list peers that opt in to discovery.</p>
+      <a href="/docs/sdk/list-peers">Peer discovery reference</a>
     </>}
     {feedback&&<p role="alert">{feedback}</p>}
   </section>;
@@ -69,7 +73,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
     if(restored)edit(restored);
   }).catch(error=>setNotice(error.message));},[]);
   function edit(item:AppRegistration|'create'|null){
-    setSelection(item);setDeleteConfirm(false);setNotice('');setSecret(null);
+    setSelection(item);setShowConfiguration(false);setDeleteConfirm(false);setNotice('');setSecret(null);
     setRequirements(item&&item!=='create'?(item.requirements??optionalClaims):optionalClaims);
     setDraft(item&&item!=='create'?{...item,callbacks:item.callbacks??[item.callback]}:blank());
   }
@@ -86,7 +90,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
     });
   }
 
-  if(!selection)return <div className="xc-stack">
+  if(!selection)return <div key="registered-apps" className="xc-stack">
     <div className="xc-portal-toolbar"><h2>Registered apps</h2>
       <button className="xc-button xc-primary" onClick={()=>edit('create')} disabled={!apps}><Plus size={18}/> Register an app</button></div>
     <a href="/profile/developer">Manage your developer profile</a>
@@ -107,7 +111,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
     setShowConfiguration(false);
     void load().then(items=>{const app=items.find(item=>item.id===existing.id);if(app)edit(app);}).catch(error=>setNotice(error.message));
   }}/>;
-  return <div className="xc-stack">
+  return <div key={existing?.id??'create-app'} className="xc-stack">
     <button type="button" className="xc-button xc-secondary xc-self-start" onClick={()=>{history.replaceState(history.state,'','/developer');edit(null);}} disabled={busy}><ArrowLeft size={16}/> Registered apps</button>
     {existing?.status==='active'&&<a className="xc-button xc-secondary xc-self-start" href={'/developer/storage/'+existing.id}><Database size={17}/> {existing.verified?'Manage app storage':'Manage sharing requests'}</a>}
     {existing&&<button type="button" className="xc-button xc-secondary xc-self-start" onClick={()=>setShowConfiguration(true)}><Braces size={17}/> App configuration</button>}

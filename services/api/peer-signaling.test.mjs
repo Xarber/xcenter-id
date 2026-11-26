@@ -48,6 +48,8 @@ test('peers require app and account credentials, enforce discovery, and expire',
     policy.get('a').discovery=true;
     assert.deepEqual(await (await request('alice',directory(alice),{peer:alice})).json(),{peers:[bob.id]});
     assert.deepEqual(await (await request('bob',directory(bob),{peer:bob})).json(),{peers:[]});
+    assert.deepEqual(await (await request('other',directory(other),{peer:other})).json(),{peers:[]});
+    assert.equal((await request('other',directory(alice),{peer:alice})).status,404);
     assert.equal((await request('other',poll(alice),{peer:alice})).status,404);
     assert.equal((await request('alice',poll(bob),{peer:bob})).status,404);
     assert.equal((await request('alice',poll(alice))).status,404);
@@ -56,6 +58,9 @@ test('peers require app and account credentials, enforce discovery, and expire',
     assert.equal((await request('bob',poll(bob),{peer:bob,body:{...offer,to:alice.id}})).status,202);
     assert.deepEqual(await (await request('alice',poll(alice),{peer:alice})).json(),{messages:[{...offer,from:bob.id}]});
     assert.deepEqual(await (await request('alice',poll(alice),{peer:alice})).json(),{messages:[]});
+    const hangup={type:'hangup',data:{attempt:'synthetic'}};
+    assert.equal((await request('bob',poll(bob),{peer:bob,body:{...hangup,to:alice.id}})).status,202);
+    assert.deepEqual(await (await request('alice',poll(alice),{peer:alice})).json(),{messages:[{from:bob.id,...hangup}]});
     policy.get('a').enabled=false;
     assert.equal((await request('alice',poll(alice),{peer:alice})).status,403);
     policy.get('a').enabled=true;

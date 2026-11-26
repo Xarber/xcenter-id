@@ -72,3 +72,5 @@ Protected data includes storage totals, public-profile visibility settings, and 
 Peer signaling limits registrations to 2,048 total, 256 per app and eight per account per app. An active peer allows up to 35 operations per ten-second window. The queue holds 24 messages per recipient, with a 16 KiB request limit per signal and a 90-second idle lease. Signaling state is held in memory, so reconnect after an issuer restart. Test any required TURN relay separately under the app's networking configuration.
 
 See [app container file boundaries](APP_CONTAINER_FILES.md#security-and-storage) for scoped binary uploads, dashboard visibility, quota and unlink behavior.
+
+The shared peer service derives its namespace from the authenticated registration for discovery, offers, answers, ICE candidates and hang-ups. The signaling body does not choose a namespace. Each request checks the live app policy and peer ownership. The browser adapter accepts incoming media only after the host app agrees to the invitation. Keep microphone, camera, display and file permissions tied to explicit user actions. Set receiver-side file limits and treat remote metadata and bytes as untrusted.

@@ -20,7 +20,7 @@ Every operation is under `/v1/apps/{clientId}/files`. Send the matching scoped u
 | PUT `/{id}` | `{browseable: boolean}` | `{ok:true}`. User container only. |
 | DELETE `/{id}` | Committed file ID | `{ok:true}`. Removes the file and reclaims its charged bytes. |
 
-Use the [SDK guide](https://id.xcenter.it/docs/sdk/app-container-files) for a language-specific start and the [JS and native adapter guide](https://github.com/Xarber/xcenter-id-sdk/blob/70c3b31cafee0052831d1295375845bd97222064/docs/APP_CONTAINER_FILES.md) for a backup example. Files sit at the root of the app container beside record collections. Ordinary account folder listings include each direct child folder’s recursive `size` in bytes, computed from committed nested files. Record collection folder sizes use their charged record bytes. The account file browser shows only the sum of the files available in a Browseable-only folder view.
+Use the [SDK guide](https://id.xcenter.it/docs/sdk/app-container-files) for a language-specific start and the [JS and native adapter guide](https://github.com/Xarber/xcenter-id-sdk/blob/70c3b31cafee0052831d1295375845bd97222064/docs/APP_CONTAINER_FILES.md) for a backup example. The app container browser shows record collections first, with binary files below them. Ordinary account folder listings include each direct child folder’s recursive `size` in bytes, computed from committed nested files. Record collection folder sizes use their charged record bytes. The account file browser shows only the sum of the files available in a Browseable-only folder view.
 
 ## Security and storage
 

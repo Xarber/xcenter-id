@@ -3,7 +3,7 @@ import {readJson} from './server.mjs';
 
 const peerId = /^[a-zA-Z0-9_-]{24}$/;
 const proofPattern = /^[a-zA-Z0-9_-]{43}$/;
-const kinds = new Set(['offer','answer','candidate']);
+const kinds = new Set(['offer','answer','candidate','hangup']);
 const headers = {
   'Access-Control-Allow-Origin':'*','Cache-Control':'no-store',
   'Content-Type':'application/json','X-Content-Type-Options':'nosniff',
@@ -74,7 +74,7 @@ export function createPeerSignaling({authenticate,settings,now=Date.now}){
       try{input=await readJson(req,16*1024);}catch{return send(res,422,{error:'Invalid signaling message.'});}
       if(!input||!peerId.test(input.to??'')||!kinds.has(input.type)||!Object.hasOwn(input,'data')||
         input.data===null||typeof input.data!=='object'||Array.isArray(input.data)){
-        return send(res,422,{error:'Choose a destination and an offer, answer, or ICE candidate object.'});
+        return send(res,422,{error:'Choose a destination and an offer, answer, ICE candidate, or hang-up object.'});
       }
       const live=await authenticate(token);
       if(live?.owner!==peer.owner||live?.client!==peer.client||peers.get(key)!==peer||!valid(peer,now())){

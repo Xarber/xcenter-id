@@ -1,4 +1,4 @@
-export const sdkSource = 'https://github.com/Xarber/xcenter-id-sdk/tree/70c3b31cafee0052831d1295375845bd97222064';
+export const sdkSource = 'https://github.com/Xarber/xcenter-id-sdk/tree/73712952aa263ae091a5ca78001c592f3d11968f';
 
 export const groups = {
   setup: 'Setup & configuration',
@@ -493,7 +493,7 @@ const accountAndTransport: Reference[] = [
     access:"files_write",flow:["Unfinished transfer ID","Release reservation","Cancellation confirmed"],args:[["id","string","Transfer ID from the start response. Preserve it across interruptions."],signal],
     example:"const result = await user.files.transfers.cancel(transferId);",output:"{\"ok\":true}",related:"upload-status"},
   {group:"advanced",id:"list-peers",title:"List discoverable peers",signature:"user.peers.list(peer, options?)",
-    description:"Fetch discoverable peers in the current registration when discovery is enabled. Your own peer is excluded.",
+    description:"Enable peer signaling and discovery in Developer Apps, then open a peer with discoverable: true to appear in the list. This method returns only other opted-in peers using the same registration. It works for callers who opt out of being listed. Other apps use their own isolated directories.",
     access:"Verified registration, enabled peer connections and a user access token",flow:["Active peer session","Query the app directory","Discoverable peer IDs"],args:[["peer","PeerSession","Your own session from peers.open. Keep the proof private."],signal],
     example:"const result = await user.peers.list(peer);",output:"{\"peers\":[\"dHGGbnxVRIkI4K-I7Fo_tr0o\"]}",related:"peer-signaling"},
   {group:"advanced",id:"receive-peer-messages",title:"Receive peer messages",signature:"user.peers.receive(peer, options?)",
@@ -502,7 +502,7 @@ const accountAndTransport: Reference[] = [
     example:"const result = await user.peers.receive(peer);",output:"{\"messages\":[{\"from\":\"dHGGbnxVRIkI4K-I7Fo_tr0o\",\"type\":\"candidate\",\"data\":{\"candidate\":\"candidate:…\",\"sdpMid\":\"0\",\"sdpMLineIndex\":0}}]}",related:"send-peer-message"},
   {group:"advanced",id:"send-peer-message",title:"Send a peer message",signature:"user.peers.send(peer, message, options?)",
     description:"Send signaling within the same app namespace. HTTP 202 confirms queueing. A live peer must poll to retrieve the message. Each request is limited to 16 KiB.",
-    access:"Verified registration, enabled peer connections and a user access token",flow:["Active peer and signal","Queue for destination","Signal accepted"],args:[["peer","PeerSession","Your own session from peers.open. Keep the proof private."],["message","{to, type, data}","Destination ID, offer/answer/candidate message type and JSON object payload."],signal],
+    access:"Verified registration, enabled peer connections and a user access token",flow:["Active peer and signal","Queue for destination","Signal accepted"],args:[["peer","PeerSession","Your own session from peers.open. Keep the proof private."],["message","{to, type, data}","Destination ID, offer/answer/candidate/hangup message type and JSON object payload."],signal],
     example:"const result = await user.peers.send(peer, {to: remotePeerId, type: \"offer\", data: {type: offer.type, sdp: offer.sdp}});",output:"{\"accepted\":true}",related:"receive-peer-messages"},
   {group:"advanced",id:"close-peer",title:"Close a peer registration",signature:"user.peers.close(peer, options?)",
     description:"Remove the signaling registration and its queued messages. Close the local WebRTC connection separately.",
@@ -523,8 +523,17 @@ const accountAndTransport: Reference[] = [
     args:[['file','{name, size, folder?}','Name, byte size and optional account folder ID.'],['readChunk','(offset, length) → base64 string or Promise','Read exactly those bytes from the source.'],['options.id?','string','Existing transfer ID to resume.'],['options.onProgress?','(progress) → void','Receives id, received and total.'],signal],
     example:'const saved = await user.files.uploadChunks({name, size}, readBase64Chunk, {id: existingTransferId, onProgress: showProgress});',
     output:'{"id":"3aa33912-a1b8-4c39-ab4a-ac63d15adf71"}',related:'upload-file'},
+  {group:'advanced',id:'browser-peer-connections',title:'Connect browser peers for media and data',signature:'openPeerConnections(user, options?)',
+    description:'Open a browser WebRTC host in the signed-in app’s own peer namespace. The host handles offers, answers and hang-ups for independent connections. The application handles user invitations, permissions, and local media tracks. Use an approved microphone, camera or display stream for calls, or use a reliable data channel to exchange files.',
+    flow:['Active verified app session','Accept an invitation and negotiate WebRTC','Exchange audio, video or data'],
+    args:[['user','UserClient','Signed-in SDK client for the verified registration.'],['options.discoverable?','boolean','Whether this peer should appear in the registration’s directory. Defaults to false.'],
+      ['options.configuration?','RTCConfiguration','WebRTC settings such as STUN and TURN servers.'],['options.onInvite?','callback','Return false to decline or return an optional MediaStream and connection callback to accept.'],
+      ['options.onError?','callback','Display signaling and connection errors.']],
+    example:'import {openPeerConnections} from "@xcenter-id/web/peers";\nconst host = await openPeerConnections(user, {onInvite: approveInvitation});\nconst peers = await host.listDiscoverablePeers();\nconst call = await host.connect(peers[0], {stream: approvedMedia});',
+    output:'An active peer host and a negotiated WebRTC connection. Close the host on sign-out and stop tracks you opened.',
+    related:'list-peers'},
   {group:'advanced',id:'peer-signaling',title:'Open a WebRTC peer',signature:'user.peers.open({discoverable}, options?)',
-    description:'Enable Peer connections in Developer Apps for your verified registration. The server scopes opaque peer IDs to the registration. Keep the proof private. Use peers.send for offer, answer and candidate messages, peers.receive to poll, and peers.close when finished. The optional peers.list directory only shows peers that opt in when app discovery is enabled. Media and data travel through your own WebRTC connection. A TURN server may be needed on restrictive networks.',
+    description:'Enable Peer connections in Developer Apps for your verified registration. The server scopes opaque peer IDs to the registration. Keep the proof private. Use peers.send for offer, answer, candidate and hangup messages, peers.receive to poll, and peers.close when finished. The optional peers.list directory only shows peers that opt in when app discovery is enabled. Media and data travel through your own WebRTC connection. A TURN server may be needed on restrictive networks.',
     access:'Verified registration, enabled peer connections and a user access token',flow:['Open app-scoped peer','Exchange signaling messages','Connect through WebRTC'],
     args:[['discoverable','boolean','Set true to appear in the app directory if the developer enabled discovery.'],signal],
     example:'const peer = await user.peers.open({discoverable: false});',output:'{"id":"<opaque-peer-id>","proof":"<keep-private>","expiresIn":90}'},

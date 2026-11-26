@@ -560,6 +560,7 @@ const platformOnly: Partial<Record<string,Language>> = {
   'swift-browser-sign-in':'swift','android-browser-sign-in':'kotlin','flutter-browser-sign-in':'dart','close-dart-clients':'dart','jvm-data-client':'kotlin','swift-config-data':'swift',
 };
 const unavailable: Record<string,string> = {
+  'browser-peer-connections':'The WebRTC browser adapter is available in JavaScript and TypeScript. Use the Peer signaling pages with your platform’s WebRTC and media APIs.',
   revoke:'The issuer currently supports revocation through Linked apps. There is no native revoke operation.',
   'server-user-info':'The separate subject-binding method belongs to the Node adapter. Native adapters validate the returned subject during code exchange and refresh.',
   'public-avatar-url':'The native SDK exposes publicAvatar to fetch image bytes. This URL-only helper is available in JavaScript and TypeScript.',

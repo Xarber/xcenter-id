@@ -39,9 +39,6 @@ export default function AppFileContainer({ app, service, back }: { app: Containe
     <table className="xc-file-table"><thead><tr><th scope="col">Name</th><th scope="col">Size</th><th scope="col"><span className="xc-sr">Actions</span></th></tr></thead>
       <tbody>
         {app.canManage&&!service&&<tr><td colSpan={3}><button className="xc-file-new" type="button" disabled={busy} onClick={()=>editor.create(collection)}><Plus size={18}/> New record</button></td></tr>}
-        {!collection&&files?.files.map(file=><tr key={file.id}><td>
-          <a className="xc-file-name" href={'/account/'+filePath+'/'+file.id}><File size={18}/><strong>{file.name}</strong></a>
-        </td><td>{formatBytes(file.size)}</td><td/></tr>)}
         {folder?.collections.map(item=><tr key={item.collection}><td>
           <button className="xc-file-new" type="button" onClick={()=>setCollection(item.collection)}><Folder size={18}/>{item.collection}</button>
         </td><td>{formatBytes(item.bytes)}</td><td/></tr>)}
@@ -51,6 +48,9 @@ export default function AppFileContainer({ app, service, back }: { app: Containe
             {app.canManage&&!service&&<button className="xc-file-icon" type="button" disabled={busy} aria-label={'Edit '+record.id} onClick={()=>void editor.edit(collection,record.id)}><Pencil size={16}/></button>}
           </div></td>
         </tr>)}
+        {!collection&&files?.files.map(file=><tr key={file.id}><td>
+          <a className="xc-file-name" href={'/account/'+filePath+'/'+file.id}><File size={18}/><strong>{file.name}</strong></a>
+        </td><td>{formatBytes(file.size)}</td><td/></tr>)}
       </tbody>
     </table>
     {folder?.nextCursor && <button className="xc-button xc-secondary" disabled={loading} onClick={() => void more()}>Load more</button>}

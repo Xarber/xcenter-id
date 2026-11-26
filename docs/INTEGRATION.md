@@ -26,3 +26,9 @@ Use the [resumable upload guide](https://id.xcenter.it/docs/sdk/resumable-upload
 ### Stay signed in
 
 Request `offline_access` by default for ordinary account sign-in. The hosted X-Center ID consent screen provides the **Stay signed in** toggle, so skip any duplicate prompt in the app. For an intentionally short session or an app without secure refresh-token handling, omit the scope. If the issuer returns no refresh token, complete sign-in and end the app session by the issuer access token’s expiry. [SDK session setup](https://github.com/Xarber/xcenter-id-sdk/blob/main/docs/CONFIGURATION.md#ask-to-stay-signed-in)
+
+### Peer discovery and media
+
+Enable **Peer connections** and **List discoverable peers in this app** for a verified registration. Pass `{discoverable: true}` when opening a peer that should appear in the directory. Call `user.peers.list(session)` to list other opted-in peers on the same registration. A different app cannot discover them, even if it is signed in as the same account.
+
+For browser voice calls, video calls, screen sharing and file transfer over WebRTC, use the [browser peer adapter](https://github.com/Xarber/xcenter-id-sdk/blob/73712952aa263ae091a5ca78001c592f3d11968f/docs/PEER_CONNECTIONS.md). The app handles invitations, media consent, and file acceptance. Native apps can connect their platform media implementation to the SDK signaling methods.

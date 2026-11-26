@@ -669,3 +669,14 @@ The user authorized work despite the five-hour checkpoint. Provider API, dashboa
 | AUTHN-168 | Expand Peer connections to cover the capabilities offered by PeerJS, including voice calls, video calls, screen sharing and, if feasible, file transfers. | Queued | Map the [PeerJS API](https://peerjs.com/) against current X-Center signaling. Preserve app isolation while adding or adapting media and data APIs. Verify two-peer calls, screen-sharing consent and stop behavior on supported platforms. Evaluate bounded chunked file transfer through data channels and document supported platforms, permissions, and ICE/TURN requirements in the SDK and integration guide. Depends on AUTHN-167 for discovery examples. |
 
 The user requested a queue-only checkpoint. Resume these items after usage resets. No implementation, build or deployment started for this batch.
+
+### Browser and peer verification
+
+| ID | State | Evidence and remaining checks |
+| --- | --- | --- |
+| AUTHN-165 | Implemented | Web and native app storage render record collections and rows above binary files. Chrome at 390 and 1,280 pixels verified service row order and Browseable-only downloads. Native layout still needs installed verification. |
+| AUTHN-166 | Verified | The portal uses separate keyed list and app views. Peer settings cancel their requests on unmount. In Chrome at 390 and 1,280 pixels, App A → Back → App B → Back → App A displayed a single panel and the correct app settings. |
+| AUTHN-167 | Verified | The portal and SDK explain both discovery opt-ins. Provider tests verify same-app listing and refusals for cross-app discovery and signaling even when the account is the same. |
+| AUTHN-168 | Implemented | The browser SDK accepts app-managed invitations and connects independent WebRTC sessions through one tenant-isolated signaling service. Chrome tests cover audio/video tracks, a synthetic screen-track replacement, ordered file chunks, and hanging up one of two parallel connections. Verify real system screen selection, cross-network TURN, and native platforms separately. The adapter uses X-Center's API. Compatibility with the unmodified PeerJS client protocol remains open. |
+
+The shared service derives the namespace from the live authenticated client registration for every operation. Each app receives the same feature surface within its namespace. Running a server process per app is unnecessary.

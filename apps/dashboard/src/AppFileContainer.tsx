@@ -57,13 +57,6 @@ export default function AppFileContainer({ app, token, colors, back, service }: 
     {!!editor.message&&<Text accessibilityLiveRegion="polite" style={{color:colors.ink}}>{editor.message}</Text>}
     <View style={fileRow}><Text accessibilityRole="header" style={{flex:1,color:colors.muted}}>Name</Text>
       <Text accessibilityRole="header" style={{color:colors.muted}}>Size</Text></View>
-    {!collection&&files?.files.map(file=><View style={fileRow} key={file.id}>
-      <View style={{flex:1}}>{action(file.name,()=>{
-        setDownloadError('');
-        void shareDownload(filePath+'/'+file.id,file.name,token).catch(()=>setDownloadError('Could not download this file.'));
-      },'document-outline')}</View>
-      <Text style={{color:colors.muted}}>{formatBytes(file.size)}</Text>
-    </View>)}
     {folder?.collections.map(item=><View style={fileRow} key={item.collection}><View style={{flex:1}}>
       {action(item.collection,()=>setCollection(item.collection),'folder-outline')}</View>
       <Text style={{color:colors.muted}}>{formatBytes(item.bytes)}</Text>
@@ -79,6 +72,13 @@ export default function AppFileContainer({ app, token, colors, back, service }: 
       </Pressable>}
     </View>)}
     {!!folder?.nextCursor&&action('Load more',()=>void more(),'ellipsis-horizontal')}
+    {!collection&&files?.files.map(file=><View style={fileRow} key={file.id}>
+      <View style={{flex:1}}>{action(file.name,()=>{
+        setDownloadError('');
+        void shareDownload(filePath+'/'+file.id,file.name,token).catch(()=>setDownloadError('Could not download this file.'));
+      },'document-outline')}</View>
+      <Text style={{color:colors.muted}}>{formatBytes(file.size)}</Text>
+    </View>)}
     {!collection&&files?.nextCursor&&action('Load more files',()=>void moreFiles(),'ellipsis-horizontal')}
     {!loading&&!folder?.collections.length&&!folder?.records.length&&(collection||files&&!files.files.length)&&<Text style={{color:colors.muted}}>This folder is empty.</Text>}
     {loading&&<Text accessibilityRole="progressbar" style={{color:colors.muted}}>Loading folder…</Text>}
