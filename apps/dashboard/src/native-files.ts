@@ -20,8 +20,8 @@ export async function pickDocumentAsync(maxBytes=2*1024**2) {
   }
 }
 
-export async function pickDocumentsAsync() {
-  const result=await getDocumentAsync({copyToCacheDirectory:true,multiple:true});
+export async function pickDocumentsAsync(multiple=true) {
+  const result=await getDocumentAsync({copyToCacheDirectory:true,multiple});
   return result.canceled?[]:result.assets.map(asset=>{
     const file=new File(asset.uri);
     return {

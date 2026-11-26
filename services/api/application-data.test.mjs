@@ -157,7 +157,7 @@ test('container files are quota-bound, app-scoped, and browsed only with the per
   const base='http://127.0.0.1:'+server.address().port;
   const call=(path,{token,cookie,method='GET',payload,revision}={})=>fetch(base+path,{method,
     headers:{...(token?{authorization:'Bearer '+token}:{}),...(cookie?{cookie}:{}),
-      ...(payload?{'content-type':'application/json'}:{}),...(revision?{'if-match':revision}:{})},
+      ...(payload?{'content-type':'application/json'}:{}),'X-AuthNJS-Request':'account-consent',...(revision?{'if-match':revision}:{})},
     ...(payload?{body:JSON.stringify(payload)}:{})});
   const files='/v1/apps/backup/files',uploads=files+'/uploads',browser='/account/app-files/backup';
   const portal='/account/app-storage/'+primary.id;
@@ -198,6 +198,34 @@ test('container files are quota-bound, app-scoped, and browsed only with the per
   assert.equal((await call(browser+'/'+id,{cookie:'player'})).status,404);
   assert.deepEqual(await list(browser,{cookie:'player'}),[]);
   assert.equal(data.containers('player')[0].showInFiles,false);
+  assert.equal((await start(user,{name:'invalid.zip',size:1,editable:true})).status,422);
+  assert.equal((await call(files+'/'+id,{token:user,method:'PUT',payload:{browseable:true,editable:true}})).status,200);
+  assert.equal((await list(browser,{cookie:'player'}))[0].editable,true);
+  const edit=(path,method,payload)=>call(browser+path,{cookie:'player',method,payload});
+  assert.equal((await call(browser+'/'+id,{cookie:'stranger',method:'PUT',payload:{name:'foreign.zip'}})).status,404);
+  assert.equal((await fetch(base+browser+'/'+id,{method:'DELETE',headers:{cookie:'player'}})).status,403);
+  assert.equal((await edit('/'+id,'PUT',{name:'renamed.zip'})).status,200);
+  assert.equal((await list(browser,{cookie:'player'}))[0].name,'renamed.zip');
+  assert.equal((await edit('/uploads','POST',{replace:id,size:700001})).status,409);
+  const draft=async size=>(await (await edit('/uploads','POST',{replace:id,size})).json()).id;
+  const stale=await draft(3);
+  assert.equal(data.accountUsage('player'),600000);
+  assert.equal((await edit('/uploads','POST',{replace:id,size:3})).status,409);
+  assert.equal((await edit('/uploads/'+stale,'PUT',{position:0,content:'YWJj'})).status,200);
+  assert.equal((await call(files+'/'+id,{token:user,method:'PUT',payload:{browseable:true,editable:false}})).status,200);
+  assert.equal((await edit('/uploads/'+stale,'POST',{})).status,405);
+  assert.equal((await edit('/'+id,'DELETE')).status,405);
+  assert.equal((await edit('/uploads/'+stale,'DELETE')).status,200);
+  assert.equal((await call(files+'/'+id,{token:user,method:'PUT',payload:{browseable:true,editable:true}})).status,200);
+  const revision=await draft(3);
+  assert.equal((await status(user,revision)).status,404);
+  assert.equal((await edit('/uploads/'+revision,'PUT',{position:0,content:'eHl6'})).status,200);
+  assert.equal((await edit('/uploads/'+revision,'POST',{})).status,201);
+  assert.deepEqual(await (await edit('/uploads/'+revision,'POST',{})).json(),{id});
+  assert.equal(await (await call(files+'/'+id,{token:user})).text(),'xyz');
+  assert.equal(data.accountUsage('player'),3);
+  assert.equal((await edit('/'+id,'DELETE')).status,200);
+  assert.equal(data.accountUsage('player'),0);
   assert.equal((await manage({action:'rotate-key'})).status,403);
 
   registry.verifyApp(primary.id,true);

@@ -1,3 +1,4 @@
+import {useAppFileEdits} from './app-file-edits';
 import {useDialog} from './dialog-model';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useState } from 'react';
@@ -5,7 +6,7 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import AppIcon from './AppIcon';
 import { useAppFileContainer, useAppRecordEditor, useContainerFiles, type AppFileContainer as Container } from './account-file-containers';
 import { nativeRequest } from './native-account';
-import { shareDownload } from './native-files';
+import { pickDocumentsAsync, shareDownload } from './native-files';
 import type { DashboardTheme } from './native-surfaces';
 import { formatBytes } from './storage-summary';
 
@@ -13,15 +14,16 @@ export default function AppFileContainer({ app, token, colors, back, service }: 
   app: Container; token: string; colors: Pick<DashboardTheme,'ink'|'muted'|'accent'|'soft'|'danger'|'panel'|'line'>; back: () => void; service?:string;
 }) {
   const showDialog=useDialog();
-  const request = useCallback((path: string, data?:object, method?:string) => nativeRequest(path, token, data, method), [token]);
+  const request = useCallback((path: string, data?:object, method?:string, signal?:AbortSignal) => nativeRequest(path, token, data, method, signal), [token]);
   const root=service?'app-storage/'+service+'/browse':'file-containers/'+encodeURIComponent(app.client);
   const filePath=service?'app-storage/'+service+'/files':'app-files/'+encodeURIComponent(app.client);
   const { collection, setCollection, folder, loading, error, more, path, refresh } = useAppFileContainer(root, !!(service||app.canManage), request);
-  const {page:files,failure,moreFiles}=useContainerFiles(filePath,!collection,request);
+  const {page:files,failure,moreFiles,reload}=useContainerFiles(filePath,!collection,request);
+  const edits=useAppFileEdits(filePath,request,reload);
   const editor=useAppRecordEditor(app.client,request,refresh);
   const {draft,setDraft,busy}=editor;
   const [downloadError, setDownloadError] = useState('');
-  const action = (label: string, onPress: () => void, icon: 'folder-outline' | 'document-outline' | 'arrow-back' | 'ellipsis-horizontal' | 'add-outline' | 'checkmark-outline' | 'close-outline' | 'trash-outline' | 'pencil-outline') =>
+  const action = (label: string, onPress: () => void, icon: 'folder-outline' | 'document-outline' | 'arrow-back' | 'ellipsis-horizontal' | 'add-outline' | 'checkmark-outline' | 'close-outline' | 'trash-outline' | 'pencil-outline' | 'swap-horizontal-outline') =>
     <Pressable accessibilityRole="button" disabled={loading||busy} onPress={onPress}
       style={({pressed})=>({minHeight:44,flexDirection:'row',alignItems:'center',gap:8,padding:8,borderRadius:10,backgroundColor:pressed?colors.soft:colors.panel})}>
       <Ionicons accessible={false} name={icon} size={19} color={colors.accent}/>
@@ -54,6 +56,13 @@ export default function AppFileContainer({ app, token, colors, back, service }: 
         {text:'Cancel',style:'cancel'},{text:'Remove',style:'destructive',onPress:()=>void editor.submit(true)},
       ]),'trash-outline')}
     </View>}
+    {edits.rename&&<View style={{gap:8}}>
+      <TextInput accessibilityLabel="File name" maxLength={160} value={edits.rename.name} onChangeText={name=>{
+        if(edits.rename)edits.setRename({...edits.rename,name});
+      }} style={{color:colors.ink,minHeight:44,borderColor:colors.line,borderWidth:1,paddingHorizontal:8}}/>
+      {action('Save name',()=>{if(edits.rename&&!edits.busy)void edits.change(edits.rename.file,'PUT',{name:edits.rename.name});},'checkmark-outline')}
+      {action('Cancel',()=>edits.setRename(undefined),'close-outline')}
+    </View>}
     {!!editor.message&&<Text accessibilityLiveRegion="polite" style={{color:colors.ink}}>{editor.message}</Text>}
     <View style={fileRow}><Text accessibilityRole="header" style={{flex:1,color:colors.muted}}>Name</Text>
       <Text accessibilityRole="header" style={{color:colors.muted}}>Size</Text></View>
@@ -78,10 +87,28 @@ export default function AppFileContainer({ app, token, colors, back, service }: 
         void shareDownload(filePath+'/'+file.id,file.name,token).catch(()=>setDownloadError('Could not download this file.'));
       },'document-outline')}</View>
       <Text style={{color:colors.muted}}>{formatBytes(file.size)}</Text>
+      {!service&&file.browseable&&file.editable&&<View style={{flexDirection:'row'}}>
+        {([
+          ['Rename','pencil-outline',()=>edits.setRename({file,name:file.name})],
+          ['Replace','swap-horizontal-outline',()=>void pickDocumentsAsync(false).then(([picked])=>{
+            if(picked)edits.replace(file,{...picked,name:file.name});
+          }).catch(edits.report)],
+          ['Delete','trash-outline',()=>showDialog('Permanently delete '+file.name+'?',undefined,[
+            {text:'Cancel',style:'cancel'},{text:'Delete file',style:'destructive',onPress:()=>void edits.change(file,'DELETE',{})},
+          ])],
+        ] as const).map(([label,icon,press])=><Pressable key={label} accessibilityRole="button" accessibilityLabel={label+' '+file.name}
+          disabled={edits.busy} onPress={press} style={{minWidth:44,minHeight:44,alignItems:'center',justifyContent:'center'}}>
+          <Ionicons accessible={false} name={icon} size={18} color={label==='Delete'?colors.danger:colors.accent}/>
+        </Pressable>)}
+      </View>}
+    </View>)}
+    {edits.transfer.rows.map(row=><View key={row.key}>
+      <Text accessibilityLiveRegion="polite" style={{color:colors.muted}}>{row.finishing?'Saving ': 'Replacing '}{row.name} · {row.size?Math.floor(row.sent/row.size*100):0}%</Text>
+      {!row.finishing&&action('Cancel replacement',()=>edits.transfer.cancel(row.key),'close-outline')}
     </View>)}
     {!collection&&files?.nextCursor&&action('Load more files',()=>void moreFiles(),'ellipsis-horizontal')}
     {!loading&&!folder?.collections.length&&!folder?.records.length&&(collection||files&&!files.files.length)&&<Text style={{color:colors.muted}}>This folder is empty.</Text>}
     {loading&&<Text accessibilityRole="progressbar" style={{color:colors.muted}}>Loading folder…</Text>}
-    {!!(error||failure||downloadError)&&<Text accessibilityRole="alert" style={{color:colors.danger}}>{error||failure||downloadError}</Text>}
+    {!!(error||failure||downloadError||edits.failure)&&<Text accessibilityRole="alert" style={{color:colors.danger}}>{error||failure||downloadError||edits.failure}</Text>}
   </View>;
 }

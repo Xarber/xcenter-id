@@ -190,7 +190,11 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
           const [,client,...route]=accountFiles;
           if(!registered(client)||!sourceLinked(owner,client))fail(404,'App folder unavailable.');
           const canManage=!!developerContainer(owner,client);
-          return await binary.handle(req,res,url,{owner,client,readOnly:true,browseableOnly:!canManage},route,responseHeaders);
+          const live=()=>accounts.current(req)?.owner===owner&&registered(client)&&sourceLinked(owner,client);
+          if(req.method!=='GET'&&(!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent')){
+            fail(403,'Change files from your account.');
+          }
+          return await binary.handle(req,res,url,{owner,client,dashboard:true,browseableOnly:!canManage,live},route,responseHeaders);
         }
         const serviceFiles=serviceBinaryFiles.exec(url.pathname);
         if(serviceFiles){

@@ -1,16 +1,18 @@
+import {useAppFileEdits} from './app-file-edits';
 import {useConfirmDialog} from './dialog-model';
-import { File, Folder, Pencil, Plus } from 'lucide-react';
+import { File, Folder, Pencil, Plus, Replace, Trash2, X } from 'lucide-react';
 import { useAppFileContainer, useAppRecordEditor, useContainerFiles, type AppFileContainer as Container } from './account-file-containers';
 import AppIcon from './AppIcon.web';
 import { formatBytes } from './storage-summary';
-import { api } from './web-account';
+import { api, fileAsBase64 } from './web-account';
 
 export default function AppFileContainer({ app, service, back }: { app: Container; service?:string; back?:()=>void }) {
   const confirmAction=useConfirmDialog();
   const root=service?'app-storage/'+service+'/browse':'file-containers/'+encodeURIComponent(app.client);
   const filePath=service?'app-storage/'+service+'/files':'app-files/'+encodeURIComponent(app.client);
   const { collection, setCollection, folder, loading, error, more, path, refresh } = useAppFileContainer(root, !!(service||app.canManage), api);
-  const {page:files,failure,moreFiles}=useContainerFiles(filePath,!collection,api);
+  const {page:files,failure,moreFiles,reload}=useContainerFiles(filePath,!collection,api);
+  const edits=useAppFileEdits(filePath,api,reload);
   const editor = useAppRecordEditor(app.client,api,refresh);
   const {draft,setDraft,busy} = editor;
   return <section className="xc-card xc-pad xc-stack">
@@ -35,6 +37,16 @@ export default function AppFileContainer({ app, service, back }: { app: Containe
         }}>Remove record</button>}
       </div>
     </form>}
+    {edits.rename&&<form className="xc-inline-form" onSubmit={event=>{
+      event.preventDefault();
+      if(edits.rename)void edits.change(edits.rename.file,'PUT',{name:edits.rename.name});
+    }}>
+      <label>File name<input required maxLength={160} value={edits.rename.name} onChange={event=>{
+        if(edits.rename)edits.setRename({...edits.rename,name:event.target.value});
+      }}/></label>
+      <button className="xc-button xc-primary" disabled={edits.busy}>Save name</button>
+      <button className="xc-button xc-secondary" type="button" onClick={()=>edits.setRename(undefined)}>Cancel</button>
+    </form>}
     {editor.message&&<p role="status">{editor.message}</p>}
     <table className="xc-file-table"><thead><tr><th scope="col">Name</th><th scope="col">Size</th><th scope="col"><span className="xc-sr">Actions</span></th></tr></thead>
       <tbody>
@@ -50,13 +62,33 @@ export default function AppFileContainer({ app, service, back }: { app: Containe
         </tr>)}
         {!collection&&files?.files.map(file=><tr key={file.id}><td>
           <a className="xc-file-name" href={'/account/'+filePath+'/'+file.id}><File size={18}/><strong>{file.name}</strong></a>
-        </td><td>{formatBytes(file.size)}</td><td/></tr>)}
+        </td><td>{formatBytes(file.size)}</td><td>
+          {!service&&file.browseable&&file.editable&&<div className="xc-file-actions">
+            <button type="button" className="xc-file-icon" aria-label={'Rename '+file.name} disabled={edits.busy}
+              onClick={()=>edits.setRename({file,name:file.name})}><Pencil size={16}/></button>
+            <label className="xc-file-icon" title={'Replace '+file.name}><Replace size={16} aria-hidden/>
+              <input className="xc-sr" type="file" aria-label={'Replace '+file.name} disabled={edits.busy} onChange={event=>{
+                const picked=event.currentTarget.files?.[0];
+                event.currentTarget.value='';
+                if(picked)edits.replace(file,{name:file.name,size:picked.size,read:(offset,size)=>fileAsBase64(picked.slice(offset,offset+size))});
+              }}/></label>
+            <button type="button" className="xc-file-icon" aria-label={'Delete '+file.name} disabled={edits.busy} onClick={async()=>{
+              if(await confirmAction('Permanently delete '+file.name+'?','Delete file'))void edits.change(file,'DELETE',{});
+            }}><Trash2 size={16}/></button>
+          </div>}
+        </td></tr>)}
       </tbody>
     </table>
+    {edits.transfer.rows.map(row=><div className="xc-file-actions xc-transfer" key={row.key}>
+      <span>{row.finishing?'Saving ': 'Replacing '}{row.name}</span>
+      <progress aria-label={'Replacing '+row.name} max={row.size||1} value={row.sent}/>
+      <button type="button" className="xc-file-icon" aria-label={'Cancel replacement of '+row.name} disabled={row.finishing}
+        onClick={()=>edits.transfer.cancel(row.key)}><X size={16}/></button>
+    </div>)}
     {folder?.nextCursor && <button className="xc-button xc-secondary" disabled={loading} onClick={() => void more()}>Load more</button>}
     {!collection&&files?.nextCursor&&<button className="xc-button xc-secondary" onClick={()=>void moreFiles()}>Load more files</button>}
     {!loading&&!folder?.collections.length&&!folder?.records.length&&(collection||files&&!files.files.length)&&<p>This folder is empty.</p>}
     {loading && <p role="status">Loading folder…</p>}
-    {(error||failure) && <p role="alert">{error||failure}</p>}
+    {(error||failure||edits.failure) && <p role="alert">{error||failure||edits.failure}</p>}
   </section>;
 }

@@ -12,11 +12,12 @@ export type AppFileContainer = {
 };
 type Collection = { collection: string; records: number; bytes: number };
 type RecordEntry = { id: string; bytes: number };
-type FileEntry = {id:string;size:number;name:string};
-type FilePage = {files:FileEntry[];nextCursor:string|null};
+export type ContainerFile = {id:string;size:number;name:string;browseable?:boolean;editable?:boolean};
+type FilePage = {files:ContainerFile[];nextCursor:string|null};
 
 export function useContainerFiles(path:string,enabled:boolean,request:(path:string)=>Promise<FilePage>){
   const [page,setPage]=useState<FilePage>();
+  const [revision,setRevision]=useState(0);
   const [failure,setFailure]=useState('');
   useEffect(()=>{
     if(!enabled)return;
@@ -25,7 +26,7 @@ export function useContainerFiles(path:string,enabled:boolean,request:(path:stri
     setFailure('');
     void request(path).then(result=>{if(active)setPage(result);}).catch(()=>{if(active)setFailure('Could not load files.');});
     return ()=>{active=false;};
-  },[path,enabled,request]);
+  },[path,enabled,request,revision]);
   async function moreFiles(){
     if(!page?.nextCursor)return;
     const cursor=page.nextCursor;
@@ -35,7 +36,7 @@ export function useContainerFiles(path:string,enabled:boolean,request:(path:stri
       setPage({files:[...page.files,...result.files],nextCursor:result.nextCursor});
     }catch{setPage(page);setFailure('Could not load more files.');}
   }
-  return {page,failure,moreFiles};
+  return {page,failure,moreFiles,reload:()=>setRevision(value=>value+1)};
 }
 
 type Folder = { collections: Collection[]; records: RecordEntry[]; nextCursor: string | null };

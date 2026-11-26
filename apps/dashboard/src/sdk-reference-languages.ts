@@ -587,7 +587,7 @@ const typescript: Partial<Record<string,LanguageExample>> = {
     argument('@xcenter-id/client','Package','Shared typed HTTP and OAuth APIs for JavaScript and TypeScript.'),
     argument('@authnjs/expo','Package','Expo system-browser OAuth and React Native account components.'),
     argument('@xcenter-id/server','Package','Node-only API with type declarations. Keep its secrets on the backend.'),
-  ],'npm pack ./packages/client ./packages/expo\n# In the Expo application, install both tarballs from the SDK checkout.\nnpm install /path/to/xcenter-id-client-0.6.0.tgz /path/to/authnjs-expo-0.8.0.tgz\nnpx expo install expo-auth-session expo-crypto expo-web-browser',
+  ],'npm pack ./packages/client ./packages/expo\n# In the Expo application, install both tarballs from the SDK checkout.\nnpm install /path/to/xcenter-id-client-0.7.0.tgz /path/to/authnjs-expo-0.9.0.tgz\nnpx expo install expo-auth-session expo-crypto expo-web-browser',
   'import {createUserClient} from "@authnjs/expo/client";'),
   'create-user-client':snippet('createUserClient(options: { clientId: string; getAccessToken: () => string | Promise<string>; fetch?: typeof fetch }): UserClient',[
     argument('clientId','string','Client ID assigned in Developer Apps.'),
@@ -689,13 +689,13 @@ dataExamples("close-peer",'user',
   ["closePeer(peerId, proof: peerProof)","closePeer(peerId, peerProof)","closePeer(peerId, peerProof)"]);
 
 dataExamples("app-container-files",'user',
-  ["startAppUpload(name: String, size: Int64, browseable: Bool = false)","startAppUpload(name: String, size: Long, browseable: Boolean = false)","startAppUpload(String name, int size, {bool browseable = false})"],
-  [["name","String","Display name."],["size","64-bit integer","Exact size in bytes."],["browseable","boolean","True exposes this user file in the account dashboard. Defaults to false. Omit for service uploads."]],
-  ["startAppUpload(name: \"Beat Saber.zip\", size: 600000, browseable: true)","startAppUpload(\"Beat Saber.zip\", 600000L, browseable = true)","startAppUpload(\"Beat Saber.zip\", 600000, browseable: true)"]);
+  ["startAppUpload(name: String, size: Int64, browseable: Bool = false, editable: Bool = false)","startAppUpload(name: String, size: Long, browseable: Boolean = false, editable: Boolean = false)","startAppUpload(String name, int size, {bool browseable = false, bool editable = false})"],
+  [["name","String","Display name."],["size","64-bit integer","Exact size in bytes."],["browseable","boolean","True exposes this user file in the account dashboard. Defaults to false. Omit for service uploads."],["editable","boolean","Defaults to false. Set true with browseable to allow dashboard writes and deletion."]],
+  ["startAppUpload(name: \"Beat Saber.zip\", size: 600000, browseable: true, editable: true)","startAppUpload(\"Beat Saber.zip\", 600000L, browseable = true, editable = true)","startAppUpload(\"Beat Saber.zip\", 600000, browseable: true, editable: true)"]);
 
 dataExamples("start-app-upload",'user',
-  ["startAppUpload(name: String, size: Int64, browseable: Bool = false)","startAppUpload(name: String, size: Long, browseable: Boolean = false)","startAppUpload(String name, int size, {bool browseable = false})"],
-  [["name","String","Display name."],["size","64-bit integer","Exact size in bytes."],["browseable","boolean","True exposes this user file in the account dashboard. Defaults to false. Omit for service uploads."]],
+  ["startAppUpload(name: String, size: Int64, browseable: Bool = false, editable: Bool = false)","startAppUpload(name: String, size: Long, browseable: Boolean = false, editable: Boolean = false)","startAppUpload(String name, int size, {bool browseable = false, bool editable = false})"],
+  [["name","String","Display name."],["size","64-bit integer","Exact size in bytes."],["browseable","boolean","True exposes this user file in the account dashboard. Defaults to false. Omit for service uploads."],["editable","boolean","Defaults to false. Set true with browseable to allow dashboard writes and deletion."]],
   ["startAppUpload(name: \"backup.zip\", size: 600000)","startAppUpload(\"backup.zip\", 600000L)","startAppUpload(\"backup.zip\", 600000)"]);
 
 dataExamples("app-upload-status",'user',
@@ -729,9 +729,9 @@ dataExamples("download-app-file",'user',
   ["downloadAppFile(id)","downloadAppFile(id)","downloadAppFile(id)"]);
 
 dataExamples("set-app-file-browseable",'user',
-  ["setAppFileBrowseable(_ id: String, browseable: Bool)","setAppFileBrowseable(id: String, browseable: Boolean)","setAppFileBrowseable(String id, bool browseable)"],
-  [["id","string","Committed file ID returned by complete or list."],["browseable","boolean","True exposes this user file in the account dashboard. Defaults to false. Omit for service uploads."]],
-  ["setAppFileBrowseable(id, browseable: false)","setAppFileBrowseable(id, false)","setAppFileBrowseable(id, false)"]);
+  ["setAppFileVisibility(_ id: String, browseable: Bool, editable: Bool? = nil)","setAppFileVisibility(id: String, browseable: Boolean, editable: Boolean? = null)","setAppFileVisibility(String id, {required bool browseable, bool? editable})"],
+  [["id","String","Committed file ID."],["browseable","Boolean","Allows dashboard reads."],["editable","Optional Boolean","Allows writes and deletion only if Browseable is also true."]],
+  ["setAppFileVisibility(id, browseable: true, editable: true)","setAppFileVisibility(id, browseable = true, editable = true)","setAppFileVisibility(id, browseable: true, editable: true)"]);
 
 dataExamples("delete-app-file",'user',
   ["deleteAppFile(_ id: String)","deleteAppFile(id: String)","deleteAppFile(String id)"],

@@ -1,4 +1,4 @@
-import {createCipheriv, createDecipheriv, randomBytes, randomUUID} from 'node:crypto';
+import {createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID} from 'node:crypto';
 import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {appendTransferChunk, openFileTransfers, uploadChunkSize, uploadIdleMs} from './file-transfers.mjs';
@@ -16,15 +16,25 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
     browseable INTEGER NOT NULL DEFAULT 0
   ) STRICT;
   CREATE INDEX IF NOT EXISTS app_files_scope ON app_files(owner,client,id);`);
+  if(!db.prepare('PRAGMA table_info(app_files)').all().some(field=>field.name==='content_id')){
+    db.exec('ALTER TABLE app_files ADD COLUMN content_id TEXT');
+  }
   const file=db.prepare('SELECT * FROM app_files WHERE owner=? AND client=? AND id=? AND (browseable=1 OR ?=0)');
   const list=db.prepare('SELECT * FROM app_files WHERE owner=? AND client=? AND id>? AND (browseable=1 OR ?=0) ORDER BY id LIMIT 101');
   const aggregate=db.prepare(`SELECT client,count(*) AS files,sum(max(size,1)) AS bytes,
     sum(browseable) AS browseable, sum(CASE WHEN browseable=1 THEN size ELSE 0 END) AS visibleBytes FROM app_files WHERE owner=? GROUP BY client`);
   const used=db.prepare('SELECT total(max(1,size)) AS bytes FROM app_files WHERE owner=? AND (? IS NULL OR client=?)');
-  const materialize=db.prepare('INSERT INTO app_files VALUES(?,?,?,?,?,?)');
+  const materialize=db.prepare('INSERT INTO app_files(id,client,owner,size,created,browseable) VALUES(?,?,?,?,?,?)');
+  const swap=db.prepare('UPDATE app_files SET content_id=?,size=? WHERE id=?');
+  const clearChunks=db.prepare('DELETE FROM file_transfer_chunks WHERE id=?');
+  const replacement=db.prepare('SELECT 1 FROM file_transfers WHERE owner=? AND client=? AND folder=? AND committed=0 AND updated>=?');
+  const clearDrafts=db.prepare('DELETE FROM file_transfers WHERE owner=? AND client=? AND folder=? AND committed=0');
   const setBrowseable=db.prepare('UPDATE app_files SET browseable=? WHERE id=?');
   const updateMetadata=db.prepare('UPDATE file_transfers SET metadata=? WHERE owner=? AND id=?');
-  const reserve=db.prepare('SELECT total(max(1,size)) AS bytes FROM file_transfers WHERE owner=? AND committed=0 AND updated>=? AND (? IS NULL OR client=?)');
+  const reserve=db.prepare(`SELECT total(max(0,max(1,t.size)-coalesce(max(1,f.size),0))) AS bytes
+    FROM file_transfers t LEFT JOIN app_files f ON f.id=t.folder AND f.owner=t.owner AND f.client=t.client
+    WHERE t.owner=? AND t.committed=0 AND t.updated>=? AND (? IS NULL OR t.client=?)`);
+  const fingerprint=transfer=>createHash('sha256').update(transfer.metadata).digest('hex');
   const metadataContext=(owner,client,id,size)=>Buffer.from(JSON.stringify(['xcenter.appfile.v1',owner,client,id,size]));
   function seal(owner,client,id,size,metadata){
     const nonce=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key,nonce);
@@ -46,21 +56,36 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
   }
   const hidden={error:'File unavailable.'};
   function committed(row){
-    const transfer=transfers.byId.get(row.owner,row.id);
+    const transfer=transfers.byId.get(row.owner,row.content_id??row.id);
     if(!transfer?.committed||transfer.client!==row.client||transfer.size!==row.size)throw new Error('Invalid file metadata.');
     const metadata=open(transfer);
-    if(metadata.browseable!==!!row.browseable)throw new Error('Invalid file visibility.');
+    if(metadata.browseable!==!!row.browseable|| (metadata.target??transfer.id)!==row.id ||
+        (metadata.editable===true&&(!metadata.browseable||row.owner===serviceOwner)))throw new Error('Invalid file visibility.');
     return {transfer,metadata};
   }
-  const view=row=>({id:row.id,size:row.size,created:row.created,browseable:!!row.browseable,
-    name:committed(row).metadata.name});
+  function view(row){
+    const {metadata}=committed(row);
+    return {id:row.id,size:row.size,created:row.created,browseable:!!row.browseable,
+      editable:metadata.editable===true,name:metadata.name};
+  }
+  function editTarget(owner,client,id){
+    const row=file.get(owner,client,id,1);
+    if(!row)return [404,hidden];
+    const content=committed(row);
+    return content.metadata.editable===true?{row,...content}:[405,{error:'This app file is read-only.'}];
+  }
+  function removeFile(row){
+    if(row.content_id)transfers.remove.run(row.owner,row.content_id);
+    clearDrafts.run(row.owner,row.client,row.id);
+    transfers.remove.run(row.owner,row.id);
+  }
 
   return {
     totals:owner=>aggregate.all(owner),
     bytes:(owner,client=null)=>used.get(owner,client,client).bytes+reserve.get(owner,Date.now()-uploadIdleMs,client,client).bytes,
     removeAccount:owner=>transfers.removeOwner.run(owner),
     removeApp:(owner,client)=>db.prepare('DELETE FROM file_transfers WHERE owner=? AND client=?').run(owner,client),
-    async handle(req,res,url,{owner,client,readOnly=false,browseableOnly=false,live},route,headers) {
+    async handle(req,res,url,{owner,client,readOnly=false,dashboard=false,browseableOnly=false,live},route,headers) {
       const respond=(status,value)=>res.writeHead(status,{...headers,'Content-Type':'application/json'}).end(JSON.stringify(value));
       const [uploading,uploadId,fileId]=route;
       if(readOnly&&req.method!=='GET')return respond(405,{error:'This view is read-only.'});
@@ -81,10 +106,14 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
       }
       function pending(){
         const row=uploadId&&transfers.byId.get(owner,uploadId);
-        return row?.client===client&&!transfers.isExpired(row)?row:null;
+        return row?.client===client&&!!row.folder===dashboard&&!transfers.isExpired(row)?row:null;
       }
       if(uploading&&uploadId&&req.method==='GET'){
         const row=pending();
+        if(dashboard&&row){
+          const target=editTarget(owner,client,open(row).target);
+          if(Array.isArray(target))return respond(...target);
+        }
         return row?respond(200,{id:row.id,size:row.size,received:row.received,chunkSize:uploadChunkSize,committed:!!row.committed}):respond(404,hidden);
       }
       if(readOnly)return respond(405,{error:'Upload operations are unavailable in this view.'});
@@ -93,8 +122,14 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
           if(!pending())return respond(404,hidden);
           transfers.cancel.run(owner,uploadId);
         }else{
-          if(!file.get(owner,client,fileId,0))return respond(404,hidden);
-          transfers.remove.run(owner,fileId);
+          const [status,result]=transaction(()=>{
+            const target=dashboard?editTarget(owner,client,fileId):{row:file.get(owner,client,fileId,0)};
+            if(Array.isArray(target))return target;
+            if(!target.row)return [404,hidden];
+            removeFile(target.row);
+            return [200,{ok:true}];
+          });
+          return respond(status,result);
         }
         return respond(200,{ok:true});
       }
@@ -107,28 +142,75 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
       if(!await live())return respond(403,{error:'File authorization changed.'});
       const [status,value]=transaction(()=>{
         if(fileId){
+          if(dashboard){
+            const target=editTarget(owner,client,fileId);
+            if(Array.isArray(target))return target;
+            const name=fileName(input?.name);
+            if(!name)return [422,{error:'Choose a valid file name.'}];
+            const {row,transfer,metadata}=target;
+            updateMetadata.run(seal(owner,client,transfer.id,row.size,{...metadata,name}),owner,transfer.id);
+            return [200,{ok:true}];
+          }
           const row=file.get(owner,client,fileId,0);
           if(!row)return [404,hidden];
-          if(typeof input?.browseable!=='boolean')return [422,{error:'Choose whether the file is Browseable.'}];
-          const {metadata}=committed(row);
-          updateMetadata.run(seal(owner,client,fileId,row.size,{...metadata,browseable:input.browseable}),owner,fileId);
-          setBrowseable.run(Number(input.browseable),fileId);
+          const {transfer,metadata}=committed(row);
+          const browseable=input?.browseable;
+          const editable=input?.editable===undefined?(browseable&&metadata.editable===true):input.editable;
+          if(typeof browseable!=='boolean'||typeof editable!=='boolean'||(editable&&!browseable)){
+            return [422,{error:'Editable files must also be Browseable.'}];
+          }
+          updateMetadata.run(seal(owner,client,transfer.id,row.size,{...metadata,browseable,editable}),owner,transfer.id);
+          setBrowseable.run(Number(browseable),fileId);
           return [200,{ok:true}];
         }
         if(!uploadId){
           transfers.purge();
-          const name=fileName(input?.name), size=input?.size, browseable=input?.browseable??false;
-          if(!name||!Number.isSafeInteger(size)||size<0||typeof browseable!=='boolean'||(owner===serviceOwner&&browseable)||input.folder!=null){
+          if(dashboard){
+            const targetId=input?.replace;
+            if(typeof targetId!=='string'||!/^[0-9a-f-]{36}$/.test(targetId)||!Number.isSafeInteger(input.size)||input.size<0){
+              return [422,{error:'Choose an existing file and replacement size.'}];
+            }
+            const target=editTarget(owner,client,targetId);
+            if(Array.isArray(target))return target;
+            if(replacement.get(owner,client,targetId,Date.now()-uploadIdleMs))return [409,{error:'A replacement is already in progress.'}];
+            if(Math.max(0,Math.max(1,input.size)-Math.max(1,target.row.size))>remaining(owner,client)){
+              return [409,{error:'Storage quota exceeded.'}];
+            }
+            if(!hasDiskRoom())return [503,{error:'File storage temporarily unavailable.'}];
+            const id=randomUUID();
+            const metadata={...target.metadata,target:targetId,base:fingerprint(target.transfer)};
+            transfers.begin.run(id,owner,targetId,Date.now(),input.size,seal(owner,client,id,input.size,metadata),client);
+            return [201,{id,chunkSize:uploadChunkSize}];
+          }
+          const name=fileName(input?.name), size=input?.size, browseable=input?.browseable??false, editable=input?.editable===undefined?false:input.editable;
+          if(!name||!Number.isSafeInteger(size)||size<0||typeof browseable!=='boolean'||typeof editable!=='boolean'||editable&&!browseable||(owner===serviceOwner&&browseable)||input.folder!=null){
             return [422,{error:'Provide a file name, size, and valid visibility.'}];
           }
           if(Math.max(1,size)>remaining(owner,client))return [409,{error:'Storage quota exceeded.'}];
           if(!hasDiskRoom())return [503,{error:'File storage temporarily unavailable.'}];
           const id=randomUUID();
-          transfers.begin.run(id,owner,null,Date.now(),size,seal(owner,client,id,size,{name,browseable}),client);
+          transfers.begin.run(id,owner,null,Date.now(),size,seal(owner,client,id,size,{name,browseable,editable}),client);
           return [201,{id,chunkSize:uploadChunkSize}];
         }
         const row=pending();
         if(!row)return [404,hidden];
+        if(dashboard){
+          const metadata=open(row);
+          const target=editTarget(owner,client,metadata.target);
+          if(Array.isArray(target))return target;
+          if(row.committed)return req.method==='POST'?[200,{id:target.row.id}]:[409,{error:'The replacement is already finished.'}];
+          if(metadata.target!==row.folder||metadata.base!==fingerprint(target.transfer)){
+            return [409,{error:'The original file changed. Start the replacement again.'}];
+          }
+          if(req.method==='PUT')return appendTransferChunk(transfers,row,input,hasDiskRoom);
+          if(row.received!==row.size)return [409,{error:'Upload is incomplete.'}];
+          if(remaining(owner,client)<0)return [409,{error:'Storage quota exceeded.'}];
+          swap.run(row.id,row.size,target.row.id);
+          transfers.complete.run(row.id);
+          if(target.row.content_id)transfers.remove.run(owner,target.row.content_id);
+          else clearChunks.run(target.row.id);
+          return [201,{id:target.row.id}];
+        }
         if(req.method==='PUT')return appendTransferChunk(transfers,row,input,hasDiskRoom);
         if(row.committed)return [200,{id:uploadId}];
         if(row.received!==row.size)return [409,{error:'Upload is incomplete.'}];

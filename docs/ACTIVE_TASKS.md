@@ -692,3 +692,11 @@ Provider `c5beb38` is live as 0.20.0 after staged and public checks. The provide
 Existing X-Center HTTP peer sessions remain on their protocol. Stock PeerJS uses its own transport namespace within the same authenticated registration, with no per-app processes. The stock client's disconnect and reconnect use the open lease. Reissue a lease when it expires.
 
 AUTHN-169 is verified for stock PeerJS 1.5.5 in Chrome and the staged issuer. Provider tests enforce app and account partitioning, source canonicalization, discovery opt-in, origin binding, lease renewal and revocation. The [provider quality run](https://github.com/Xarber/xcenter-id/actions/runs/45840795644) and [SDK quality matrix](https://github.com/Xarber/xcenter-id-sdk/actions/runs/45840723271) passed. Provider `bc98bb6` is live. SDK `aa2f7e1` is on `testing`, `beta` and `main`. The stock and existing HTTP signaling transports have separate directories. No new native build was needed for the gateway.
+
+### Editable app files
+
+| ID | State | Evidence and next action |
+| --- | --- | --- |
+| AUTHN-170 | Implemented | App-uploaded user files require both Browseable and Editable for dashboard rename, replacement and deletion. Browseable-only and older files remain read-only. Service files stay private. API tests cover revocation during upload, stable IDs, quota, read-only access, and owner and request-header checks. Chrome exercised rename, chunked replace and delete confirmation at 390 px, and read-only controls at 1,280 px. Native installed verification and production rollout remain open. |
+
+Updated the provider docs, SDK reference, cross-platform SDKs and installed integration skill. The user waived usage limits for this change. A replacement preserves the public file ID and atomically switches the encrypted content pointer. Keep a pointer-aware API during any future web rollback.
