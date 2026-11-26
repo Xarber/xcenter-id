@@ -16,7 +16,10 @@ export function openFileTransfers(db,key) {
       position INTEGER NOT NULL,content BLOB NOT NULL,PRIMARY KEY(id,position)
     ) STRICT;
   `);
-  const begin=db.prepare('INSERT INTO file_transfers(id,owner,folder,updated,size,metadata) VALUES(?,?,?,?,?,?)');
+  if(!db.prepare("PRAGMA table_info(file_transfers)").all().some(column=>column.name==='client')){
+    db.exec('ALTER TABLE file_transfers ADD COLUMN client TEXT');
+  }
+  const begin=db.prepare('INSERT INTO file_transfers(id,owner,folder,updated,size,metadata,client) VALUES(?,?,?,?,?,?,?)');
   const byId=db.prepare('SELECT * FROM file_transfers WHERE owner=? AND id=?');
   const pending=db.prepare('SELECT total(max(1,size)) AS bytes FROM file_transfers WHERE owner=? AND committed=0 AND updated>=?');
   const purge=db.prepare('DELETE FROM file_transfers WHERE committed=0 AND updated<?');

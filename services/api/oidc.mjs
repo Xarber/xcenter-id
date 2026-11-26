@@ -640,6 +640,13 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       if (!access?.accountId || !registry?.has(access.clientId) || !accounts.linkedGrant(access.accountId,access.clientId) || (!native&&(await provider.Client.find(access.clientId))?.tokenEndpointAuthMethod!=='client_secret_basic') || !await activeGrant(access) || !access.scope?.split(' ').includes('app_data')) return null;
       return { owner:access.accountId, client:access.clientId, confidential:true };
     },
+    async peerAccess(token){
+      const access=await provider.AccessToken.find(token);
+      if(!access?.accountId||!registry?.peerPolicy(access.clientId)?.enabled||
+        !access.scope?.split(' ').includes('openid')||!accounts.linkedGrant(access.accountId,access.clientId)||
+        !await activeGrant(access))return null;
+      return {owner:access.accountId,client:access.clientId};
+    },
     async fileAccess(token, scopes) {
       const access=await provider.AccessToken.find(token);
       if(!access?.accountId||!registry?.has(access.clientId)||!accounts.linkedGrant(access.accountId,access.clientId))return null;

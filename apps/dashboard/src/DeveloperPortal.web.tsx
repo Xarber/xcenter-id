@@ -12,6 +12,37 @@ import { developerApi, optionalClaims, readAppIcon, type AppRegistration } from 
 type Draft=Pick<AppRegistration,'name'|'description'|'repository'|'icon'|'callbacks'|'native'|'local'>;
 const blank=():Draft=>({name:'',description:'',repository:'',icon:null,callbacks:[''],native:false});
 
+function PeerSettings({registration}:{registration:string}){
+  const [policy,setPolicy]=useState<{enabled:boolean;discovery:boolean}|null>(null);
+  const [busy,setBusy]=useState(false);
+  const [feedback,setFeedback]=useState('');
+  const path='apps/'+registration+'/peers';
+  useEffect(()=>{
+    let active=true;
+    void developerApi(path).then(value=>{if(active)setPolicy(value);})
+      .catch(error=>{if(active)setFeedback(error.message);});
+    return ()=>{active=false;};
+  },[path]);
+  async function save(change:{enabled:boolean;discovery:boolean}){
+    setBusy(true);setFeedback('');
+    try{setPolicy(await developerApi(path,change));}
+    catch(error){setFeedback(error instanceof Error?error.message:'Could not save peer settings.');}
+    finally{setBusy(false);}
+  }
+  return <section className="xc-card xc-pad xc-stack">
+    <h2>Peer connections</h2>
+    <p>Use shared WebRTC signaling for this app. Other apps cannot see or contact these peers.</p>
+    {policy&&<>
+      <label className="xc-list-row"><span>Enable peer signaling</span><input type="checkbox" role="switch"
+        checked={policy.enabled} disabled={busy} onChange={event=>void save({...policy,enabled:event.target.checked})}/></label>
+      <label className="xc-list-row"><span>Allow apps to list discoverable peers</span><input type="checkbox" role="switch"
+        checked={policy.discovery} disabled={busy||!policy.enabled} onChange={event=>void save({...policy,discovery:event.target.checked})}/></label>
+      <a href="/docs/sdk/peer-signaling">Signaling reference</a>
+    </>}
+    {feedback&&<p role="alert">{feedback}</p>}
+  </section>;
+}
+
 export default function DeveloperPortal({back}:{back:()=>void}){
   const confirmAction=useConfirmDialog();
   const [apps,setApps]=useState<AppRegistration[]|null>(null);
@@ -76,6 +107,7 @@ export default function DeveloperPortal({back}:{back:()=>void}){
     <button type="button" className="xc-button xc-secondary xc-self-start" onClick={()=>{history.replaceState(history.state,'','/developer');edit(null);}} disabled={busy}><ArrowLeft size={16}/> Registered apps</button>
     {existing?.status==='active'&&<a className="xc-button xc-secondary xc-self-start" href={'/developer/storage/'+existing.id}><Database size={17}/> {existing.verified?'Manage app storage':'Manage sharing requests'}</a>}
     {existing&&<button type="button" className="xc-button xc-secondary xc-self-start" onClick={()=>setShowConfiguration(true)}><Braces size={17}/> App configuration</button>}
+    {existing?.status==='active'&&existing.verified&&<PeerSettings key={existing.id} registration={existing.id}/>}
     <div><h2>{existing?.name??'Register an app'}</h2><TrustBadges kind="app" verified={existing?.verified}/></div>
     <form className="xc-stack" onSubmit={event=>{event.preventDefault();save();}}>
       <div className="xc-profile-head xc-portal-profile">

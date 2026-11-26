@@ -576,3 +576,17 @@ The [quality workflow](https://github.com/Xarber/xcenter-id/actions/runs/4566460
 | AUTHN-159 | Update integration guidance and SDK reference | Queued | Update the provider, public SDK and installed integration skill with live reference links and the verified upload and management contracts. Publish only after implementation and relevant source checks. |
 
 26 November, 05:14 CET. UADS §0 checkpoint before implementation. The weekly window had 53% remaining and resets 2 December at 15:33 CET. With more than six days until reset and no reset credits available, the 55% minimum applies. The five-hour window had 74% remaining and resets 26 November at 09:58 CET. The weekly threshold drops to 35% on 26 November at 15:33 CET. No implementation, build, release, or deployment began. Resume by checking both windows, then start AUTHN-155 at the email removal mutation and its account confirmation handler.
+
+| ID | Request | State | Next action |
+| --- | --- | --- | --- |
+| AUTHN-160 | Shared WebRTC signaling for verified apps, with generated app-isolated peer IDs and optional discovery | In Progress | The draft adds HTTPS signaling, verified-app owner controls, opaque IDs and app-scoped discovery. Add direct isolation, expiry, revocation and discovery tests, complete the SDK guide and verify a real WebRTC connection before rollout. |
+
+26 November, 05:30 CET. The user waived the weekly threshold for this assignment. The five-hour window has 6% remaining and resets 26 November at 09:58 CET. The weekly window has 42% remaining and resets 2 December at 15:33 CET. UADS §0 requires a five-hour checkpoint now.
+
+- AUTHN-155 is implemented in source. Web runs passkey confirmation before removal when required. Native checks confirmation and stops on cancellation. Verify the real removal and cancellation paths with isolated browser and device fixtures.
+- AUTHN-156 has native camera zoom buttons and an in-app browser sheet. Installed-device verification and reuse of the signed-in native account are open.
+- AUTHN-157 has draft delegated chunk transfer routes and a JavaScript upload helper in the public SDK checkout. Verify revocation, cross-app isolation, quota and resumption. Add the native SDK methods, then update the reference.
+- AUTHN-158 and AUTHN-159 are queued. No trusted administration credentials or account permissions were enabled.
+- Dashboard TypeScript, the existing 49 provider tests and the existing Node SDK tests passed. Two SDK browser tests skipped when no Chrome executable was specified. The new peer feature, new transfer paths and installed flows need their own verification. No application build or production rollout started.
+
+When usage permits, start by verifying AUTHN-155, then add regression coverage for delegated chunk and peer authorization before completing the SDK and developer guides.

@@ -155,8 +155,11 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
   function destination(owner,folder){
     return folder===null?[]:typeof folder==='string'&&fileId.test(folder)?trail(owner,folder):null;
   }
-  async function upload(req,res,owner,id){
-    if(req.method==='DELETE'&&id){
+  async function upload(req,res,owner,id,client,authorized){
+    if(id&&['GET','DELETE'].includes(req.method)){
+      const row=transfers.byId.get(owner,id);
+      if(!row||row.client!==client||transfers.isExpired(row))return json(res,404,{error:'Upload unavailable.'});
+      if(req.method==='GET')return json(res,200,{id,size:row.size,received:row.received,chunkSize:uploadChunkSize,committed:!!row.committed});
       transfers.cancel.run(owner,id);
       return json(res,200,{ok:true});
     }
@@ -166,7 +169,7 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     let input;
     try{input=await readInput(req,req.method==='PUT'?Math.ceil(uploadChunkSize/3)*4+1024:4096);}
     catch{return json(res,422,{error:'Invalid upload request.'});}
-    if(accounts.current(req)?.owner!==owner)return json(res,403,{error:'Sign in to continue the upload.'});
+    if(!await authorized())return json(res,403,{error:'Your upload authorization is no longer active.'});
     const [status,result]=transaction(()=>{
       if(!id&&req.method==='POST'){
         transfers.purge();
@@ -178,11 +181,11 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
         if(Math.max(1,size)>remaining(owner))return [409,{error:'Account storage is full.'}];
         if(!hasDiskRoom())return [503,{error:'File storage is temporarily unavailable.'}];
         const next=randomUUID();
-        transfers.begin.run(next,owner,folder,Date.now(),size,pack(owner,next,name,Buffer.alloc(0),size));
+        transfers.begin.run(next,owner,folder,Date.now(),size,pack(owner,next,name,Buffer.alloc(0),size),client);
         return [201,{id:next,chunkSize:uploadChunkSize}];
       }
       const row=id&&transfers.byId.get(owner,id);
-      if(!row||transfers.isExpired(row))return [404,{error:'Upload unavailable.'}];
+      if(!row||row.client!==client||transfers.isExpired(row))return [404,{error:'Upload unavailable.'}];
       if(req.method==='POST'){
         if(row.committed)return [200,{id}];
         if(row.received!==row.size)return [409,{error:'Upload is incomplete.'}];
@@ -216,7 +219,8 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     const delegated=path.startsWith('/v1/');
     const shared=path==='/v1/files/shared'||path.startsWith('/v1/files/shared/');
     if(delegated&&shared&&req.method!=='GET')return json(res,405,{error:'Shared files are read-only.'});
-    const scopes=shared?['shared_files_read']:req.method==='GET'?['files_read','files_write']:['files_write'];
+    const uploading=path.startsWith('/v1/files/uploads');
+    const scopes=uploading?['files_write']:shared?['shared_files_read']:req.method==='GET'?['files_read','files_write']:['files_write'];
     const token=delegated&&/^Bearer (\S+)$/i.exec(req.headers.authorization??'')?.[1];
     const identity=delegated?(token&&await fileAccess?.(token,scopes)):accounts.current(req);
     if(!identity) return json(res,401,{error:delegated?'An access token with the matching file permission is required.':'Sign in to manage your files.'});
@@ -224,6 +228,18 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     if(delegated)path='/account'+path.slice('/v1'.length);
     if(delegated&&shared&&!friends)return json(res,404,{error:'Shared files unavailable.'});
     const shareId=/^\/account\/files\/shared\/([0-9a-f-]{36})$/.exec(path)?.[1];
+    const uploadRoute=/^\/account\/files\/uploads(?:\/([0-9a-f-]{36}))?$/.exec(path);
+    if(uploadRoute){
+      if(!delegated&&req.method!=='GET'&&(!(accounts.allowsMutation?.(req)??req.headers.origin===origin)||
+        req.headers['x-authnjs-request']!=='account-consent'))return json(res,403,{error:'Only the account manager can change your files.'});
+      const client=delegated?identity.client:null;
+      if(delegated&&!client)return json(res,403,{error:'Application unavailable.'});
+      const authorized=async()=>{
+        const live=delegated?await fileAccess(token,['files_write']):accounts.current(req);
+        return live?.owner===owner&&(!delegated||live.client===client);
+      };
+      return upload(req,res,owner,uploadRoute[1],client,authorized);
+    }
     if (friends && (path==='/account/files/shared'||shareId)) {
       if (req.method==='GET'&&!shareId) {
         const incoming=incomingShares.all(owner).filter(activeShare).flatMap(share=>{
@@ -303,8 +319,6 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     if(!delegated&&(!(accounts.allowsMutation?.(req) ?? req.headers.origin===origin)||req.headers['x-authnjs-request']!=='account-consent')){
       return json(res,403,{error:'Only the account manager can change your files.'});
     }
-    const uploadRoute=!delegated&&/^\/account\/files\/uploads(?:\/([0-9a-f-]{36}))?$/.exec(path);
-    if(uploadRoute)return upload(req,res,owner,uploadRoute[1]);
     if(req.method==='DELETE'&&individual&&folderItem){
       const recursive=!delegated&&new URL(req.url,origin).searchParams.get('recursive')==='1';
       const result=transaction(()=>{

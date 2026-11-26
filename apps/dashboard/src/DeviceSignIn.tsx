@@ -1,7 +1,8 @@
 import {useDialog} from './dialog-model';
+import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef, useState, type ComponentRef } from 'react';
-import { Linking, Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { deviceSignInUrl, isDeviceCode, normalizeDeviceCode } from './device-link';
 import { accountHost } from './native-account';
 
@@ -9,6 +10,7 @@ export default function DeviceSignIn({colors,back}: {colors:{ink:string;accent:s
   const showDialog=useDialog();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
+  const [zoom, setZoom] = useState(0);
   const [characters,setCharacters] = useState<string[]>(()=>Array(6).fill(''));
   const inputs=useRef<Array<ComponentRef<typeof TextInput>|null>>([]);
   const code=characters.join('');
@@ -24,7 +26,7 @@ export default function DeviceSignIn({colors,back}: {colors:{ink:string;accent:s
     opening.current = true;
     setScanning(false);
     setStatus('');
-    try { await Linking.openURL(url); }
+    try { await openBrowserAsync(url, {presentationStyle: WebBrowserPresentationStyle.PAGE_SHEET}); }
     catch { setStatus('Could not open the sign-in page.'); }
     finally { opening.current = false; }
   }
@@ -58,12 +60,21 @@ export default function DeviceSignIn({colors,back}: {colors:{ink:string;accent:s
     <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Sign in on another device</Text>
     <Text style={{color:colors.muted}}>Use the code shown on your TV or other device.</Text>
     {scanning ? <>
-      <CameraView style={{height:240,borderRadius:16,overflow:'hidden'}} barcodeScannerSettings={{barcodeTypes:['qr']}}
+      <CameraView zoom={zoom} style={{height:240,borderRadius:16,overflow:'hidden'}} barcodeScannerSettings={{barcodeTypes:['qr']}}
         onBarcodeScanned={({data})=>{
           const url=deviceSignInUrl(data,accountHost);
           if (url) review(url);
           else setStatus('Scan the X-Center ID QR code shown on your device.');
         }}/>
+      <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>
+        {[{label:'1×',value:0},{label:'Closer',value:0.18},{label:'Closest',value:0.35}].map(level=>
+          <Pressable key={level.label} accessibilityRole="button" accessibilityLabel={'Camera zoom: '+level.label}
+            accessibilityState={{selected:zoom===level.value}} onPress={()=>setZoom(level.value)}
+            style={{minHeight:44,justifyContent:'center',paddingHorizontal:12,borderRadius:12,
+              borderWidth:1,borderColor:zoom===level.value?colors.accent:colors.line,backgroundColor:colors.soft}}>
+            <Text style={{color:colors.accent,fontWeight:'700'}}>{level.label}</Text>
+          </Pressable>)}
+      </View>
       {action('Close scanner',()=>{setScanning(false);setStatus('');})}
     </> : action('Scan QR code',()=>void scan())}
     <Text style={{color:colors.ink,fontWeight:'700'}}>Enter a device code</Text>

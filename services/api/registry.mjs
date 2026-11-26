@@ -12,6 +12,9 @@ export function openRegistry(path) {
     CREATE TABLE IF NOT EXISTS client_brand(id TEXT PRIMARY KEY,developer_name TEXT NOT NULL,icon TEXT)
       STRICT;
     CREATE TABLE IF NOT EXISTS app_restrictions(id TEXT PRIMARY KEY, restricted INTEGER NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS app_peer_policy (
+      id TEXT PRIMARY KEY,enabled INTEGER NOT NULL,discovery INTEGER NOT NULL
+    ) STRICT;
     CREATE TABLE IF NOT EXISTS client_native(id TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS app_profiles(id TEXT PRIMARY KEY, description TEXT NOT NULL, repository TEXT NOT NULL, callbacks TEXT NOT NULL, verified INTEGER NOT NULL DEFAULT 0) STRICT;
     CREATE TABLE IF NOT EXISTS app_callback_approvals(id TEXT PRIMARY KEY, callbacks TEXT NOT NULL) STRICT;
@@ -122,6 +125,20 @@ export function openRegistry(path) {
       const {id}=accessByClient.get(client);
       return !!db.prepare('INSERT OR IGNORE INTO app_access_members SELECT ?,?,0 WHERE (SELECT count(*) FROM app_access_members WHERE id=?) < 500')
         .run(id,owner,id).changes||membership.get(id,owner)?.approved===0;
+    },
+    peerPolicy(client){
+      const app=detailByClient.get(client);
+      if(!app||!db.prepare('SELECT verified FROM app_profiles WHERE id=?').get(app.id)?.verified)return null;
+      const policy=db.prepare('SELECT enabled,discovery FROM app_peer_policy WHERE id=?').get(app.id);
+      return {enabled:!!policy?.enabled,discovery:!!policy?.enabled&&!!policy.discovery};
+    },
+    ownedPeerPolicy(owner,id,change){
+      const app=lookup.get(id,owner);
+      if(!app||app.status!=='active'||!this.peerPolicy(app.client))return null;
+      if(change)db.prepare(`INSERT INTO app_peer_policy VALUES(?,?,?) ON CONFLICT(id)
+        DO UPDATE SET enabled=excluded.enabled,discovery=excluded.discovery`)
+        .run(id,Number(change.enabled),Number(change.enabled&&change.discovery));
+      return this.peerPolicy(app.client);
     },
     registration:id=>db.prepare('SELECT c.id,c.client,c.developer,c.status,p.verified FROM clients c LEFT JOIN app_profiles p ON p.id=c.id WHERE c.id=?').get(id),
     clientForId:id=>db.prepare('SELECT client FROM clients WHERE id=?').get(id)?.client,

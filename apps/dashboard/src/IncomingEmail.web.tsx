@@ -2,6 +2,7 @@ import {useConfirmDialog} from './dialog-model';
 import {hasPendingDelivery,verificationStatus,type VerificationAddress,type VerificationStatus} from './email-verification-status';
 import {useEffect,useState} from 'react';
 import {api} from './web-account';
+import {confirmIdentity} from './Reauthenticate.web';
 
 export default function IncomingEmail({updated,addresses}:{updated:()=>Promise<void>;addresses:VerificationAddress[]}){
   const confirmAction=useConfirmDialog();
@@ -20,13 +21,25 @@ export default function IncomingEmail({updated,addresses}:{updated:()=>Promise<v
     if(report||completed||message==='Email verified.'&&!!target)setStatus(message);
     if(report||message==='Email verified.'&&!!target)await updated();
   }
+  async function removeAddress(address:string){
+    if(!await confirmAction('Remove this email address from your account?','Remove address'))return;
+    setBusy(true);setStatus('');
+    try{
+      if(!(await api('session/access')).confirmed)await confirmIdentity();
+      await api('email/remove',{email:address});
+      await check();await updated();
+      setStatus('Email address removed.');
+    }catch(error){
+      setStatus(error instanceof Error&&error.name==='NotAllowedError'?'Confirmation canceled.':error instanceof Error?error.message:'Could not remove the email address.');
+    }finally{setBusy(false);}
+  }
   useEffect(()=>{void check().catch(error=>setStatus(error.message));},[]);
   useEffect(()=>{
     if(!info?.pending&&!info?.outgoing)return;
     const timer=setInterval(()=>void check().catch(()=>{}),15000);
     return ()=>clearInterval(timer);
   },[info?.pending?.address,info?.outgoing?.address,draft]);
-  if(!info?.enabled&&!info?.canSendLink&&!status)return null;
+  if(!info?.enabled&&!info?.canSendLink&&!status&&!addresses.length)return null;
   return <section className="xc-card xc-pad xc-stack">
     <h2>Email addresses</h2>
     <p>Verify an address by opening a link sent to it, or by sending a prepared message from that address.</p>
@@ -37,7 +50,7 @@ export default function IncomingEmail({updated,addresses}:{updated:()=>Promise<v
       <label>Email to verify<input type="email" required maxLength={254} value={email} onChange={event=>setEmail(event.target.value)}/></label>
       <button className="xc-button xc-secondary" disabled={busy}>Add email</button>
     </form>
-    {addresses.map(item=><div key={item.address} className="xc-list-row"><div><strong>{item.address}</strong><p>{item.verified?'Verified':'Unverified · Cannot be used for sign-in or shared with apps'}</p></div>{!item.verified&&info?.canSendLink&&<button type="button" className="xc-button xc-primary" disabled={busy} onClick={()=>{setBusy(true);setStatus('Sending verification link…');void api('email',{email:item.address}).then(()=>check(true,item.address)).catch(error=>setStatus(error.message)).finally(()=>setBusy(false));}}>Email me a link</button>}{!item.verified&&info?.enabled&&<button className="xc-button xc-secondary" disabled={busy} onClick={()=>{setBusy(true);void api('email/incoming',{email:item.address}).then(result=>{setDraft(result);window.location.href=result.mailto;return check(true,result.address);}).catch(e=>setStatus(e.message)).finally(()=>setBusy(false));}}>Send a verification email</button>}<button className="xc-button xc-secondary" disabled={busy} onClick={async()=>{if(!await confirmAction('Remove this email address from your account?','Remove address'))return;setBusy(true);void api('email/remove',{email:item.address}).then(async()=>{await check();await updated();}).catch(e=>setStatus(e.message)).finally(()=>setBusy(false));}}>Remove</button></div>)}
+    {addresses.map(item=><div key={item.address} className="xc-list-row"><div><strong>{item.address}</strong><p>{item.verified?'Verified':'Unverified · Cannot be used for sign-in or shared with apps'}</p></div>{!item.verified&&info?.canSendLink&&<button type="button" className="xc-button xc-primary" disabled={busy} onClick={()=>{setBusy(true);setStatus('Sending verification link…');void api('email',{email:item.address}).then(()=>check(true,item.address)).catch(error=>setStatus(error.message)).finally(()=>setBusy(false));}}>Email me a link</button>}{!item.verified&&info?.enabled&&<button className="xc-button xc-secondary" disabled={busy} onClick={()=>{setBusy(true);void api('email/incoming',{email:item.address}).then(result=>{setDraft(result);window.location.href=result.mailto;return check(true,result.address);}).catch(e=>setStatus(e.message)).finally(()=>setBusy(false));}}>Send a verification email</button>}<button className="xc-button xc-secondary" disabled={busy} onClick={()=>void removeAddress(item.address)}>Remove</button></div>)}
     {draft&&<><p>Send from <strong>{draft.address}</strong>. Your email provider must authenticate the message.</p>
       <a className="xc-button xc-primary xc-self-start" href={draft.mailto}>Open verification email</a>
       <p>Expires {new Date(draft.expires).toLocaleTimeString()}. Delivery normally takes a few minutes.</p></>}

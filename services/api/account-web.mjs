@@ -1,3 +1,4 @@
+import {createPeerSignaling} from './peer-signaling.mjs';
 import {appConfiguration} from './application-configuration.mjs';
 import {isUsername} from './identity-profile.mjs';
 import {createConsentTest} from './velunivo-consent-preview.mjs';
@@ -121,6 +122,28 @@ const friendRecordRoutes = friends && store && createFriendRecordRoutes({ accoun
   publishers:new Map((configuration.friendRecordPublishers??[]).map(({id,name})=>[id,name])),
   allowed:(owner,source)=>registry.has(source)&&!accounts.isDisconnected(owner,source),
 }) });
+const peerSignaling=createPeerSignaling({
+  authenticate:token=>provider?.peerAccess(token),
+  settings:client=>registry.peerPolicy(client),
+});
+async function peerSettings(req,res,id){
+  const answer=(status,value)=>res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(value));
+  const owner=accounts.current(req)?.owner;
+  if(!owner)return answer(401,{error:'Sign in first.'});
+  if(req.method==='GET'){
+    const policy=registry.ownedPeerPolicy(owner,id);
+    return answer(policy?200:404,policy??{error:'Peer settings are available to owners of active verified apps.'});
+  }
+  if(req.method!=='POST'||!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='developer-portal'){
+    return answer(403,{error:'Use Developer Apps to change peer settings.'});
+  }
+  let value;
+  try{value=await readJson(req,512);}catch{return answer(422,{error:'Invalid peer settings.'});}
+  if(typeof value?.enabled!=='boolean'||typeof value?.discovery!=='boolean')return answer(422,{error:'Choose both peer settings.'});
+  if(accounts.current(req)?.owner!==owner)return answer(403,{error:'Developer session changed.'});
+  const policy=registry.ownedPeerPolicy(owner,id,value);
+  return answer(policy?200:404,policy??{error:'Peer settings are available to owners of active verified apps.'});
+}
 const sampleOrigins=new Set(configuration?.clients.filter(client=>['notes-external','trips-external'].includes(client.client_id))
   .map(client=>new URL(client.redirect_uris[0]).origin)??[]);
 const samples = provider && store ? createSamples({ issuer: origin, configuration:process.env.AUTHNJS_PUBLIC_SAMPLE_APPS==='true'?configuration:{...configuration,clients:configuration.clients.filter(client=>!['notes-external','trips-external'].includes(client.client_id))}, provider, accounts, store }) : null;
@@ -217,6 +240,15 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     return;
   }
   const externalSample=sampleOrigins.has(forwardedOrigin)&&req.headers['x-forwarded-proto']==='https';
+  if(path==='/v1/peers'||path.startsWith('/v1/peers/')){
+    void peerSignaling(req,res,target).catch(()=>{if(!res.headersSent)res.writeHead(503,{'Cache-Control':'no-store'});res.end();});
+    return;
+  }
+  const peerSettingsId=/^\/account\/developer\/apps\/([0-9a-f-]{36})\/peers$/.exec(path)?.[1];
+  if(peerSettingsId){
+    void peerSettings(req,res,peerSettingsId).catch(()=>{if(!res.headersSent)res.writeHead(503,{'Cache-Control':'no-store'});res.end();});
+    return;
+  }
   if(path==='/v1/profile/friends'&&appFriendRoutes){
     void appFriendRoutes(req,res).catch(()=>{
       if(!res.headersSent)res.writeHead(503,{'Cache-Control':'no-store'});
@@ -296,12 +328,12 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
     });
     return;
   }
-  if (accountFiles && (/^\/account\/files\/(?:destinations|uploads(?:\/[0-9a-f-]{36})?)$/.test(path)||/^\/(?:account|v1)\/files(?:\/(?:folders|shared)(?:\/[0-9a-f-]{36})?|\/[0-9a-f-]{36})?$/.test(path))) {
+  if (accountFiles && (/^\/account\/files\/(?:destinations|uploads(?:\/[0-9a-f-]{36})?)$/.test(path)||/^\/v1\/files\/uploads(?:\/[0-9a-f-]{36})?$/.test(path)||/^\/(?:account|v1)\/files(?:\/(?:folders|shared)(?:\/[0-9a-f-]{36})?|\/[0-9a-f-]{36})?$/.test(path))) {
     if(path.startsWith('/v1/')){
       res.setHeader('Access-Control-Allow-Origin','*');
       res.setHeader('Access-Control-Expose-Headers','Content-Disposition');
       if(req.method==='OPTIONS'){
-        const methods=path==='/v1/files/shared'||path.startsWith('/v1/files/shared/')?'GET, OPTIONS':'GET, POST, PATCH, DELETE, OPTIONS';
+        const methods=path==='/v1/files/shared'||path.startsWith('/v1/files/shared/')?'GET, OPTIONS':'GET, POST, PUT, PATCH, DELETE, OPTIONS';
         return res.writeHead(204,{'Access-Control-Allow-Methods':methods,'Access-Control-Allow-Headers':'Authorization, Content-Type'}).end();
       }
     }
