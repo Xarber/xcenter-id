@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { handleInbox } from './mail-routes.mjs';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -164,6 +164,8 @@ test('inbox routes expose text and attachments to their owner and protect deleti
   assert.match(view.text,/Message text/);
   assert.equal(view.html,undefined);
   assert.equal(view.attachments[0].name,'report.txt');
+  assert.equal(view.attachments[0].sha256,createHash('sha256').update('document bytes').digest('hex'));
+  assert.deepEqual(await (await fetch(root+'/attachments/0?metadata=1',{headers:reader})).json(),view.attachments[0]);
   const attachment = await fetch(root+'/attachments/0',{headers:reader});
   assert.equal(attachment.headers.get('content-disposition'),'attachment; filename="attachment-1"');
   assert.equal(await attachment.text(),'document bytes');

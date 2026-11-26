@@ -700,3 +700,11 @@ AUTHN-169 is verified for stock PeerJS 1.5.5 in Chrome and the staged issuer. Pr
 | AUTHN-170 | Implemented | App-uploaded user files require both Browseable and Editable for dashboard rename, replacement and deletion. Browseable-only and older files remain read-only. Service files stay private. API tests cover revocation during upload, stable IDs, quota, read-only access, and owner and request-header checks. Chrome exercised rename, chunked replace and delete confirmation at 390 px, and read-only controls at 1,280 px. Native installed verification and production rollout remain open. |
 
 Updated the provider docs, SDK reference, cross-platform SDKs and installed integration skill. The user waived usage limits for this change. A replacement preserves the public file ID and atomically switches the encrypted content pointer. Keep a pointer-aware API during any future web rollback.
+
+### File content hashes
+
+| ID | Request | State | Next action |
+| --- | --- | --- | --- |
+| AUTHN-171 | Include content hashes in all file metadata and listings for app-owned indexes, then deploy to production. | Implemented | Run source and SDK quality gates, stage authenticated file checks in isolation, then deploy with a verified rollback target. |
+
+The SHA-256 digest follows the exact downloaded bytes. File and share permissions still gate access to metadata. The digest cache is encrypted and keyed by immutable content; replacement preserves the public ID while switching the hash. See [file metadata and hashes](APP_CONTAINER_FILES.md#file-metadata-and-content-hashes).

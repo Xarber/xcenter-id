@@ -6,6 +6,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import {fileName as nameOf, readFileInput as readInput, fileDownloadHeaders} from './file-input.mjs';
 import {appendTransferChunk, openFileTransfers,uploadChunkSize } from './file-transfers.mjs';
+import {openFileDigests} from './file-digests.mjs';
 
 const fileLimit = 2 * 1024 * 1024;
 const storageLimit = 10 * 1024 * 1024;
@@ -35,6 +36,7 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     CREATE INDEX IF NOT EXISTS file_shares_recipient ON user_file_shares(recipient);
   `);
   const transfers=openFileTransfers(db,key);
+  const digests=openFileDigests(db,key,'user_files');
   const hasDiskRoom=()=>{
     if(database===':memory:')return true;
     try{const status=statfsSync(dirname(database));return status.bavail*status.bsize>=256*1024**2;}
@@ -67,7 +69,7 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
   const removeOwnedShares=db.prepare('DELETE FROM user_file_shares WHERE owner=? OR recipient=?');
   const detachOwnedFolders=db.prepare('UPDATE user_folders SET parent=NULL WHERE owner=?');
   const removeOwnedFolders=db.prepare('DELETE FROM user_folders WHERE owner=?');
-  const forFolder = db.prepare('SELECT f.* FROM user_files f LEFT JOIN user_file_folders link ON link.file=f.id WHERE f.owner=? AND link.folder IS ? ORDER BY f.created DESC,f.id');
+  const forFolder = db.prepare('SELECT f.id FROM user_files f LEFT JOIN user_file_folders link ON link.file=f.id WHERE f.owner=? AND link.folder IS ? ORDER BY f.created DESC,f.id');
   const children = db.prepare('SELECT * FROM user_folders WHERE owner=? AND parent IS ? ORDER BY created,id');
   const folderById = db.prepare('SELECT * FROM user_folders WHERE owner=? AND id=?');
   const folderCount = db.prepare('SELECT count(*) AS total FROM user_folders WHERE owner=?');
@@ -121,6 +123,32 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
   function json(res,status,result) {
     res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});
     res.end(JSON.stringify(result));
+  }
+
+  async function describe(owner,id) {
+    const row=select.get(owner,id);
+    if(!row)return null;
+    const transfer=transfers.byId.get(owner,id);
+    const getCurrent=()=>select.get(owner,id);
+    const sha256=await digests.get(row,()=>transfer?.committed?transfers.read(transfer):[unpack(row,true).data],getCurrent);
+    const current=getCurrent();
+    return current&&sha256?{...unpack(current,false),sha256}:null;
+  }
+
+  async function describeShares(shares,direction){
+    const result=[];
+    for(const share of shares){
+      if(!activeShare(share))continue;
+      const entry=await describe(share.owner,share.file);
+      if(entry&&activeShare(share)&&shareById.get(share.recipient,share.id)){
+        result.push({share,entry:{...entry,id:share.id,[direction]:accounts.username(direction==='from'?share.owner:share.recipient)}});
+      }
+    }
+    return result;
+  }
+
+  function visibleShares(entries){
+    return entries.filter(({share})=>activeShare(share)&&shareById.get(share.recipient,share.id)).map(({entry})=>entry);
   }
 
   async function download(res,row) {
@@ -205,6 +233,12 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     const identity=delegated?(token&&await fileAccess?.(token,scopes)):accounts.current(req);
     if(!identity) return json(res,401,{error:delegated?'An access token with the matching file permission is required.':'Sign in to manage your files.'});
     const owner=identity.owner;
+    const query=new URL(req.url,origin).searchParams;
+    const metadata=query.get('metadata')==='1';
+    async function stillAuthorized(){
+      const live=delegated?await fileAccess(token,scopes):accounts.current(req);
+      return live?.owner===owner&&(!delegated||live.client===identity.client);
+    }
     if(delegated)path='/account'+path.slice('/v1'.length);
     if(delegated&&shared&&!friends)return json(res,404,{error:'Shared files unavailable.'});
     const shareId=/^\/account\/files\/shared\/([0-9a-f-]{36})$/.exec(path)?.[1];
@@ -222,21 +256,20 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     }
     if (friends && (path==='/account/files/shared'||shareId)) {
       if (req.method==='GET'&&!shareId) {
-        const incoming=incomingShares.all(owner).filter(activeShare).flatMap(share=>{
-          const row=select.get(share.owner,share.file);
-          return row?[{...unpack(row,false),id:share.id,from:accounts.username(share.owner)}]:[];
-        });
-        if(delegated)return json(res,200,{incoming});
-        const outgoing=outgoingShares.all(owner).filter(activeShare).flatMap(share=>{
-          const row=select.get(owner,share.file);
-          return row?[{...unpack(row,false),id:share.id,to:accounts.username(share.recipient)}]:[];
-        });
-        return json(res,200,{incoming,outgoing});
+        const incoming=await describeShares(incomingShares.all(owner),'from');
+        const outgoing=delegated?undefined:await describeShares(outgoingShares.all(owner),'to');
+        if(!await stillAuthorized())return json(res,403,{error:'File access was revoked.'});
+        return json(res,200,{incoming:visibleShares(incoming),outgoing:outgoing&&visibleShares(outgoing)});
       }
       if (req.method==='GET'&&shareId) {
         const share=shareById.get(owner,shareId);
         const row=share&&activeShare(share)&&select.get(share.owner,share.file);
-        return row?download(res,row):json(res,404,{error:'Shared file unavailable.'});
+        if(!row)return json(res,404,{error:'Shared file unavailable.'});
+        if(!metadata)return download(res,row);
+        const entry=await describe(share.owner,share.file);
+        if(!await stillAuthorized())return json(res,403,{error:'File access was revoked.'});
+        if(!entry||!activeShare(share)||!shareById.get(owner,shareId))return json(res,404,{error:'Shared file unavailable.'});
+        return json(res,200,{...entry,id:share.id,from:accounts.username(share.owner)});
       }
       if (!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent') {
         return json(res,403,{error:'Only the account manager can change file access.'});
@@ -276,13 +309,19 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     const individual=fileId.test(id);
     if(req.method==='GET'){
       if(path==='/account/files'){
-        const location=new URL(req.url,origin).searchParams.get('folder');
+        const location=query.get('folder');
         const breadcrumbs=trail(owner,location);
         if(!breadcrumbs)return json(res,404,{error:'Folder unavailable.'});
         const folder=location||null;
         const sizes=new Map(folderSizes.all(owner,folder,owner,owner).map(row=>[row.root,row.size]));
+        const files=[];
+        for(const {id} of forFolder.all(owner,folder)){
+          const entry=await describe(owner,id);
+          if(entry)files.push(entry);
+        }
+        if(!await stillAuthorized())return json(res,403,{error:'File access was revoked.'});
         const listing={
-          files:forFolder.all(owner,folder).map(row=>unpack(row,false)),
+          files,
           folders:children.all(owner,folder).map(row=>({...unpack(row,false),size:sizes.get(row.id)??0})),
           breadcrumbs,
         };
@@ -295,7 +334,10 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
       if(!delegated&&path==='/account/files/destinations')return json(res,200,{folders:directory.all(owner).map(row=>({...unpack(row,false),parent:row.parent}))});
       const row=individual&&select.get(owner,id);
       if(!row)return json(res,404,{error:'File unavailable.'});
-      return download(res,row);
+      if(!metadata)return download(res,row);
+      const entry=await describe(owner,id);
+      if(!await stillAuthorized())return json(res,403,{error:'File access was revoked.'});
+      return entry?json(res,200,entry):json(res,404,{error:'File unavailable.'});
     }
     if(!delegated&&(!(accounts.allowsMutation?.(req) ?? req.headers.origin===origin)||req.headers['x-authnjs-request']!=='account-consent')){
       return json(res,403,{error:'Only the account manager can change your files.'});

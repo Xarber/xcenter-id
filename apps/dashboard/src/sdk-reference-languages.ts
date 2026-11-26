@@ -363,11 +363,13 @@ const folderName=argument('name','String','Display name for the new folder or fi
 const folderPatch=argument('change','ItemChange / JSON object / map','Set a new name, a destination, or both. Omit a property to keep it. An explicit null folder moves to the root.');
 const fileRows = [
   ['list-files','listFiles','folder: String? = nil','folder: String? = null','{String? folder}',[parent],'folder: folderID','folder = folderId','folder: folderId'],
+  ['get-file','getFile','_ id: String','id: String','String id',[idArg],'fileID','fileId','fileId'],
   ['download-file','downloadFile','_ id: String','id: String','String id',[idArg],'fileID','fileId','fileId'],
   ['delete-file','deleteFile','_ id: String','id: String','String id',[idArg],'fileID','fileId','fileId'],
   ['create-folder','createFolder','name: String, parent: String? = nil','name: String, parent: String? = null','String name, {String? parent}',[folderName,argument('parent','String?',parent[2])],'name: "Notes"','"Notes"',"'Notes'"],
   ['delete-folder','deleteFolder','_ id: String','id: String','String id',[idArg],'folderID','folderId','folderId'],
   ['list-shared-files','listSharedFiles','','','',[],'','',''],
+  ['get-shared-file','getSharedFile','_ id: String','id: String','String id',[argument('id','String','Incoming share identifier returned by the shared file list.')],'shareID','shareId','shareId'],
   ['download-shared-file','downloadSharedFile','_ id: String','id: String','String id',[argument('id','String','Incoming share identifier returned by the shared file list.')],'shareID','shareId','shareId'],
 ] as const;
 for(const [id,method,swiftSig,kotlinSig,dartSig,args,swift,kotlin,dart] of fileRows){
@@ -722,6 +724,10 @@ dataExamples("list-app-files",'user',
   ["listAppFiles(cursor: String? = nil)","listAppFiles(cursor: String? = null)","listAppFiles({String? cursor})"],
   [["cursor","Optional String","Cursor returned by the preceding page. Omit for the first page."]],
   ["listAppFiles()","listAppFiles()","listAppFiles()"]);
+
+dataExamples("get-app-file",'user',
+  ["getAppFile(_ id: String)","getAppFile(id: String)","getAppFile(String id)"],
+  [idArg],["getAppFile(id)","getAppFile(id)","getAppFile(id)"]);
 
 dataExamples("download-app-file",'user',
   ["downloadAppFile(_ id: String)","downloadAppFile(id: String)","downloadAppFile(String id)"],

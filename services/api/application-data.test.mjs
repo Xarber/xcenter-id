@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
@@ -177,12 +178,17 @@ test('container files are quota-bound, app-scoped, and browsed only with the per
   assert.equal((await complete(user,id)).status,409);
   assert.equal(data.containers('player').length,0);
   const content=Buffer.alloc(600000,42);
+  const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
   assert.equal((await write(user,id,0,content.subarray(0,chunkSize))).status,200);
   assert.equal((await write(user,id,0,content.subarray(0,chunkSize))).status,200);
   assert.equal((await write(user,id,chunkSize,content.subarray(chunkSize))).status,200);
   assert.equal((await complete(user,id)).status,201);
   assert.equal((await complete(user,id)).status,200);
-  assert.deepEqual((await list(browser,{cookie:'player'})).map(item=>item.name),['Beat Saber.zip']);
+  const [original]=await list(browser,{cookie:'player'});
+  assert.equal(original.name,'Beat Saber.zip');
+  assert.equal(original.sha256,digest(content));
+  assert.deepEqual(await (await call(files+'/'+id+'?metadata=1',{token:user})).json(),original);
+  assert.equal((await call(files+'/'+id+'?metadata=1',{token:stranger})).status,404);
   assert.equal(data.containers('player')[0].showInFiles,true);
   assert.equal(data.containers('player')[0].canManage,false);
   assert.equal(data.containers('player')[0].visibleBytes,600000);
@@ -205,7 +211,9 @@ test('container files are quota-bound, app-scoped, and browsed only with the per
   assert.equal((await call(browser+'/'+id,{cookie:'stranger',method:'PUT',payload:{name:'foreign.zip'}})).status,404);
   assert.equal((await fetch(base+browser+'/'+id,{method:'DELETE',headers:{cookie:'player'}})).status,403);
   assert.equal((await edit('/'+id,'PUT',{name:'renamed.zip'})).status,200);
-  assert.equal((await list(browser,{cookie:'player'}))[0].name,'renamed.zip');
+  const [renamed]=await list(browser,{cookie:'player'});
+  assert.equal(renamed.name,'renamed.zip');
+  assert.equal(renamed.sha256,original.sha256);
   assert.equal((await edit('/uploads','POST',{replace:id,size:700001})).status,409);
   const draft=async size=>(await (await edit('/uploads','POST',{replace:id,size})).json()).id;
   const stale=await draft(3);
@@ -223,6 +231,10 @@ test('container files are quota-bound, app-scoped, and browsed only with the per
   assert.equal((await edit('/uploads/'+revision,'POST',{})).status,201);
   assert.deepEqual(await (await edit('/uploads/'+revision,'POST',{})).json(),{id});
   assert.equal(await (await call(files+'/'+id,{token:user})).text(),'xyz');
+  const replaced=await (await call(browser+'/'+id+'?metadata=1',{cookie:'player'})).json();
+  assert.equal(replaced.id,id);
+  assert.equal(replaced.sha256,digest('xyz'));
+  assert.notEqual(replaced.sha256,original.sha256);
   assert.equal(data.accountUsage('player'),3);
   assert.equal((await edit('/'+id,'DELETE')).status,200);
   assert.equal(data.accountUsage('player'),0);
@@ -238,13 +250,17 @@ test('container files are quota-bound, app-scoped, and browsed only with the per
   assert.equal((await call(files+'/'+id,{token:key})).status,404);
   assert.equal((await call(portal+'/files/'+service,{cookie:'player'})).status,404);
   assert.equal(await (await call(portal+'/files/'+service,{cookie:'developer'})).text(),'s');
+  assert.equal((await (await call(files+'/'+service+'?metadata=1',{token:key})).json()).sha256,digest('s'));
+  assert.equal((await list(portal+'/files',{cookie:'developer'}))[0].sha256,digest('s'));
   assert.equal((await (await call(portal,{cookie:'developer'})).json()).used,1);
 
   const devFile=(await (await start(developer,{name:'dev.bin',size:0})).json()).id;
   assert.equal((await complete(developer,devFile)).status,201);
   assert.deepEqual(await list(browser,{cookie:'developer'}),[]);
   assert.equal((await manage({action:'file-visibility',enabled:true})).status,200);
-  assert.deepEqual((await list(browser,{cookie:'developer'})).map(item=>item.id),[devFile]);
+  const [empty]=await list(browser,{cookie:'developer'});
+  assert.equal(empty.id,devFile);
+  assert.equal(empty.sha256,digest(''));
   assert.equal((await call('/account/file-containers/backup',{cookie:'developer'})).status,200);
   assert.equal((await manage({action:'file-visibility',enabled:false})).status,200);
   assert.equal((await call('/account/file-containers/backup',{cookie:'developer'})).status,404);

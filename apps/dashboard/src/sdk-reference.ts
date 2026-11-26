@@ -1,4 +1,4 @@
-export const sdkSource = 'https://github.com/Xarber/xcenter-id-sdk/tree/cd374b95c174dc9b37973228428bbe1f7325da58';
+export const sdkSource = 'https://github.com/Xarber/xcenter-id-sdk/tree/ed0d3f55fa1dbba44ac245ebdc1a58b1ad66e9f0';
 
 export const groups = {
   setup: 'Setup & configuration',
@@ -57,6 +57,11 @@ const publicRecord = '{"id":"opaque-public-id","revision":1,"public":true,"data"
 const page = (item: string) => '{"records":[' + item + '],"nextCursor":null}';
 const ok = '{"ok":true}';
 const mockId = '9dbbdc61-08a6-4c49-9df8-51cf596871cd';
+const digest = '185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969';
+const fileSample = {id:mockId,name:'hello.txt',created:1795600000000,size:5,sha256:digest};
+const sharedSample = {...fileSample,from:'morgan'};
+const appFileSample = {...fileSample,browseable:true,editable:false};
+const digestBehavior = 'The sha256 field is a 64-character lowercase hexadecimal digest of the file bytes. It survives renames and moves. Use the file ID and digest together in your own index. Identical bytes can have multiple file IDs.';
 const fileId = ['id', 'string', 'File or folder ID from an earlier list or create response.'] as const;
 const folder = ['folder?', 'string | null', 'Parent folder ID. Omit or use null for the account root.'] as const;
 const change = [
@@ -248,7 +253,8 @@ data.push({group:'data',id:'recipient-sharing',title:'Share a record with recipi
 const files: Reference[] = [];
 type FileDoc = [id:string,title:string,method:string,signature:string,description:string,access:string,action:string,result:string,args:readonly Argument[],code:string,output:string,native:string];
 const fileDocs: FileDoc[] = [
-  ['list-files','List files in a folder','list','options?','List direct children and the breadcrumb trail. Each folder row includes a recursive size in bytes. Pass a folder ID from a preceding result to open a nested folder.','files_read or files_write','Enumerate selected folder','Files, folders and breadcrumbs',[folder],'const listing = await user.files.list();','{"files":[{"id":"'+mockId+'","name":"hello.txt","created":1795600000000,"size":5}],"folders":[],"breadcrumbs":[]}','listFiles(folder)'],
+  ['list-files','List files in a folder','list','options?','List direct children and the breadcrumb trail. Each folder row includes a recursive size in bytes. Pass a folder ID from a preceding result to open a nested folder. '+digestBehavior,'files_read or files_write','Enumerate selected folder','Files, folders and breadcrumbs',[folder],'const listing = await user.files.list();',JSON.stringify({files:[fileSample],folders:[],breadcrumbs:[]}),'listFiles(folder)'],
+  ['get-file','Get file metadata','get','id, options?','Return a file descriptor without downloading the file. '+digestBehavior,'files_read or files_write','Read file metadata','File descriptor',[fileId],'const {sha256} = await user.files.get(id);',JSON.stringify(fileSample),'getFile(id)'],
   ['download-file','Download a file','download','id, options?','Read a file as a binary response. In JavaScript use arrayBuffer() or blob() and offer a safe save destination.','files_read or files_write','Fetch owned file','File response',[fileId],'const response = await user.files.download("'+mockId+'");\nconst content = await response.arrayBuffer();',bytes,'downloadFile(id)'],
   ['upload-file','Upload a file','upload','file, options?','The delegated upload accepts a nonempty file up to 2 MiB and counts against the user’s quota. For larger files, use the resumable transfer API.','files_write','Decode and save file','New file ID',[['file.name','string','Display name, including the extension if applicable.'],['file.content','base64 string','Raw base64-encoded bytes. Omit data URL prefixes.'],['file.folder?','string | null',folder[2]]],'const created = await user.files.upload({name:"hello.txt", content:"SGVsbG8="});','{"id":"'+mockId+'"}','uploadFile(name, contentBytes, folder)'],
   ['update-file','Rename or move a file','update','id, change, options?','Supply a new name, a destination folder, or both. A move uses the existing file ID.','files_write','Apply rename or move','Change acknowledgment',[fileId,...change],'await user.files.update("'+mockId+'", {name:"welcome.txt", folder:null});',ok,'updateFile(id, change)'],
@@ -256,7 +262,8 @@ const fileDocs: FileDoc[] = [
   ['create-folder','Create a folder','createFolder','folder, options?','Creates a named folder inside an existing folder or at the account root. Keep the returned ID for navigation and future uploads.','files_write','Create empty directory','New folder ID',[['folder.name','string','Name to display in the file browser.'],['folder.folder?','string | null',folder[2]]],'const folder = await user.files.createFolder({name:"Notes"});','{"id":"'+mockId+'"}','createFolder(name, parent)'],
   ['update-folder','Rename or move a folder','updateFolder','id, change, options?','Change the folder name or parent. A folder cannot be moved into itself or any of its descendants.','files_write','Validate destination and move','Change acknowledgment',[fileId,...change],'await user.files.updateFolder("'+mockId+'", {name:"Meeting notes", folder:null});',ok,'updateFolder(id, change)'],
   ['delete-folder','Delete an empty folder','deleteFolder','id, options?','The delegated method accepts empty folders only. Use the account dashboard for recursive deletion.','files_write','Check that the folder is empty','Deletion acknowledgment',[fileId],'await user.files.deleteFolder("'+mockId+'");',ok,'deleteFolder(id)'],
-  ['list-shared-files','List incoming file shares','listShared','options?','Returns files shared with the signed-in user and the sender’s handle. IDs identify the shares. Use them with downloadShared.','shared_files_read','Look up incoming grants','Read-only shared files',[],'const {incoming} = await user.files.listShared();','{"incoming":[{"id":"'+mockId+'","name":"hello.txt","size":5,"created":1795600000000,"from":"morgan"}]}','listSharedFiles()'],
+  ['list-shared-files','List incoming file shares','listShared','options?','Returns files shared with the signed-in user and the sender’s handle. IDs identify the shares. Use them with getShared or downloadShared. Each entry includes sha256.','shared_files_read','Look up incoming grants','Read-only shared files',[],'const {incoming} = await user.files.listShared();',JSON.stringify({incoming:[sharedSample]}),'listSharedFiles()'],
+  ['get-shared-file','Get shared file metadata','getShared','id, options?','Return the sender and file descriptor while the share remains active. '+digestBehavior,'shared_files_read','Verify the live share','Shared file descriptor',[['id','string','Incoming share ID returned by listShared.']],'const {sha256} = await user.files.getShared(shareId);',JSON.stringify(sharedSample),'getSharedFile(id)'],
   ['download-shared-file','Download an incoming file share','downloadShared','id, options?','Uses a share ID from listShared. Downloads work only while the original user’s file and the live share are available.','shared_files_read','Check live share and fetch','Shared file bytes',[['id','string','Incoming share ID returned by listShared.']],'const response = await user.files.downloadShared("'+mockId+'");\nconst content = await response.arrayBuffer();',bytes,'downloadSharedFile(id)'],
 ];
 for(const [id,title,method,signature,description,access,action,result,args,example,output,native] of fileDocs){
@@ -571,9 +578,13 @@ const containerFiles: Reference[] = [
     access:"app_data for user files · verified app database key for service files",flow:["Pending transfer ID","Discard staged chunks","Cancellation acknowledged"],args:[["id","string","Transfer ID returned by the start operation. Store it to resume the same file."],signal],
     example:"const result = await user.appFiles.transfers.cancel(id);",output:"{\"ok\":true}",related:"app-upload-status"},
   {group:"files",id:"list-app-files",title:"List files in the app container",signature:"user.appFiles.list(options?)",
-    description:"Return one page of the app’s committed files. An authenticated app can see its own private and Browseable files. Account dashboard access separately enforces Browseable visibility.",
+    description:"Return one page of the app’s committed files. An authenticated app can see its own private and Browseable files. Account dashboard access separately enforces Browseable visibility. "+digestBehavior,
     access:"app_data for user files · verified app database key for service files",flow:["Account or service credential","List files within its namespace","Entries and next cursor"],args:[["options.cursor?","string","Pass the previous page’s nextCursor unchanged."],signal],
-    example:"const result = await user.appFiles.list();",output:"{\"files\":[{\"id\":\"3aa33912-a1b8-4c39-ab4a-ac63d15adf71\",\"name\":\"backup.zip\",\"size\":600000,\"created\":1795680000000,\"browseable\":true}],\"nextCursor\":null}",related:"download-app-file"},
+    example:"const result = await user.appFiles.list();",output:JSON.stringify({files:[appFileSample],nextCursor:null}),related:"download-app-file"},
+  {group:"files",id:"get-app-file",title:"Get app file metadata",signature:"user.appFiles.get(id, options?) / service.files.get(id, options?)",
+    description:"Read a committed file descriptor without downloading the bytes. Replacing bytes updates sha256 even if the file ID remains the same. "+digestBehavior,
+    access:"app_data for user files · verified app database key for service files",flow:["File ID","Check app and account scope","Descriptor with SHA-256"],args:[["id","string","Committed file ID returned by complete or list."],signal],
+    example:"const {sha256} = await user.appFiles.get(id);",output:JSON.stringify(appFileSample),related:"list-app-files"},
   {group:"files",id:"download-app-file",title:"Download a file from the app container",signature:"user.appFiles.download(id, options?)",
     description:"Get the committed file as a binary attachment. Stream large files to a supported safe destination instead of holding the full response in memory.",
     access:"app_data for user files · verified app database key for service files",flow:["File ID","Check app and account scope","Binary data"],args:[["id","string","Committed file ID returned by complete or list."],signal],

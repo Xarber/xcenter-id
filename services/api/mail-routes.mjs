@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import { simpleParser } from 'mailparser';
 import { convert } from 'html-to-text';
 
@@ -5,6 +6,10 @@ const inbox = '/account/inbox';
 const itemPath = /^\/account\/inbox\/([0-9a-f-]{36})(?:\/(view|attachments\/([0-9]{1,4})))?$/;
 const privateHeaders = { 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff' };
 const messageId=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
+
+function attachmentMetadata({filename,size,content},index){
+  return {index,name:(filename??'Attachment').slice(0,180),size,sha256:createHash('sha256').update(content).digest('hex')};
+}
 
 async function selection(req) {
   if (!/^application\/json(?:;|$)/i.test(req.headers['content-type']??'')) return null;
@@ -125,15 +130,15 @@ export async function handleInbox(req, res, path, accounts, mail) {
             text:(parsed.text ?? (parsed.html ? convert(parsed.html, {
               wordwrap:false, selectors:[{selector:'img',format:'skip'},{selector:'a',options:{ignoreHref:true}}],
             }) : '')).slice(0,150000),
-            attachments:parsed.attachments.map(({filename,size},index)=>({
-              index, name:(filename ?? 'Attachment').slice(0,180), size,
-            })),
+            attachments:parsed.attachments.map(attachmentMetadata),
           });
         } else {
           const index = Number(match[3]);
           const attachment = parsed.attachments[index];
           if (!attachment) json(res,{error:'Attachment not found.'},404);
-          else download(res,'attachment-'+(index+1),attachment.content);
+          else if(new URL(req.url,'http://localhost').searchParams.get('metadata')==='1'){
+            json(res,attachmentMetadata(attachment,index));
+          }else download(res,'attachment-'+(index+1),attachment.content);
         }
       }
     }

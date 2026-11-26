@@ -33,3 +33,13 @@ Uploads are bounded by remaining quota and disk headroom. The issuer purges unfi
 Account sessions use `/account/app-files/{clientId}` and the account-consent mutation header. Rename with `PUT /{id}` and `{name}`. Delete with `DELETE /{id}`. Replace content with the same chunk loop as a new upload, starting with `POST /uploads` and `{replace: fileId, size}`. Replacement retains the original name and file ID. The original remains readable until the new content is committed. Quota reserves only net growth, while temporary chunks still require disk headroom. Concurrent edits to the original invalidate an unfinished replacement. A file listing exposes `editable` separately from `browseable`. Apps manage visibility with their scoped token, while the account dashboard can change content only when both flags are present.
 
 A replacement stores new encrypted content behind the original file ID. When rolling back the dashboard, keep the API on a revision that understands that content pointer. An older API cannot read files whose content has already been replaced.
+
+## File metadata and content hashes
+
+Personal Files, friend file shares, app containers and verified app service storage return a `sha256` field on every committed binary file entry. It is the 64-character lowercase hexadecimal SHA-256 of the exact download bytes. Renaming, moving or changing visibility preserves the hash. Replacing content changes it when the bytes change, even if the file ID stays the same. Identical content can appear in multiple file entries. Keep both the ID and hash in an app-owned index.
+
+Add `?metadata=1` to a file's regular download URL to retrieve the same JSON descriptor without downloading the bytes. Use the same permission and credential as the download. For shares, use the incoming share ID. For mailbox attachments, the message view lists the hash of each decoded attachment and the attachment download route accepts the same metadata parameter. Folder entries report aggregate size. Records and folders have no binary file digest. Draft uploads become hashable once committed.
+
+JavaScript exposes `user.files.get(id)`, `user.files.getShared(shareId)`, `user.appFiles.get(id)`, and `service.files.get(id)`. Swift, Kotlin and Dart expose `getFile`, `getSharedFile`, and `getAppFile` on the corresponding clients.
+
+The server computes the digest on the first metadata read, streams data in bounded chunks, and stores the digest encrypted alongside its content revision. The first listing of large uncached files can take longer. Download authorization, quota and binary response behavior are preserved. The provider has no hash-search endpoint.

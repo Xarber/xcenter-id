@@ -194,14 +194,14 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
           if(req.method!=='GET'&&(!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent')){
             fail(403,'Change files from your account.');
           }
-          return await binary.handle(req,res,url,{owner,client,dashboard:true,browseableOnly:!canManage,live},route,responseHeaders);
+          return await binary.handle(req,res,url,{owner,client,dashboard:true,browseableOnly:!canManage,live,canReadPrivate:()=>!!developerContainer(owner,client)},route,responseHeaders);
         }
         const serviceFiles=serviceBinaryFiles.exec(url.pathname);
         if(serviceFiles){
           const [,id,...route]=serviceFiles;
           const client=dashboardServiceClient(req,id);
           if(!client)fail(404,'Service storage unavailable.');
-          return await binary.handle(req,res,url,{owner:serviceOwner,client,readOnly:true},route,responseHeaders);
+          return await binary.handle(req,res,url,{owner:serviceOwner,client,readOnly:true,live:()=>dashboardServiceClient(req,id)===client},route,responseHeaders);
         }
         const browseService=serviceRecords.exec(url.pathname);
         if(browseService){

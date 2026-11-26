@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
@@ -20,11 +20,15 @@ test('account file uploads and downloads are owner-scoped and use attachment hea
     headers:{authorization:owner,'content-type':'application/json','x-authnjs-request':'account-consent',origin}});
   try{
     const raw='File content.';
+    const sha256=createHash('sha256').update(raw).digest('hex');
     const created=await call('first','POST','',{name:'example.txt',content:Buffer.from(raw).toString('base64')});
     assert.equal(created.status,201);
     const {id}=await created.json();
     assert.equal((await call('second','GET','/'+id)).status,404);
     assert.equal((await call('second','DELETE','/'+id,{})).status,404);
+    const metadata=await call('first','GET','/'+id+'?metadata=1');
+    assert.equal((await metadata.json()).sha256,sha256);
+    assert.equal((await call('second','GET','/'+id+'?metadata=1')).status,404);
     const item=await call('first','GET','/'+id);
     assert.match(item.headers.get('content-disposition'),/^attachment/);
     assert.equal(await item.text(),raw);
@@ -58,6 +62,7 @@ test('account file uploads and downloads are owner-scoped and use attachment hea
     const listing = await (await call('first','GET','?folder='+child)).json();
     assert.deepEqual(listing.breadcrumbs.map(item=>item.name),['Projects','Archive']);
     assert.equal(listing.files[0].name,'renamed.txt');
+    assert.equal(listing.files[0].sha256,sha256);
     assert.equal(await (await call('first','GET','/'+uploadedId)).text(),raw);
     const index = await (await call('first','GET')).json();
     assert.equal(index.files.length,0);
@@ -115,11 +120,15 @@ test('friend invitations and file shares isolate recipients and do not revive on
   assert.equal((await call('owner','/shared','POST',{file,friend})).status,200);
   const {incoming:[share]}=await (await call('recipient','/shared')).json();
   assert.equal(share.name,'letter.txt');
+  assert.equal(share.sha256,createHash('sha256').update('shared').digest('hex'));
+  assert.deepEqual(await (await call('recipient','/shared/'+share.id+'?metadata=1')).json(),share);
+  assert.equal((await (await call('owner','/shared')).json()).outgoing[0].sha256,share.sha256);
   assert.equal((await call('another','/shared/'+share.id)).status,404);
   assert.equal((await call('recipient','/'+file)).status,404);
   assert.equal(await (await call('recipient','/shared/'+share.id)).text(),'shared');
   assert.equal(friends.remove('another',friend),false);
   assert.equal(friends.remove('recipient',friend),true);
+  assert.equal((await call('recipient','/shared/'+share.id+'?metadata=1')).status,404);
   assert.equal((await call('recipient','/shared/'+share.id)).status,404);
   assert.equal(friends.accept('recipient',friends.invite('owner').code),true);
   assert.equal((await call('recipient','/shared/'+share.id)).status,404);

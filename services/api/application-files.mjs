@@ -3,6 +3,7 @@ import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {appendTransferChunk, openFileTransfers, uploadChunkSize, uploadIdleMs} from './file-transfers.mjs';
 import {fileName, readFileInput, fileDownloadHeaders} from './file-input.mjs';
+import {openFileDigests} from './file-digests.mjs';
 
 export const appFileRoute = '(?:/(uploads)(?:/([0-9a-f-]{36}))?|/([0-9a-f-]{36}))?$';
 export const serviceOwner = '~app';
@@ -10,6 +11,7 @@ export const serviceOwner = '~app';
 export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
   db.exec('PRAGMA foreign_keys=ON');
   const transfers=openFileTransfers(db,key);
+  const digests=openFileDigests(db,key,'file_transfers');
   db.exec(`CREATE TABLE IF NOT EXISTS app_files(
     id TEXT PRIMARY KEY REFERENCES file_transfers(id) ON DELETE CASCADE,
     client TEXT NOT NULL,owner TEXT NOT NULL,size INTEGER NOT NULL,created INTEGER NOT NULL,
@@ -63,10 +65,19 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
         (metadata.editable===true&&(!metadata.browseable||row.owner===serviceOwner)))throw new Error('Invalid file visibility.');
     return {transfer,metadata};
   }
-  function view(row){
-    const {metadata}=committed(row);
-    return {id:row.id,size:row.size,created:row.created,browseable:!!row.browseable,
-      editable:metadata.editable===true,name:metadata.name};
+  async function view(row,browseableOnly){
+    const {transfer}=committed(row);
+    const getCurrent=()=>file.get(row.owner,row.client,row.id,0);
+    const sameContent=()=> {
+      const current=getCurrent();
+      return current&&(current.content_id??current.id)===transfer.id?current:null;
+    };
+    const sha256=await digests.get(transfer,()=>transfers.read(transfer),sameContent);
+    const current=sameContent();
+    if(!current||!sha256||(browseableOnly&&!current.browseable))return null;
+    const {metadata}=committed(current);
+    return {contentId:transfer.id,id:current.id,size:current.size,created:current.created,browseable:!!current.browseable,
+      editable:metadata.editable===true,name:metadata.name,sha256};
   }
   function editTarget(owner,client,id){
     const row=file.get(owner,client,id,1);
@@ -85,7 +96,7 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
     bytes:(owner,client=null)=>used.get(owner,client,client).bytes+reserve.get(owner,Date.now()-uploadIdleMs,client,client).bytes,
     removeAccount:owner=>transfers.removeOwner.run(owner),
     removeApp:(owner,client)=>db.prepare('DELETE FROM file_transfers WHERE owner=? AND client=?').run(owner,client),
-    async handle(req,res,url,{owner,client,readOnly=false,dashboard=false,browseableOnly=false,live},route,headers) {
+    async handle(req,res,url,{owner,client,readOnly=false,dashboard=false,browseableOnly=false,live,canReadPrivate},route,headers) {
       const respond=(status,value)=>res.writeHead(status,{...headers,'Content-Type':'application/json'}).end(JSON.stringify(value));
       const [uploading,uploadId,fileId]=route;
       if(readOnly&&req.method!=='GET')return respond(405,{error:'This view is read-only.'});
@@ -94,10 +105,32 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
           const cursor=url.searchParams.get('cursor')??'';
           if(cursor&&!/^[0-9a-f-]{36}$/.test(cursor))return respond(422,{error:'Invalid cursor.'});
           const rows=list.all(owner,client,cursor,Number(browseableOnly));
-          return respond(200,{files:rows.slice(0,100).map(view),nextCursor:rows.length>100?rows[99].id:null});
+          const files=[];
+          for(const original of rows.slice(0,100)){
+            const row=file.get(owner,client,original.id,Number(browseableOnly));
+            const entry=row&&await view(row,browseableOnly);
+            if(entry)files.push(entry);
+          }
+          if(!await live())return respond(403,{error:'File authorization changed.'});
+          const visible=files.flatMap(({contentId,...entry})=>{
+            const current=file.get(owner,client,entry.id,Number(browseableOnly||canReadPrivate?.()===false));
+            return current&&(current.content_id??current.id)===contentId&&current.browseable===Number(entry.browseable)?[entry]:[];
+          });
+          return respond(200,{files:visible,nextCursor:rows.length>100?rows[99].id:null});
         }
         const row=file.get(owner,client,fileId,Number(browseableOnly));
         if(!row)return respond(404,hidden);
+        if(url.searchParams.get('metadata')==='1'){
+          const entry=await view(row,browseableOnly);
+          if(!await live())return respond(403,{error:'File authorization changed.'});
+          const current=file.get(owner,client,fileId,Number(browseableOnly||canReadPrivate?.()===false));
+          if(!entry||!current)return respond(404,hidden);
+          const {contentId,...descriptor}=entry;
+          if((current.content_id??current.id)!==contentId||current.browseable!==Number(descriptor.browseable)){
+            return respond(409,{error:'The file changed. Try again.'});
+          }
+          return respond(200,descriptor);
+        }
         const {transfer,metadata}=committed(row);
         res.writeHead(200,{...headers,...fileDownloadHeaders(metadata.name,row.size)});
         try{await pipeline(Readable.from(transfers.read(transfer)),res);}
@@ -208,7 +241,10 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
           swap.run(row.id,row.size,target.row.id);
           transfers.complete.run(row.id);
           if(target.row.content_id)transfers.remove.run(owner,target.row.content_id);
-          else clearChunks.run(target.row.id);
+          else {
+            clearChunks.run(target.row.id);
+            digests.remove(target.row.id);
+          }
           return [201,{id:target.row.id}];
         }
         if(req.method==='PUT')return appendTransferChunk(transfers,row,input,hasDiskRoom);
