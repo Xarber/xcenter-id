@@ -1,5 +1,5 @@
 import ListPages from './ListPages.web';
-import {useListPage} from './list-page';
+import {useListPage,useRemoteListPage} from './list-page';
 import CallbackApproval,{type ReviewedRegistration} from './CallbackApproval.web';
 import AppIcon from './AppIcon.web';
 import type {AppFileContainer as Container} from './account-file-containers';
@@ -25,8 +25,9 @@ export function AdminAvatar({username,hasPicture}:{username:string;hasPicture?:b
 }
 type Details=ManagedAccount&{developerVerified?:boolean;externalMailLimits?:{daily:number|null;monthly:number|null;usedToday:number;usedMonth:number};admin:boolean;rootAdmin:boolean;verified:boolean;name:string;created:number;devices:number;passkeys:number;apps:{client:string;label:string;icon?:string|null;verified?:boolean}[]};
 type Registered=ReviewedRegistration&{icon?:string|null;verified:boolean;id:string;name:string;status:string;restricted:boolean;callback:string};
+const loadAccounts=(path:string,signal:AbortSignal)=>api(path,undefined,'GET',signal);
+
 export function AdminAccounts(){
-  const [users,setUsers]=useState<ManagedAccount[]>([]);
   const [details,setDetails]=useState<{account:Details;registered:Registered[];containers?:Container[]}|null>(null);
   const [filter,setFilter]=useState('');
   const [busy,setBusy]=useState(false);
@@ -40,20 +41,18 @@ export function AdminAccounts(){
   const name=/^\/admin\/users\/([a-z0-9._-]{3,24})$/.exec(window.location.pathname)?.[1];
   async function load(){
     if(name){setDetails(await api('admin/users/'+name));}
-    else setUsers((await api('admin/accounts')).accounts);
   }
   function run(work:()=>Promise<void>){
     setBusy(true);setStatus('');
     void work().catch(error=>setStatus(error.message)).finally(()=>setBusy(false));
   }
-  useEffect(()=>{run(load);},[name]);
+  useEffect(()=>{if(name)run(load);},[name]);
   async function mutate(path:string,data:{action?:string}&Record<string,unknown>){
     await api(path,data);setAction('');setConfirmation('');setText('');await load();setStatus(data.action==='delete'?'App deleted.':'Saved.');
   }
   const user=details?.account;
   const registrations=details?.registered.filter(app=>app.status!=='revoked')??[];
-  const visibleUsers=users.filter(user=>user.username.includes(filter.toLowerCase().trim()));
-  const userPage=useListPage(visibleUsers.length,filter.trim());
+  const userPage=useRemoteListPage<ManagedAccount>(filter.trim().toLowerCase(),!name,loadAccounts);
   const targeted=window.location.hash.startsWith('#app-')?window.location.hash.slice(5):'';
   const registeredPage=useListPage(registrations.length,name??'');
   useEffect(()=>{
@@ -128,8 +127,11 @@ export function AdminAccounts(){
             <IconAction label="Cancel app deletion" disabled={busy} onClick={()=>setAction('')}><X size={20}/></IconAction></div>}
         </div>)}<ListPages state={registeredPage} label="Registered apps"/></section>
       </>}
-    </>:<><h2>Accounts</h2><label>Find an account<input type="search" value={filter} onChange={event=>setFilter(event.target.value)}/></label>
-      {visibleUsers.slice(userPage.start,userPage.end).map(user=>
+    </>:<><h2>Accounts</h2><label>Find an account<input type="search" maxLength={24} value={filter} onChange={event=>setFilter(event.target.value)}/></label>
+      {userPage.loading&&<p role="status">Loading accounts…</p>}
+      {userPage.error&&<p role="alert">{userPage.error}</p>}
+      {!userPage.loading&&!userPage.error&&!userPage.items.length&&<p>No accounts found.</p>}
+      {userPage.items.map(user=>
         <a className="xc-list-row" key={user.username} href={'/admin/users/'+user.username}>
           <span className="xc-row-head"><AdminAvatar username={user.username} hasPicture={user.hasPicture}/><span className="xc-identity-label"><strong>@{user.username}</strong><TrustBadges compact verified={user.verified} admin={user.admin}/></span></span>
           {user.locked&&<LockKeyhole size={18} aria-label="Locked"/>}

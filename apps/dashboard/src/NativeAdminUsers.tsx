@@ -1,5 +1,5 @@
 import ListPages from './ListPages';
-import {useListPage} from './list-page';
+import {useListPage,useRemoteListPage} from './list-page';
 import {useDialog} from './dialog-model';
 import AppIcon from './AppIcon';
 import type {AppFileContainer as Container} from './account-file-containers';
@@ -7,7 +7,7 @@ import {Surface,SurfaceTitle,type DashboardTheme} from './native-surfaces';
 import {formatBytes} from './storage-summary';
 import TrustBadges from './TrustBadges';
 import ApplicationStorage from './ApplicationStorage';
-import {useEffect,useState} from 'react';
+import {useCallback,useEffect,useState} from 'react';
 import {Image,Pressable,Text,TextInput,View} from 'react-native';
 import {Ionicons} from '@expo/vector-icons';
 import {accountHost,nativeRequest} from './native-account';
@@ -25,7 +25,6 @@ function Avatar({user,token,colors}:{user:ManagedAccount;token:string;colors:Col
 }
 export default function NativeAdminUsers({token,colors,onDetail,requested}:{token:string;colors:Colors;onDetail:(open:boolean)=>void;requested?:{username:string;app?:string}}){
   const showDialog=useDialog();
-  const [users,setUsers]=useState<ManagedAccount[]>([]);
   const [capacity,setCapacity]=useState<string|null>(null);
   const [unit,setUnit]=useState(2);
   const [storageApp,setStorageApp]=useState('');
@@ -43,17 +42,16 @@ export default function NativeAdminUsers({token,colors,onDetail,requested}:{toke
   const api=(path:string,data?:object)=>nativeRequest(path,token,data);
   async function load(){
     if(selected)setDetails(await api('admin/users/'+selected));
-    else setUsers((await api('admin/accounts')).accounts);
   }
   useEffect(()=>{
+    if(!selected)return;
     let active=true;
     setLoading(true);
     setStatus('');
-    const request=selected?api('admin/users/'+selected):api('admin/accounts');
+    const request=api('admin/users/'+selected);
     void request.then(result=>{
       if(!active)return;
-      if(selected)setDetails(result);
-      else setUsers(result.accounts);
+      setDetails(result);
     }).catch(error=>{if(active)setStatus(error.message);})
       .finally(()=>{if(active)setLoading(false);});
     return ()=>{active=false;};
@@ -71,8 +69,8 @@ export default function NativeAdminUsers({token,colors,onDetail,requested}:{toke
   const input={color:colors.ink,borderColor:colors.line,borderWidth:1,borderRadius:10,paddingHorizontal:12,minHeight:48};
   const divider={borderTopWidth:1,borderColor:colors.line,paddingTop:12};
   const registered=details?.registered.filter(app=>app.status!=='revoked')??[];
-  const visible=users.filter(user=>user.username.includes(filter.trim().toLowerCase()));
-  const userPage=useListPage(visible.length,filter.trim());
+  const loadAccounts=useCallback((path:string,signal:AbortSignal)=>nativeRequest(path,token,undefined,'GET',signal),[token]);
+  const userPage=useRemoteListPage<ManagedAccount>(filter.trim().toLowerCase(),!selected,loadAccounts);
   const appPage=useListPage(registered.length,selected);
   useEffect(()=>{
     if(requested?.app&&details){
@@ -170,11 +168,12 @@ export default function NativeAdminUsers({token,colors,onDetail,requested}:{toke
         <ListPages state={appPage} label="Registered apps" colors={colors}/>
       </>}
     </>:<><SurfaceTitle colors={colors} title="Accounts" icon="people-outline"/>
-      <TextInput accessibilityLabel="Find an account" autoCapitalize="none" value={filter} onChangeText={setFilter}
+      <TextInput accessibilityLabel="Find an account" autoCapitalize="none" maxLength={24} value={filter} onChangeText={setFilter}
       placeholder="Find an account" placeholderTextColor={colors.muted} style={input}/>
-      {loading&&<Text accessibilityRole="progressbar" style={{color:colors.muted}}>Loading accounts…</Text>}
-      {!loading&&!status&&!visible.length&&<Text style={{color:colors.muted}}>No accounts found.</Text>}
-      {visible.slice(userPage.start,userPage.end).map(user=>
+      {userPage.loading&&<Text accessibilityRole="progressbar" style={{color:colors.muted}}>Loading accounts…</Text>}
+      {!userPage.loading&&!userPage.error&&!userPage.items.length&&<Text style={{color:colors.muted}}>No accounts found.</Text>}
+      {userPage.error&&<Text accessibilityRole="alert" style={{color:colors.danger}}>{userPage.error}</Text>}
+      {userPage.items.map(user=>
         <Pressable accessibilityRole="button" key={user.username} onPress={()=>{setSelected(user.username);onDetail(true);setDetails(null);}}
           style={({pressed})=>[divider,{minHeight:60,flexDirection:'row',alignItems:'center',gap:12,backgroundColor:pressed?colors.soft:colors.panel}]}>
           <Avatar user={user} token={token} colors={colors}/><View style={{flex:1,gap:4}}><Text style={{color:colors.ink}}>@{user.username}</Text><TrustBadges verified={user.verified} admin={user.admin} color={colors.ink}/></View>

@@ -70,3 +70,7 @@ The first-party dashboard starts a transfer with `POST /account/files/uploads` a
 For folder deletion, the current dashboard sends `DELETE /account/files/folders/:id?recursive=1` after confirmation. The transaction removes the owned subtree, shares, data chunks and unfinished reservations. The legacy request and delegated clients retain empty-folder deletion.
 
 The signed-in browser can start a second login or signup by including `addAccount: true` and the first-party request header in both phases. The passkey challenge and any emailed code are bound to the current browser session. Successful sign-in parks the previous session within the existing three-account cap.
+
+### Administration list pagination
+
+`GET /account/admin/accounts?page=2&size=25&q=example` requires a recent administrator session and returns `{accounts,total,page}`. Sizes are 10, 25, 50 and 100. The optional filter matches part of a username, ignoring case. Out-of-range page numbers select the last available page. Older clients that omit paging fields still receive the previous capped response.

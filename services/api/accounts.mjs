@@ -449,10 +449,20 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     }
     if (req.method === 'GET' && pathname === '/account/admin/accounts') {
       requireCondition(isAdmin(active),403,'Administrator access is required.');
-      return {accounts:q(`SELECT p.username,p.owner,coalesce(e.premium_mail,0) AS premium FROM identity_profiles p
-        LEFT JOIN account_entitlements e ON e.owner=p.owner ORDER BY p.username LIMIT 500`).all()
-        .map(row=>({username:row.username,premium:!!row.premium,capacity:storageCapacity(row.owner),
-          locked:restriction.get(row.owner)?.status==='locked',protected:isAdmin({owner:row.owner}),...badges(row.owner),hasPicture:!!profile(row.owner)?.picture}))};
+      const query=new URL(req.url,'https://account.invalid').searchParams;
+      const paging=query.has('page')||query.has('size')||query.has('q');
+      const size=Number(query.get('size')??25);
+      const requested=Number(query.get('page')??1);
+      const filter=(query.get('q')??'').trim().toLowerCase();
+      if(paging)requireCondition([10,25,50,100].includes(size)&&Number.isSafeInteger(requested)&&requested>0&&filter.length<=24,422,'Choose a valid account page.');
+      const total=paging?q('SELECT count(*) AS total FROM identity_profiles WHERE instr(username,?)>0').get(filter).total:0;
+      const page=paging?Math.min(requested,Math.max(1,Math.ceil(total/size))):1;
+      const rows=q(`SELECT p.username,p.owner,coalesce(e.premium_mail,0) AS premium FROM identity_profiles p
+        LEFT JOIN account_entitlements e ON e.owner=p.owner WHERE instr(p.username,?)>0
+        ORDER BY p.username LIMIT ? OFFSET ?`).all(filter,paging?size:500,paging?(page-1)*size:0);
+      return {accounts:rows.map(row=>({username:row.username,premium:!!row.premium,capacity:storageCapacity(row.owner),
+        locked:restriction.get(row.owner)?.status==='locked',protected:isAdmin({owner:row.owner}),...badges(row.owner),hasPicture:!!profile(row.owner)?.picture})),
+        ...(paging?{page,total}:{})};
     }
     if(req.method==='GET'&&pathname==='/account/username-change'){
       requireCondition(active,401,'Sign in first.');

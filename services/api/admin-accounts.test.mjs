@@ -45,6 +45,45 @@ test('only a recently authenticated administrator can change a quota',async()=>{
   }
 });
 
+test('administrator account lists can page and filter beyond the legacy cap',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'authnjs-admin-page-'));
+  const database=join(dir,'accounts.sqlite');
+  const previous=process.env.AUTHNJS_ADMIN_ACCOUNT_IDS;
+  process.env.AUTHNJS_ADMIN_ACCOUNT_IDS='list-owner';
+  const service=createAccounts({database,origin:'https://id.example.test'});
+  if(previous===undefined)delete process.env.AUTHNJS_ADMIN_ACCOUNT_IDS;
+  else process.env.AUTHNJS_ADMIN_ACCOUNT_IDS=previous;
+  const db=new DatabaseSync(database);
+  const server=createServer((req,res)=>void service.handle(req,res,new URL(req.url,'http://localhost').pathname)).listen(0,'127.0.0.1');
+  await once(server,'listening');
+  try{
+    db.exec(`INSERT INTO accounts VALUES('list-owner','Synthetic admin',0);
+      WITH RECURSIVE ids(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM ids WHERE n<520)
+      INSERT INTO accounts SELECT 'owner-'||n,'Synthetic user',0 FROM ids;
+      INSERT INTO identity_profiles SELECT id,'fixture-'||printf('%03d',substr(id,7)),'Example','User','adult'
+        FROM accounts WHERE id!='list-owner';`);
+    const time=Date.now();
+    db.prepare('INSERT INTO account_sessions VALUES (?,?,?,?)')
+      .run(createHash('sha256').update('list-session').digest('hex'),'list-owner',time,time+60_000);
+    const request=query=>fetch('http://127.0.0.1:'+server.address().port+'/account/admin/accounts'+query,
+      {headers:{cookie:'__Host-authnjs=list-session'}});
+    const legacy=await (await request('')).json();
+    assert.equal(legacy.accounts.length,500);
+    const last=await (await request('?page=999&size=25')).json();
+    assert.equal(last.total,520);
+    assert.equal(last.page,21);
+    assert.equal(last.accounts.at(-1).username,'fixture-520');
+    const filtered=await (await request('?q=FIXTURE-51&size=10')).json();
+    assert.equal(filtered.total,10);
+    assert.equal(filtered.accounts[0].username,'fixture-510');
+    assert.equal((await request('?size=0')).status,422);
+  }finally{
+    await new Promise(resolve=>server.close(resolve));
+    db.close();
+    rmSync(dir,{recursive:true,force:true});
+  }
+});
+
 test('operator rename preserves ownership and re-authenticates encrypted profile data', () => {
   const dir=mkdtempSync(join(tmpdir(),'authnjs-rename-'));
   const database=join(dir,'accounts.sqlite');

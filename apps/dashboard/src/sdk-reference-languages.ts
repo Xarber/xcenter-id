@@ -621,6 +621,71 @@ dataExamples('peer-signaling','user',
   [argument('discoverable','Boolean','Defaults to false. App-wide discovery must also be enabled.')],
   ['openPeer(discoverable: false)','openPeer(discoverable = false)','openPeer(discoverable: false)']);
 
+dataExamples("account-profile-visibility",'user',
+  ["profileVisibility()","profileVisibility()","profileVisibility()"],
+  [],
+  ["profileVisibility()","profileVisibility()","profileVisibility()"]);
+
+dataExamples("account-connected-apps",'user',
+  ["connectedApps()","connectedApps()","connectedApps()"],
+  [],
+  ["connectedApps()","connectedApps()","connectedApps()"]);
+
+dataExamples("account-connected-permissions",'user',
+  ["connectedPermissions(_ client: String)","connectedPermissions(client: String)","connectedPermissions(String client)"],
+  [["client","string","Registered OAuth client ID from the linked app list."]],
+  ["connectedPermissions(clientId)","connectedPermissions(clientId)","connectedPermissions(clientId)"]);
+
+dataExamples("account-disable-permission",'user',
+  ["disableConnectedPermission(_ client: String, scope: String)","disableConnectedPermission(client: String, scope: String)","disableConnectedPermission(String client, String scope)"],
+  [["client","string","Registered OAuth client ID from the linked app list."],["scope","string","Optional permission identifier from the linked app permissions response."]],
+  ["disableConnectedPermission(clientId, scope: \"friends\")","disableConnectedPermission(clientId, \"friends\")","disableConnectedPermission(clientId, \"friends\")"]);
+
+dataExamples("start-upload",'user',
+  ["startUpload(name: String, size: Int64, folder: String? = nil)","startUpload(name: String, size: Long, folder: String? = null)","startUpload(String name, int size, {String? folder})"],
+  [["name","String","File display name."],["size","64-bit integer","Exact file size in bytes."],["folder","Optional String","Account folder identifier. Omit for the root."]],
+  ["startUpload(name: \"video.mp4\", size: 4000000)","startUpload(\"video.mp4\", 4000000L)","startUpload(\"video.mp4\", 4000000)"]);
+
+dataExamples("upload-status",'user',
+  ["uploadStatus(_ id: String)","uploadStatus(id: String)","uploadStatus(String id)"],
+  [["id","string","Transfer ID from the start response. Preserve it across interruptions."]],
+  ["uploadStatus(transferId)","uploadStatus(transferId)","uploadStatus(transferId)"]);
+
+dataExamples("append-upload",'user',
+  ["appendUpload(_ id: String, position: Int64, content: Data)","appendUpload(id: String, position: Long, content: ByteArray)","appendUpload(String id, int position, Uint8List content)"],
+  [["id","string","Transfer ID from the start response. Preserve it across interruptions."],["position","64-bit integer","Next byte offset."],["content","Raw bytes","Pass this chunk as native bytes. The SDK applies base64."]],
+  ["appendUpload(transferId, position: 0, content: firstChunk)","appendUpload(transferId, 0L, firstChunk)","appendUpload(transferId, 0, firstChunk)"]);
+
+dataExamples("complete-upload",'user',
+  ["completeUpload(_ id: String)","completeUpload(id: String)","completeUpload(String id)"],
+  [["id","string","Transfer ID from the start response. Preserve it across interruptions."]],
+  ["completeUpload(transferId)","completeUpload(transferId)","completeUpload(transferId)"]);
+
+dataExamples("cancel-upload",'user',
+  ["cancelUpload(_ id: String)","cancelUpload(id: String)","cancelUpload(String id)"],
+  [["id","string","Transfer ID from the start response. Preserve it across interruptions."]],
+  ["cancelUpload(transferId)","cancelUpload(transferId)","cancelUpload(transferId)"]);
+
+dataExamples("list-peers",'user',
+  ["listPeers(_ id: String, proof: String)","listPeers(id: String, proof: String)","listPeers(String id, String proof)"],
+  [["id","String","Your current opaque peer ID returned by openPeer."],["proof","String","Private proof returned by openPeer. Never send it to another peer."]],
+  ["listPeers(peerId, proof: peerProof)","listPeers(peerId, peerProof)","listPeers(peerId, peerProof)"]);
+
+dataExamples("receive-peer-messages",'user',
+  ["receivePeerMessages(_ id: String, proof: String)","receivePeerMessages(id: String, proof: String)","receivePeerMessages(String id, String proof)"],
+  [["id","String","Your current opaque peer ID returned by openPeer."],["proof","String","Private proof returned by openPeer. Never send it to another peer."]],
+  ["receivePeerMessages(peerId, proof: peerProof)","receivePeerMessages(peerId, peerProof)","receivePeerMessages(peerId, peerProof)"]);
+
+dataExamples("send-peer-message",'user',
+  ["sendPeerMessage<Value: Encodable>(_ id: String, proof: String, to: String, type: String, data: Value)","sendPeerMessage(id: String, proof: String, to: String, type: String, data: JSONObject)","sendPeerMessage(String id, String proof, {required String to, required String type, required Map<String, Object?> data})"],
+  [["id","String","Your current opaque peer ID returned by openPeer."],["proof","String","Private proof returned by openPeer. Never send it to another peer."],["to","String","Destination peer ID in the same registration."],["type","String","offer, answer or candidate."],["data","JSON object","Signaling payload from WebRTC."]],
+  ["sendPeerMessage(peerId, proof: peerProof, to: remotePeerId, type: \"offer\", data: [\"type\": \"offer\", \"sdp\": offerSDP])","sendPeerMessage(peerId, peerProof, remotePeerId, \"offer\", JSONObject().put(\"type\", \"offer\").put(\"sdp\", offerSdp))","sendPeerMessage(peerId, peerProof, to: remotePeerId, type: \"offer\", data: {\"type\": \"offer\", \"sdp\": offerSdp})"]);
+
+dataExamples("close-peer",'user',
+  ["closePeer(_ id: String, proof: String)","closePeer(id: String, proof: String)","closePeer(String id, String proof)"],
+  [["id","String","Your current opaque peer ID returned by openPeer."],["proof","String","Private proof returned by openPeer. Never send it to another peer."]],
+  ["closePeer(peerId, proof: peerProof)","closePeer(peerId, peerProof)","closePeer(peerId, peerProof)"]);
+
 export function parseLanguage(value:unknown):Language|undefined{
   return typeof value==='string'&&Object.hasOwn(languages,value)?value as Language:undefined;
 }

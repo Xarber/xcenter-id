@@ -19,6 +19,6 @@ Request `files_read`, `files_write`, or `shared_files_read` only if issuer disco
 
 ### Direct, user-consented account controls
 
-An administrator must enable **Administration app** for an eligible registration before it requests `account_overview` or `account_manage`. The user can allow each scope under **Administrative App Permissions** in the consent screen and change it later in Linked Apps. Management access requires a confirmation showing what the app can change. Once approved, use the app’s regular user access token with the [overview API](/docs/sdk/account-overview-api) and [account settings API](/docs/sdk/administrative-app-permissions). These calls run directly inside the app.
+An administrator must enable **Administration app** for an eligible registration before it requests `account_overview` or `account_manage`. The user can allow each scope under **Administrative App Permissions** in the consent screen and change it later in Linked Apps. Management access requires a confirmation showing what the app can change. Once approved, use the app’s regular user access token with the [overview API](https://id.xcenter.it/docs/sdk/account-overview-api) and [account settings API](https://id.xcenter.it/docs/sdk/administrative-app-permissions). These calls run directly inside the app.
 
-Use the [resumable upload guide](/docs/sdk/resumable-uploads) for account files up to the available quota and the [WebRTC signaling guide](/docs/sdk/peer-signaling) for enabled, verified apps.
+Use the [resumable upload guide](https://id.xcenter.it/docs/sdk/resumable-uploads) for account files up to the available quota and the [WebRTC signaling guide](https://id.xcenter.it/docs/sdk/peer-signaling) for enabled, verified apps.
