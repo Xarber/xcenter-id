@@ -1,3 +1,4 @@
+import {dashboardThemes,type DashboardTheme} from './native-surfaces';
 import AppConfiguration from './AppConfiguration';
 import CopyButton from './CopyButton';
 import { optionalClaims, type ClaimRequirements, type DeveloperIdentity } from './developer-web';
@@ -14,7 +15,7 @@ import Animated, { Easing, FadeIn, ReduceMotion } from 'react-native-reanimated'
 type Registration = { id: string; name: string; callback: string; callbackApproved?:boolean; status: string; native?:boolean; client?: string; developerName?:string; icon?:string|null; verified?:boolean; requirements?:ClaimRequirements };
 const entering = FadeIn.duration(180).easing(Easing.bezier(0.23, 1, 0.32, 1)).reduceMotion(ReduceMotion.System);
 
-export default function DeveloperPortal({ back,token,colors }: { back: () => void;token?:string;colors?:{ink:string;accent:string;muted:string;soft:string} }) {
+export default function DeveloperPortal({ back,token,colors }: { back: () => void;token?:string;colors?:DashboardTheme }) {
   const endpoint=(token?accountHost:'')+'/account/developer/apps';
   function request(path='',init:RequestInit={}){
     const url=path==='/developer-profile'?endpoint.replace(/\/apps$/,'/profile'):endpoint+path;
@@ -219,7 +220,7 @@ export default function DeveloperPortal({ back,token,colors }: { back: () => voi
       if(!response.ok)throw new Error(result.error??'Could not load configuration.');
       return result;
     }}/>;
-  if(storage&&token)return <ApplicationStorage id={storage} token={token} colors={colors??{ink,accent,muted:border,soft:dark?'#23355d':'#e9f0ff'}} back={()=>setStorage('')}/>;
+  if(storage&&token)return <ApplicationStorage id={storage} token={token} colors={colors??dashboardThemes[dark?'dark':'light']} back={()=>setStorage('')}/>;
   return <Animated.View entering={entering} style={styles.content}>
     {action('Back to X-Center ID', back)}
     <Text accessibilityRole="header" style={[styles.title, { color: ink }]}>Developer apps</Text>

@@ -1,7 +1,7 @@
 import {createCipheriv,createDecipheriv,randomBytes} from 'node:crypto';
 
 export const uploadChunkSize=512*1024;
-const abandonedAfter=60*60*1000;
+export const uploadIdleMs=60*60*1000;
 
 export function openFileTransfers(db,key) {
   db.exec(`
@@ -51,9 +51,9 @@ export function openFileTransfers(db,key) {
   }
   return {
     begin,byId,complete,cancel,remove,removeOwner,
-    isExpired:row=>!row.committed&&row.updated<Date.now()-abandonedAfter,
-    purge:()=>purge.run(Date.now()-abandonedAfter),
-    reserved:owner=>pending.get(owner,Date.now()-abandonedAfter).bytes,
+    isExpired:row=>!row.committed&&row.updated<Date.now()-uploadIdleMs,
+    purge:()=>purge.run(Date.now()-uploadIdleMs),
+    reserved:owner=>pending.get(owner,Date.now()-uploadIdleMs).bytes,
     decrypt,
     append(row,position,bytes){
       save.run(row.id,position,encrypt(row,position,bytes));
@@ -63,4 +63,18 @@ export function openFileTransfers(db,key) {
       for(let position=0;position<row.size;position+=uploadChunkSize)yield decrypt(row,position);
     },
   };
+}
+
+export function appendTransferChunk(transfers,row,input,hasDiskRoom) {
+  const position=input?.position, content=input?.content;
+  const bytes=Buffer.from(typeof content==='string'?content:'','base64');
+  if(row.committed||!Number.isSafeInteger(position)||position<0||position>=row.size||
+    position%uploadChunkSize!==0||bytes.length!==Math.min(row.size-position,uploadChunkSize)||bytes.toString('base64')!==content){
+    return [422,{error:'Invalid upload chunk.'}];
+  }
+  if(position<row.received&&transfers.decrypt(row,position).equals(bytes))return [200,{received:position+bytes.length}];
+  if(position!==row.received)return [409,{error:'Upload chunk is out of order.'}];
+  if(!hasDiskRoom())return [503,{error:'File storage is temporarily unavailable.'}];
+  transfers.append(row,position,bytes);
+  return [200,{received:position+bytes.length}];
 }

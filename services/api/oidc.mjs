@@ -708,7 +708,9 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     },
     async dataAccess(value,{native=false}={}) {
       const access = await provider.AccessToken.find(value);
-      if (!access?.accountId || !registry?.has(access.clientId) || !accounts.linkedGrant(access.accountId,access.clientId) || (!native&&(await provider.Client.find(access.clientId))?.tokenEndpointAuthMethod!=='client_secret_basic') || !await activeGrant(access) || !access.scope?.split(' ').includes('app_data')) return null;
+      if (!access?.accountId || !registry?.has(access.clientId) || !accounts.linkedGrant(access.accountId,access.clientId) || (!native&&(await provider.Client.find(access.clientId))?.tokenEndpointAuthMethod!=='client_secret_basic') || !access.scope?.split(' ').includes('app_data')) return null;
+      const grant=await activeGrant(access);
+      if(!grant?.getOIDCScope().split(' ').includes('app_data'))return null;
       return { owner:access.accountId, client:access.clientId, confidential:true };
     },
     async overviewAccess(token,scope=overviewScope){

@@ -4,26 +4,12 @@ import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { openFileTransfers,uploadChunkSize } from './file-transfers.mjs';
+import {fileName as nameOf, readFileInput as readInput, fileDownloadHeaders} from './file-input.mjs';
+import {appendTransferChunk, openFileTransfers,uploadChunkSize } from './file-transfers.mjs';
 
 const fileLimit = 2 * 1024 * 1024;
 const storageLimit = 10 * 1024 * 1024;
 const fileId = /^[0-9a-f]{8}-[0-9a-f-]{27}$/;
-function nameOf(input) {
-  const name=typeof input==='string'?input.trim().normalize('NFC'):'';
-  return name&&name!=='.'&&name!=='..'&&name.length<=160&&!/[\\/\p{Cc}\p{Cf}]/u.test(name)?name:null;
-}
-async function readInput(req,max) {
-  const chunks=[];
-  let size=0;
-  for await(const chunk of req.iterator({destroyOnReturn:false})){
-    size+=chunk.length;
-    if(size>max){req.resume();throw new Error('Request exceeds allowed size.');}
-    chunks.push(chunk);
-  }
-  return JSON.parse(Buffer.concat(chunks).toString());
-}
-
 export function createAccountFiles({ database, key, accounts, origin, friends, usage = () => ({}), appContainers = () => [], fileAccess }) {
   if (!key || key.length !== 32) return null;
   const db = new DatabaseSync(database);
@@ -40,6 +26,7 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
       file TEXT PRIMARY KEY REFERENCES user_files(id) ON DELETE CASCADE,
       folder TEXT NOT NULL REFERENCES user_folders(id)
     ) STRICT;
+    CREATE INDEX IF NOT EXISTS user_files_by_folder ON user_file_folders(folder);
     CREATE TABLE IF NOT EXISTS user_file_shares (
       id TEXT PRIMARY KEY, file TEXT NOT NULL REFERENCES user_files(id) ON DELETE CASCADE,
       owner TEXT NOT NULL, recipient TEXT NOT NULL, friendship TEXT NOT NULL,
@@ -57,6 +44,12 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
     SELECT id,1 FROM user_folders WHERE owner=? AND id=? UNION ALL
     SELECT f.id,t.depth+1 FROM user_folders f JOIN tree t ON f.parent=t.id WHERE f.owner=? AND t.depth<8
   ) SELECT id FROM tree ORDER BY depth DESC`);
+  const folderSizes=db.prepare(`WITH RECURSIVE tree(root,id,depth) AS (
+    SELECT id,id,1 FROM user_folders WHERE owner=? AND parent IS ? UNION ALL
+    SELECT t.root,f.id,t.depth+1 FROM tree t JOIN user_folders f ON f.parent=t.id WHERE f.owner=? AND t.depth<8
+  ) SELECT tree.root,total(files.size) AS size FROM tree
+    LEFT JOIN user_file_folders link ON link.folder=tree.id
+    LEFT JOIN user_files files ON files.id=link.file AND files.owner=? GROUP BY tree.root`);
   const subtreeTransfers=db.prepare(`DELETE FROM file_transfers WHERE owner=? AND (
     (committed=0 AND folder IN (SELECT value FROM json_each(?))) OR
     id IN (SELECT file FROM user_file_folders WHERE folder IN (SELECT value FROM json_each(?)))
@@ -133,9 +126,7 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
   async function download(res,row) {
     const transfer=transfers.byId.get(row.owner,row.id);
     const file=unpack(row,!transfer?.committed);
-    const name=encodeURIComponent(file.name).replace(/[!'()*]/g,char=>'%'+char.charCodeAt(0).toString(16));
-    res.writeHead(200,{'Content-Type':'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
-      'Content-Disposition':"attachment; filename*=UTF-8''"+name,'Content-Length':row.size});
+    res.writeHead(200,fileDownloadHeaders(file.name,row.size));
     if(transfer?.committed){
       try{await pipeline(Readable.from(transfers.read(transfer)),res);}
       catch{res.destroy();}
@@ -199,18 +190,7 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
         transfers.complete.run(id);
         return [201,{id}];
       }
-      const position=input?.position;
-      const content=input?.content;
-      const bytes=Buffer.from(typeof content==='string'?content:'','base64');
-      if(row.committed||!Number.isSafeInteger(position)||position<0||position>=row.size||
-        position%uploadChunkSize!==0||bytes.length!==Math.min(row.size-position,uploadChunkSize)||bytes.toString('base64')!==content){
-        return [422,{error:'Invalid upload chunk.'}];
-      }
-      if(position<row.received&&transfers.decrypt(row,position).equals(bytes))return [200,{received:position+bytes.length}];
-      if(position!==row.received)return [409,{error:'Upload chunk is out of order.'}];
-      if(!hasDiskRoom())return [503,{error:'File storage is temporarily unavailable.'}];
-      transfers.append(row,position,bytes);
-      return [200,{received:position+bytes.length}];
+      return appendTransferChunk(transfers,row,input,hasDiskRoom);
     });
     return json(res,status,result);
   }
@@ -300,9 +280,10 @@ export function createAccountFiles({ database, key, accounts, origin, friends, u
         const breadcrumbs=trail(owner,location);
         if(!breadcrumbs)return json(res,404,{error:'Folder unavailable.'});
         const folder=location||null;
+        const sizes=new Map(folderSizes.all(owner,folder,owner,owner).map(row=>[row.root,row.size]));
         const listing={
           files:forFolder.all(owner,folder).map(row=>unpack(row,false)),
-          folders:children.all(owner,folder).map(row=>unpack(row,false)),
+          folders:children.all(owner,folder).map(row=>({...unpack(row,false),size:sizes.get(row.id)??0})),
           breadcrumbs,
         };
         if(delegated)return json(res,200,listing);

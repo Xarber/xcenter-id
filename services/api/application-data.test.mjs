@@ -88,7 +88,7 @@ test('verified app databases isolate users and services, encrypt records and gat
   assert.equal((await container('/posts/one',details)).status,409);
   assert.equal((await container('/posts/service')).status,404);
   assert.equal(data.containers('developer').find(item=>item.client==='a').canManage,true);
-  assert.deepEqual((await (await container()).json()).collections,[{collection:'posts',records:1}]);
+  assert.deepEqual((await (await container()).json()).collections,[{collection:'posts',records:1,bytes:1024+Buffer.byteLength(JSON.stringify({private:true}))}]);
   assert.deepEqual(await (await container('/posts/one?edit=1')).json(),{revision:1,data:{private:true}});
   assert.deepEqual(await (await container('/posts/one')).json(),{private:true});
   assert.equal((await container('/posts/one',{...details,method:'DELETE',body:{revision:1}})).status,200);
@@ -120,4 +120,101 @@ test('hosted payload ciphertext authenticates publication and recipient flags at
   const db=new DatabaseSync(path);db.prepare('UPDATE app_records SET public=1').run();db.close();
   const response=await fetch(base+'/public/apps/a/data/posts');assert.equal(response.status,500);assert.equal((await response.text()).includes(secret),false);
  }finally{await new Promise(resolve=>server.close(resolve));service.close();registry.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('container files are quota-bound, app-scoped, and browsed only with the permitted visibility',async t=>{
+  const registry=openRegistry(':memory:');
+  const primary=registry.submit('developer','Backup','https://backup.example.test/return');
+  const other=registry.submit('developer','Other','https://other.example.test/return');
+  registry.approve(primary.id,'backup');registry.approve(other.id,'other');
+  const user='u'.repeat(30), developer='d'.repeat(30), stranger='s'.repeat(30), wrongApp='w'.repeat(30);
+  const principals=new Map([
+    [user,{owner:'player',client:'backup'}],[developer,{owner:'developer',client:'backup'}],
+    [stranger,{owner:'stranger',client:'backup'}],[wrongApp,{owner:'player',client:'other'}],
+  ]);
+  const data=openApplicationData({
+    path:':memory:',key:Buffer.alloc(32,9),registry,authenticate:token=>principals.get(token),
+    accounts:{storageCapacity:()=>700000,available:()=>true,linkedGrant:()=> 'linked',
+      current:req=>req.headers.cookie?{owner:req.headers.cookie}:null,adminStatus:()=>403,
+      allowsMutation:()=>true,recentlyConfirmed:()=>true},
+  });
+  const server=createServer((req,res)=>void data.handle(req,res,new URL(req.url,'http://localhost'))).listen(0,'127.0.0.1');
+  await once(server,'listening');
+  t.after(async()=>{await new Promise(resolve=>server.close(resolve));data.close();registry.close();});
+  const base='http://127.0.0.1:'+server.address().port;
+  const call=(path,{token,cookie,method='GET',payload,revision}={})=>fetch(base+path,{method,
+    headers:{...(token?{authorization:'Bearer '+token}:{}),...(cookie?{cookie}:{}),
+      ...(payload?{'content-type':'application/json'}:{}),...(revision?{'if-match':revision}:{})},
+    ...(payload?{body:JSON.stringify(payload)}:{})});
+  const files='/v1/apps/backup/files',uploads=files+'/uploads',browser='/account/app-files/backup';
+  const portal='/account/app-storage/'+primary.id;
+  const start=(token,payload)=>call(uploads,{token,payload,method:'POST'});
+  const status=(token,id)=>call(uploads+'/'+id,{token});
+  const write=(token,id,position,bytes)=>call(uploads+'/'+id,{token,method:'PUT',payload:{position,content:bytes.toString('base64')}});
+  const complete=(token,id)=>call(uploads+'/'+id,{token,method:'POST',payload:{}});
+  const manage=payload=>call(portal,{cookie:'developer',method:'POST',payload});
+  const list=async (path,options)=>(await (await call(path,options)).json()).files;
+
+  assert.equal((await start(wrongApp,{name:'backup.zip',size:1})).status,403);
+  assert.equal((await start(user,{name:'../backup.zip',size:1})).status,422);
+  const {id,chunkSize}=await (await start(user,{name:'Beat Saber.zip',size:600000,browseable:true})).json();
+  assert.equal(data.accountUsage('player'),600000);
+  assert.equal((await start(user,{name:'other.zip',size:100001})).status,409);
+  assert.equal((await status(stranger,id)).status,404);
+  assert.equal((await complete(user,id)).status,409);
+  assert.equal(data.containers('player').length,0);
+  const content=Buffer.alloc(600000,42);
+  assert.equal((await write(user,id,0,content.subarray(0,chunkSize))).status,200);
+  assert.equal((await write(user,id,0,content.subarray(0,chunkSize))).status,200);
+  assert.equal((await write(user,id,chunkSize,content.subarray(chunkSize))).status,200);
+  assert.equal((await complete(user,id)).status,201);
+  assert.equal((await complete(user,id)).status,200);
+  assert.deepEqual((await list(browser,{cookie:'player'})).map(item=>item.name),['Beat Saber.zip']);
+  assert.equal(data.containers('player')[0].showInFiles,true);
+  assert.equal(data.containers('player')[0].canManage,false);
+  assert.equal(data.containers('player')[0].visibleBytes,600000);
+  const result=await call(browser+'/'+id,{cookie:'player'});
+  assert.equal(result.headers.get('content-type'),'application/octet-stream');
+  assert.match(result.headers.get('content-disposition'),/attachment/);
+  assert.deepEqual(Buffer.from(await result.arrayBuffer()),content);
+  assert.equal((await call('/account/files/'+id,{cookie:'player'})).status,404);
+  assert.equal((await call(browser+'/'+id,{cookie:'stranger'})).status,404);
+  assert.equal((await call(browser+'/'+id,{cookie:'player',method:'DELETE'})).status,405);
+  assert.equal((await call('/public/apps/backup/files/'+id)).status,404);
+  assert.equal((await call(files+'/'+id,{token:user,method:'PUT',payload:{browseable:false}})).status,200);
+  assert.equal((await call(browser+'/'+id,{cookie:'player'})).status,404);
+  assert.deepEqual(await list(browser,{cookie:'player'}),[]);
+  assert.equal(data.containers('player')[0].showInFiles,false);
+  assert.equal((await manage({action:'rotate-key'})).status,403);
+
+  registry.verifyApp(primary.id,true);
+  const key=(await (await manage({action:'rotate-key'})).json()).secret;
+  assert.equal((await start(key,{name:'server.zip',size:1,browseable:true})).status,422);
+  const service=(await (await start(key,{name:'service.zip',size:1})).json()).id;
+  assert.equal((await write(key,service,0,Buffer.from('s'))).status,200);
+  assert.equal((await complete(key,service)).status,201);
+  assert.equal((await call(files+'/'+service,{token:user})).status,404);
+  assert.equal((await call(files+'/'+id,{token:key})).status,404);
+  assert.equal((await call(portal+'/files/'+service,{cookie:'player'})).status,404);
+  assert.equal(await (await call(portal+'/files/'+service,{cookie:'developer'})).text(),'s');
+  assert.equal((await (await call(portal,{cookie:'developer'})).json()).used,1);
+
+  const devFile=(await (await start(developer,{name:'dev.bin',size:0})).json()).id;
+  assert.equal((await complete(developer,devFile)).status,201);
+  assert.deepEqual(await list(browser,{cookie:'developer'}),[]);
+  assert.equal((await manage({action:'file-visibility',enabled:true})).status,200);
+  assert.deepEqual((await list(browser,{cookie:'developer'})).map(item=>item.id),[devFile]);
+  assert.equal((await call('/account/file-containers/backup',{cookie:'developer'})).status,200);
+  assert.equal((await manage({action:'file-visibility',enabled:false})).status,200);
+  assert.equal((await call('/account/file-containers/backup',{cookie:'developer'})).status,404);
+  assert.equal((await call(browser+'/'+devFile,{cookie:'developer'})).status,404);
+
+  const pending=(await (await start(user,{name:'pending',size:100000})).json()).id;
+  data.revokeApp('player','backup');
+  assert.equal((await status(user,pending)).status,404);
+  assert.equal((await call(files+'/'+id,{token:user})).status,404);
+  assert.equal(data.accountUsage('player'),0);
+  assert.equal((await call(files+'/'+service,{token:key})).status,200);
+  await manage({action:'revoke-key'});
+  assert.equal((await call(files+'/'+service,{token:key})).status,403);
 });

@@ -313,7 +313,7 @@ createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   if(path==='/account/app-data-permissions'&&req.method==='PUT'&&req.headers['x-authnjs-request']!=='account-consent'){
     res.writeHead(403,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify({error:'Change permissions from your account.'}));return;
   }
-  if(applicationData&&(/^\/(?:public|v1)\/apps\//.test(path)||path.startsWith('/account/app-storage/')||path.startsWith('/account/file-containers/')||path==='/account/app-data-permissions')){
+  if(applicationData&&(/^\/(?:public|v1)\/apps\//.test(path)||path.startsWith('/account/app-storage/')||path.startsWith('/account/file-containers/')||path.startsWith('/account/app-files/')||path==='/account/app-data-permissions')){
     void applicationData.handle(req,res,target);return;
   }
   const appIcon=/^\/public\/app-icons\/([0-9a-f-]{36})$/.exec(path)?.[1];

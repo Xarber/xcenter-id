@@ -642,3 +642,12 @@ Web and API 0.18.0 are live at `be221b0`. Provider quality passed and SDK source
 Acceptance for AUTHN-163: a registered app with user consent can save a Beat Saber backup in its own branded user container and charge the linked user’s quota. Verified apps may also use their separate service quota. Developer inspection keeps the existing own-account boundary for user records and may show authorized files alongside records. Turning off record browsing hides records in the account file browser even for the developer. A Browseable user file makes the app container visible regardless of that setting. Ordinary users see and can download only Browseable user files in their own account. Visibility does not make service files public. Test app, account, and service isolation and direct downloads when Browseable is disabled before any build or deployment.
 
 26 November, 13:33 CET. The five-hour window is exhausted and resets at 17:07 CET. The weekly window has 84% remaining. UADS §0 requires a checkpoint. Only queue documentation changed. Resume by tracing account-files, file-transfers, application-data, and both app-container browser implementations, then implement AUTHN-163 and AUTHN-164 together.
+
+### App container implementation
+
+| ID | State | Evidence and remaining checks |
+| --- | --- | --- |
+| AUTHN-163 | Implemented | Encrypted quota-limited transfers in app-owned user and service namespaces, with scoped SDK methods and web/native browsers. Isolated HTTP regressions cover completion, retry, quota, role and credential boundaries, Browseable visibility, direct downloads, and unlink cleanup. Verify the staged web UI and native build separately. |
+| AUTHN-164 | Implemented | Ordinary folder rows include recursive byte totals. Container and collection rows show scoped sizes. The API regression verifies nested sizes update after moving a subfolder. Verify both platform layouts. |
+
+The user authorized work despite the five-hour checkpoint. Provider API, dashboard TypeScript and tests, Node SDK tests, and Swift protocol source checks passed locally. The SDK scripts and app tests are linked from the [container file guide](APP_CONTAINER_FILES.md). Record CI and deployment evidence before marking the verification complete.

@@ -28,7 +28,7 @@ const size = (value:number)=>value>1024*1024 ? (value/(1024*1024)).toFixed(1)+' 
 
 type Session = { id:string;label:string;created:number;current:boolean };
 type StoredFile = { id:string;name:string;size:number;created:number };
-type FolderItem = {id:string;name:string};
+type FolderItem = {id:string;name:string;size?:number};
 type Files = { appContainers?:Container[]; files:StoredFile[]; folders:FolderItem[]; breadcrumbs:FolderItem[]; categories:Record<string,number>; used:number; total:number; limit:number };
 
 export function DevicesPage() {
@@ -155,7 +155,7 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
     </form>;
   }
   if(container){
-    const app=state?.appContainers?.find(item=>item.client===container&&item.canManage);
+    const app=state?.appContainers?.find(item=>item.client===container&&(item.canBrowse??item.canManage));
     if(app)return <AppFileContainer app={app}/>;
     return <section className="xc-card xc-pad"><a href="/files">Back to your files</a><p role="status">{status||(state?'App folder unavailable.':'Loading folder…')}</p></section>;
   }
@@ -194,7 +194,7 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
           {nameField('New folder name','',name=>change(()=>api('files/folders',{name,folder}),'Folder created.'),()=>setCreating(false))}
           </div>:<button type="button" className="xc-file-new" onClick={()=>{setCreating(true);setRenaming(null);}} disabled={busy}><FolderPlus size={18}/> New folder</button>}</td></tr>
         {!folder&&state?.appContainers?.filter(app=>app.showInFiles).map(app=><tr key={app.client}>
-          <td>{app.canManage?<a className="xc-file-name" href={'/files?app='+encodeURIComponent(app.client)}><AppIcon icon={app.icon} compact/><strong>{app.name}</strong></a>
+          <td>{(app.canBrowse??app.canManage)?<a className="xc-file-name" href={'/files?app='+encodeURIComponent(app.client)}><AppIcon icon={app.icon} compact/><strong>{app.name}</strong></a>
             :<div className="xc-file-name"><AppIcon icon={app.icon} compact/><strong>{app.name}</strong></div>}</td>
           <td>{formatBytes(app.bytes)}</td><td className="xc-file-date">—</td><td/>
         </tr>)}
@@ -203,7 +203,7 @@ export function FilesPage({ summary=false }: { summary?:boolean }) {
           <td>{renaming?.id===item.id?<div className="xc-file-name"><Folder size={18}/>
             {nameField('Folder name',renaming.name,name=>change(()=>api('files/folders/'+item.id,{name},'PATCH'),'Folder renamed.'),()=>setRenaming(null))}
           </div>:<a className="xc-file-name" href={folderPath(item.id)} onClick={event=>{event.preventDefault();goTo(item.id);}}><Folder size={18}/><strong>{item.name}</strong></a>}</td>
-          <td>—</td><td className="xc-file-date">—</td><td><div className="xc-file-actions">
+          <td>{formatBytes(item.size??0)}</td><td className="xc-file-date">—</td><td><div className="xc-file-actions">
             <button className="xc-file-icon" aria-label={'Rename '+item.name} onClick={()=>{setCreating(false);setRenaming(item);}} disabled={busy}><Pencil size={16}/></button>
             <button type="button" className="xc-file-icon" aria-label={'Move '+item.name} disabled={busy} onClick={()=>chooseMove({...item,folder:true})}><FolderInput size={16}/></button>
             <button type="button" className="xc-file-icon" disabled={busy} onClick={async()=>{

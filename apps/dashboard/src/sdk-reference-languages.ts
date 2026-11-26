@@ -231,7 +231,7 @@ function dataExamples(
   args:Args|Record<Native,Args>, call:readonly [string,string,string], note?:string,
 ) {
   const [swift,kotlin,dart]=methods;
-  const binary=['public-avatar','user-avatar','app-icon','download-file','download-shared-file'].includes(id);
+  const binary=['public-avatar','user-avatar','app-icon','download-file','download-shared-file','download-app-file'].includes(id);
   const isPublic=receiver==='publicApi';
   const argumentsFor=(language:Native)=>'swift' in args?args[language]:args;
   native[id] = {
@@ -585,7 +585,7 @@ const typescript: Partial<Record<string,LanguageExample>> = {
     argument('@xcenter-id/client','Package','Shared typed HTTP and OAuth APIs for JavaScript and TypeScript.'),
     argument('@authnjs/expo','Package','Expo system-browser OAuth and React Native account components.'),
     argument('@xcenter-id/server','Package','Node-only API with type declarations. Keep its secrets on the backend.'),
-  ],'npm pack ./packages/client ./packages/expo\n# In the Expo application, install both tarballs from the SDK checkout.\nnpm install /path/to/xcenter-id-client-0.4.0.tgz /path/to/authnjs-expo-0.6.0.tgz\nnpx expo install expo-auth-session expo-crypto expo-web-browser',
+  ],'npm pack ./packages/client ./packages/expo\n# In the Expo application, install both tarballs from the SDK checkout.\nnpm install /path/to/xcenter-id-client-0.5.0.tgz /path/to/authnjs-expo-0.7.0.tgz\nnpx expo install expo-auth-session expo-crypto expo-web-browser',
   'import {createUserClient} from "@authnjs/expo/client";'),
   'create-user-client':snippet('createUserClient(options: { clientId: string; getAccessToken: () => string | Promise<string>; fetch?: typeof fetch }): UserClient',[
     argument('clientId','string','Client ID assigned in Developer Apps.'),
@@ -685,6 +685,60 @@ dataExamples("close-peer",'user',
   ["closePeer(_ id: String, proof: String)","closePeer(id: String, proof: String)","closePeer(String id, String proof)"],
   [["id","String","Your current opaque peer ID returned by openPeer."],["proof","String","Private proof returned by openPeer. Never send it to another peer."]],
   ["closePeer(peerId, proof: peerProof)","closePeer(peerId, peerProof)","closePeer(peerId, peerProof)"]);
+
+dataExamples("app-container-files",'user',
+  ["startAppUpload(name: String, size: Int64, browseable: Bool = false)","startAppUpload(name: String, size: Long, browseable: Boolean = false)","startAppUpload(String name, int size, {bool browseable = false})"],
+  [["name","String","Display name."],["size","64-bit integer","Exact size in bytes."],["browseable","boolean","True exposes this user file in the account dashboard. Defaults to false. Omit for service uploads."]],
+  ["startAppUpload(name: \"Beat Saber.zip\", size: 600000, browseable: true)","startAppUpload(\"Beat Saber.zip\", 600000L, browseable = true)","startAppUpload(\"Beat Saber.zip\", 600000, browseable: true)"]);
+
+dataExamples("start-app-upload",'user',
+  ["startAppUpload(name: String, size: Int64, browseable: Bool = false)","startAppUpload(name: String, size: Long, browseable: Boolean = false)","startAppUpload(String name, int size, {bool browseable = false})"],
+  [["name","String","Display name."],["size","64-bit integer","Exact size in bytes."],["browseable","boolean","True exposes this user file in the account dashboard. Defaults to false. Omit for service uploads."]],
+  ["startAppUpload(name: \"backup.zip\", size: 600000)","startAppUpload(\"backup.zip\", 600000L)","startAppUpload(\"backup.zip\", 600000)"]);
+
+dataExamples("app-upload-status",'user',
+  ["appUploadStatus(_ id: String)","appUploadStatus(id: String)","appUploadStatus(String id)"],
+  [["id","string","Transfer ID returned by the start operation. Store it to resume the same file."]],
+  ["appUploadStatus(id)","appUploadStatus(id)","appUploadStatus(id)"]);
+
+dataExamples("append-app-upload",'user',
+  ["appendAppUpload(_ id: String, position: Int64, content: Data)","appendAppUpload(id: String, position: Long, content: ByteArray)","appendAppUpload(String id, int position, Uint8List content)"],
+  [["id","string","Transfer ID returned by the start operation. Store it to resume the same file."],["position","64-bit integer","Next byte offset."],["content","Native byte buffer","Bytes of a single chunk."]],
+  ["appendAppUpload(id, position: 0, content: bytes)","appendAppUpload(id, 0L, bytes)","appendAppUpload(id, 0, bytes)"]);
+
+dataExamples("complete-app-upload",'user',
+  ["completeAppUpload(_ id: String)","completeAppUpload(id: String)","completeAppUpload(String id)"],
+  [["id","string","Transfer ID returned by the start operation. Store it to resume the same file."]],
+  ["completeAppUpload(id)","completeAppUpload(id)","completeAppUpload(id)"]);
+
+dataExamples("cancel-app-upload",'user',
+  ["cancelAppUpload(_ id: String)","cancelAppUpload(id: String)","cancelAppUpload(String id)"],
+  [["id","string","Transfer ID returned by the start operation. Store it to resume the same file."]],
+  ["cancelAppUpload(id)","cancelAppUpload(id)","cancelAppUpload(id)"]);
+
+dataExamples("list-app-files",'user',
+  ["listAppFiles(cursor: String? = nil)","listAppFiles(cursor: String? = null)","listAppFiles({String? cursor})"],
+  [["cursor","Optional String","Cursor returned by the preceding page. Omit for the first page."]],
+  ["listAppFiles()","listAppFiles()","listAppFiles()"]);
+
+dataExamples("download-app-file",'user',
+  ["downloadAppFile(_ id: String)","downloadAppFile(id: String)","downloadAppFile(String id)"],
+  [["id","string","Committed file ID returned by complete or list."]],
+  ["downloadAppFile(id)","downloadAppFile(id)","downloadAppFile(id)"]);
+
+dataExamples("set-app-file-browseable",'user',
+  ["setAppFileBrowseable(_ id: String, browseable: Bool)","setAppFileBrowseable(id: String, browseable: Boolean)","setAppFileBrowseable(String id, bool browseable)"],
+  [["id","string","Committed file ID returned by complete or list."],["browseable","boolean","True exposes this user file in the account dashboard. Defaults to false. Omit for service uploads."]],
+  ["setAppFileBrowseable(id, browseable: false)","setAppFileBrowseable(id, false)","setAppFileBrowseable(id, false)"]);
+
+dataExamples("delete-app-file",'user',
+  ["deleteAppFile(_ id: String)","deleteAppFile(id: String)","deleteAppFile(String id)"],
+  [["id","string","Committed file ID returned by complete or list."]],
+  ["deleteAppFile(id)","deleteAppFile(id)","deleteAppFile(id)"]);
+for (const language of ['swift','kotlin','dart'] as const) {
+  const guide=native['app-container-files']?.[language];
+  if(guide)guide.output='{"id":"3aa33912-a1b8-4c39-ab4a-ac63d15adf71","chunkSize":524288}';
+}
 
 export function parseLanguage(value:unknown):Language|undefined{
   return typeof value==='string'&&Object.hasOwn(languages,value)?value as Language:undefined;

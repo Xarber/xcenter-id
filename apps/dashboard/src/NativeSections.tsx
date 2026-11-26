@@ -493,11 +493,11 @@ export default function NativeSections({ section,token,account,colors,reload,exp
             </Pressable>}
         </View>
         {!folder&&files?.appContainers?.filter(app=>app.showInFiles).map(app=>
-          <Pressable accessibilityRole={app.canManage?"button":undefined} disabled={!app.canManage} key={app.client} onPress={()=>setFileContainer(app)} style={fileLine}>
+          <Pressable accessibilityRole={(app.canBrowse??app.canManage)?"button":undefined} disabled={!(app.canBrowse??app.canManage)} key={app.client} onPress={()=>setFileContainer(app)} style={fileLine}>
             <AppIcon icon={app.icon} color={colors.accent} compact/>
             <Text style={[styles.finderName,{color:colors.ink,fontWeight:'700'}]}>{app.name}</Text>
             {paragraph(formatBytes(app.bytes))}
-            {app.canManage&&<Ionicons accessible={false} name="chevron-forward" size={18} color={colors.muted}/>}
+            {(app.canBrowse??app.canManage)&&<Ionicons accessible={false} name="chevron-forward" size={18} color={colors.muted}/>}
           </Pressable>)}
         {files?.folders.map(item=><View style={fileLine} key={item.id}>
           <Ionicons name="folder-outline" size={21} color={colors.accent} accessible={false}/>
@@ -505,6 +505,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
             <Pressable accessibilityRole="button" style={[styles.finderName,{minHeight:44,justifyContent:'center'}]} onPress={()=>openFolder(item.id)}>
               <Text style={{color:colors.ink,fontWeight:'700'}}>{item.name}</Text>
             </Pressable>}
+          {paragraph(formatBytes(item.size??0))}
           {icon('Rename '+item.name,'pencil-outline',()=>{setCreatingFolder(false);setRenameEntry(item);})}
           {icon('Move '+item.name,'folder-open-outline',()=>chooseMove(item,true))}
           {icon('Remove folder '+item.name,'trash-outline',()=>confirm('Remove folder and contents?','This permanently removes the folder and everything inside it.',
@@ -528,7 +529,8 @@ export default function NativeSections({ section,token,account,colors,reload,exp
             {renameEntry?.id===item.id?renderNameEditor('File name',renameEntry.name,name=>setRenameEntry({...renameEntry,name}),()=>saveRename(item.id,false),()=>setRenameEntry(null)):
               <Pressable accessibilityRole="button" style={styles.finderName} onPress={()=>run(()=>shareDownload('files/'+item.id,item.name,token))}><Text style={{color:colors.ink,fontWeight:'700'}}>{item.name}</Text>{paragraph(formatBytes(item.size))}</Pressable>}
             <View style={styles.finderActions}>
-              {icon('Rename '+item.name,'pencil-outline',()=>{setCreatingFolder(false);setRenameEntry(item);})}
+              {paragraph(formatBytes(item.size??0))}
+          {icon('Rename '+item.name,'pencil-outline',()=>{setCreatingFolder(false);setRenameEntry(item);})}
               {icon('Share '+item.name,'share-social-outline',()=>setSharing(value=>value===item.id?'':item.id))}
               {icon('Move '+item.name,'folder-open-outline',()=>chooseMove(item,false))}
               {icon('Remove '+item.name,'trash-outline',()=>confirm('Remove file?','This permanently removes the file.',

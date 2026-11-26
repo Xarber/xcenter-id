@@ -42,6 +42,14 @@ test('account file uploads and downloads are owner-scoped and use attachment hea
     const upload = await call('first','POST','',{name:'inside.txt',content:Buffer.from(raw).toString('base64'),folder:child});
     assert.equal(upload.status,201);
     assert.equal((await call('first','DELETE','/folders/'+child,{})).status,409);
+    const listFor=async id=>(await (await call('first','GET',id?'?folder='+id:'')).json()).folders;
+    assert.equal((await listFor()).find(item=>item.id===folder).size,Buffer.byteLength(raw));
+    assert.equal((await listFor(folder)).find(item=>item.id===child).size,Buffer.byteLength(raw));
+    assert.equal((await call('first','PATCH','/folders/'+child,{folder:null})).status,200);
+    assert.equal((await listFor()).find(item=>item.id===folder).size,0);
+    assert.equal((await listFor()).find(item=>item.id===child).size,Buffer.byteLength(raw));
+    assert.equal((await call('first','PATCH','/folders/'+child,{folder})).status,200);
+
     const {id:uploadedId}=await upload.json();
     assert.equal((await call('second','PATCH','/folders/'+child,{name:'Not yours'})).status,404);
     assert.equal((await call('first','PATCH','/folders/'+child,{name:'Archive'})).status,200);
