@@ -590,3 +590,10 @@ The [quality workflow](https://github.com/Xarber/xcenter-id/actions/runs/4566460
 - Dashboard TypeScript, the existing 49 provider tests and the existing Node SDK tests passed. Two SDK browser tests skipped when no Chrome executable was specified. The new peer feature, new transfer paths and installed flows need their own verification. No application build or production rollout started.
 
 When usage permits, start by verifying AUTHN-155, then add regression coverage for delegated chunk and peer authorization before completing the SDK and developer guides.
+
+| ID | Request | State | Next action |
+| --- | --- | --- | --- |
+| AUTHN-161 | Add page browsing to Administration, Apps, and other long lists | Queued | Inventory long lists and existing API result limits. Add shared pagination for web and native, with page-size presets and an editable **Page** number. Keep filters and sorting consistent across pages and test boundary values and list mutations. |
+| AUTHN-162 | Search across Administration from one search bar | Queued | Query authorized users, registered apps and support requests across all pages. Inventory other searchable Administration sections. Group results by section and link to each result's existing detail view. Verify access controls and paged search beyond the first page. |
+
+26 November, 06:35 CET. Five-hour usage is exhausted and resets at 09:58 CET. Weekly usage has 41% remaining and resets 2 December at 15:33 CET. Under UADS §0, only this queue checkpoint was made. Continue the earlier account and SDK verification first, then AUTHN-161 and AUTHN-162.
