@@ -51,3 +51,7 @@ Chrome against isolated fixtures verified the Files changes and captured represe
 The [provider quality run](https://github.com/Xarber/xcenter-id/actions/runs/45838931269) passed at `c5beb38`. A [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45838931627) was started for the same commit. A native release and physical-device verification remain open. Isolated browser checks verified record ordering and repeated Developer Apps navigation at 390 px and 1,280 px.
 
 The [SDK quality matrix](https://github.com/Xarber/xcenter-id-sdk/actions/runs/45838776124) passed web, Swift, Android/JVM and Flutter/Dart at `7371295`. The browser peer tests used real Chromium WebRTC connections with fixtures for media and signaling. They exercised audio/video tracks, screen-track substitution, file transfer and independent parallel connections. Real capture selection, installed device checks and cross-network TURN are separate.
+
+## 26 November 0.21.0 file metadata update
+
+Web and API revision `6be04fe` are live. The release includes file digests, one-file metadata and editable app files. Public SDK source revision `19da834` is on testing, beta and main. See [production verification and recovery](operations/XCENTER_ID_PRODUCTION.md#26-november-file-metadata-rollout) and the [content hash contract](APP_CONTAINER_FILES.md#file-metadata-and-content-hashes).

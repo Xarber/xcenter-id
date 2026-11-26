@@ -42,4 +42,4 @@ Add `?metadata=1` to a file's regular download URL to retrieve the same JSON des
 
 JavaScript exposes `user.files.get(id)`, `user.files.getShared(shareId)`, `user.appFiles.get(id)`, and `service.files.get(id)`. Swift, Kotlin and Dart expose `getFile`, `getSharedFile`, and `getAppFile` on the corresponding clients.
 
-The server computes the digest on the first metadata read, streams data in bounded chunks, and stores the digest encrypted alongside its content revision. The first listing of large uncached files can take longer. Download authorization, quota and binary response behavior are preserved. The provider has no hash-search endpoint.
+The server computes the digest on the first metadata read, streams data in bounded chunks, and stores the digest encrypted alongside its content revision. The first listing of large uncached files can take longer. If the request times out at the gateway, retry with backoff while the server finishes caching the digest. Download authorization, quota and binary response behavior are preserved. The provider has no hash-search endpoint.
