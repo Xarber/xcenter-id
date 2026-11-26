@@ -23,6 +23,7 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
   const used=db.prepare('SELECT total(max(1,size)) AS bytes FROM app_files WHERE owner=? AND (? IS NULL OR client=?)');
   const materialize=db.prepare('INSERT INTO app_files VALUES(?,?,?,?,?,?)');
   const setBrowseable=db.prepare('UPDATE app_files SET browseable=? WHERE id=?');
+  const updateMetadata=db.prepare('UPDATE file_transfers SET metadata=? WHERE owner=? AND id=?');
   const reserve=db.prepare('SELECT total(max(1,size)) AS bytes FROM file_transfers WHERE owner=? AND committed=0 AND updated>=? AND (? IS NULL OR client=?)');
   const metadataContext=(owner,client,id,size)=>Buffer.from(JSON.stringify(['xcenter.appfile.v1',owner,client,id,size]));
   function seal(owner,client,id,size,metadata){
@@ -44,8 +45,15 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
     catch(error){db.exec('ROLLBACK');throw error;}
   }
   const hidden={error:'File unavailable.'};
+  function committed(row){
+    const transfer=transfers.byId.get(row.owner,row.id);
+    if(!transfer?.committed||transfer.client!==row.client||transfer.size!==row.size)throw new Error('Invalid file metadata.');
+    const metadata=open(transfer);
+    if(metadata.browseable!==!!row.browseable)throw new Error('Invalid file visibility.');
+    return {transfer,metadata};
+  }
   const view=row=>({id:row.id,size:row.size,created:row.created,browseable:!!row.browseable,
-    name:open(transfers.byId.get(row.owner,row.id)).name});
+    name:committed(row).metadata.name});
 
   return {
     totals:owner=>aggregate.all(owner),
@@ -65,8 +73,8 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
         }
         const row=file.get(owner,client,fileId,Number(browseableOnly));
         if(!row)return respond(404,hidden);
-        const transfer=transfers.byId.get(owner,fileId);
-        res.writeHead(200,{...headers,...fileDownloadHeaders(open(transfer).name,row.size)});
+        const {transfer,metadata}=committed(row);
+        res.writeHead(200,{...headers,...fileDownloadHeaders(metadata.name,row.size)});
         try{await pipeline(Readable.from(transfers.read(transfer)),res);}
         catch{res.destroy();}
         return;
@@ -99,8 +107,11 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
       if(!await live())return respond(403,{error:'File authorization changed.'});
       const [status,value]=transaction(()=>{
         if(fileId){
-          if(!file.get(owner,client,fileId,0))return [404,hidden];
+          const row=file.get(owner,client,fileId,0);
+          if(!row)return [404,hidden];
           if(typeof input?.browseable!=='boolean')return [422,{error:'Choose whether the file is Browseable.'}];
+          const {metadata}=committed(row);
+          updateMetadata.run(seal(owner,client,fileId,row.size,{...metadata,browseable:input.browseable}),owner,fileId);
           setBrowseable.run(Number(input.browseable),fileId);
           return [200,{ok:true}];
         }
