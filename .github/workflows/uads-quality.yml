@@ -54,6 +54,7 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             /services/api/
+            /packages/protected-storage/
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -61,4 +62,5 @@ jobs:
           cache-dependency-path: services/api/package-lock.json
       - run: npm ci
       - run: npm test
+      - run: node --test ../../packages/protected-storage/crypto.test.mjs
       - run: npm audit --audit-level=high

@@ -79,23 +79,23 @@ async function handoffKey(privateKey, publicKey, scope) {
 }
 
 // The caller must authenticate both devices and bind the recipient key to the approved request.
-export async function wrapDeviceHandoff({deviceKey,deviceEnvelope,recipient,scope,requestId}) {
+export async function wrapDeviceHandoff({deviceKey,deviceEnvelope,recipient,scope,requestId,deviceScope=scope}) {
   checkScope([...scope,requestId,recipient]);
   const sender = await createHandoffKey();
   const binding = [...scope,requestId,sender.publicKey,recipient];
   const shared = await handoffKey(sender.privateKey,recipient,binding);
-  const secret = await open(deviceKey,deviceEnvelope,context('device',...scope));
+  const secret = await open(deviceKey,deviceEnvelope,context('device',...deviceScope));
   try { return {sender:sender.publicKey,envelope:await seal(shared,secret,context('handoff',...binding))}; }
   finally { secret.fill(0); }
 }
 
-export async function acceptDeviceHandoff({deviceKey,recipient,packet,scope,requestId}) {
+export async function acceptDeviceHandoff({deviceKey,recipient,packet,scope,requestId,deviceScope=scope}) {
   checkScope([...scope,requestId,packet.sender,recipient.publicKey]);
   const binding = [...scope,requestId,packet.sender,recipient.publicKey];
   const shared = await handoffKey(recipient.privateKey,packet.sender,binding);
   const secret = await open(shared,packet.envelope,context('handoff',...binding));
   try {
-    return {key:await aes(secret),deviceEnvelope:await seal(deviceKey,secret,context('device',...scope))};
+    return {key:await aes(secret),deviceEnvelope:await seal(deviceKey,secret,context('device',...deviceScope))};
   } finally { secret.fill(0); }
 }
 
@@ -129,4 +129,17 @@ export async function verifyApproval(publicKey, signature, approval, {now=Date.n
   if (approval.expiry<=now || approval.expiry-now>maxLifetime) return false;
   const trusted = await crypto.subtle.importKey('raw',decode(publicKey),{name:'ECDSA',namedCurve:'P-256'},false,['verify']);
   return crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},trusted,decode(signature),approvalMessage(approval));
+}
+
+export async function signObjectWrite(privateKey, scope, envelope) {
+  checkScope(scope);
+  if(scope.length!==5||envelope.version!==1) throw new TypeError('Invalid object write.');
+  const message=context('object write',...scope,envelope.iv,envelope.data);
+  return encode(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},privateKey,message));
+}
+
+export async function signDeviceClaim(privateKey, scope, requestId, target) {
+  checkScope([...scope,requestId,target]);
+  return encode(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},privateKey,
+    context('claim device',...scope,requestId,target)));
 }
