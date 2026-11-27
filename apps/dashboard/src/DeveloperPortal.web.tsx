@@ -49,20 +49,6 @@ function PeerSettings({registration}:{registration:string}){
   </section>;
 }
 
-function DeveloperEnvironment(){
-  const [environment,setEnvironment]=useState<{sandbox:boolean;sandboxUrl:string}|null>(null);
-  useEffect(()=>{
-    const controller=new AbortController();
-    void fetch('/account/environment',{signal:controller.signal}).then(response=>response.json()).then(setEnvironment).catch(()=>{});
-    return ()=>controller.abort();
-  },[]);
-  if(!environment)return null;
-  return environment.sandbox?<div className="xc-info"><strong>Developer sandbox</strong>
-    <small>Use test accounts and registrations. Sandbox credentials and data stay on this issuer.</small>
-    <a href="/docs#sandbox">Sandbox integration guide</a></div>:
-    <a href={environment.sandboxUrl}>Open developer sandbox</a>;
-}
-
 function SandboxAppEvents({id}:{id:string}){
   const [events,setEvents]=useState<{event:string;created:number}[]|null>(null);
   const [status,setStatus]=useState('');
@@ -133,7 +119,6 @@ export default function DeveloperPortal({back}:{back:()=>void}){
     <div className="xc-portal-toolbar"><h2>Registered apps</h2>
       <button className="xc-button xc-primary" onClick={()=>edit('create')} disabled={!apps}><Plus size={18}/> Register an app</button></div>
     <a href="/profile/developer">Manage your developer profile</a>
-    <DeveloperEnvironment/>
     {apps?.slice(page.start,page.end).map(item=><button type="button" className="xc-card xc-permission-link xc-portal-app" onClick={()=>edit(item)} key={item.id}>
       <span className="xc-symbol xc-lavender">{item.icon?<img src={'data:image/png;base64,'+item.icon} alt=""/>:<Grid2X2 size={20}/>}</span>
       <span className="xc-permission-name"><strong className="xc-identity-label">{item.name}<TrustBadges compact kind="app" verified={item.verified}/></strong><span>{item.local?'Unsecure local app':item.native?'Native app':'Website'} · {item.status}</span></span>

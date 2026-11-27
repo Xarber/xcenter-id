@@ -755,3 +755,9 @@ Resume at AUTHN-178 with the client-generated device and recovery-envelope round
 | AUTHN-179 | Implemented | The verified prior batch and sandbox are deployed. Production ADP remains pending the AUTHN-178 rollout prerequisites. The earlier checkpoint's aggregate deployment dependency has been split to let independently verified changes ship. |
 
 Production is on `b12b22b`, sandbox API on `a4e2e6d`, and SDK main on `57c4930`. The [provider gate](https://github.com/Xarber/xcenter-id/actions/runs/45964160611) passed. See the [rollout and rollback record](operations/XCENTER_ID_PRODUCTION.md#27-november-sandbox-and-snapshot-rollout).
+
+### QR entry selection and sandbox pause
+
+- **AUTHN-180** separates dashboard QR account enrollment from app-only QR consent. The authorization screen shows two actions and generates a QR only after selection. Web and native scanner routes support manual six-digit pickup and exact-approval browser handoff. Verify production Web and native installed behavior separately.
+- **AUTHN-181** pauses the public developer sandbox. Public requests return 410. Both sandbox containers were stopped and databases, credentials and the previous site configuration were retained. Portal and hosted documentation links were removed. Resolve SDK issuer and callback configuration before re-enabling.
+- **AUTHN-178** adds signed, single-use device revocation to the isolated ADP implementation. Test coverage verifies signature, replay rejection and loss of approval privileges. Native protected key custody, key rotation, notification and data migration remain open.

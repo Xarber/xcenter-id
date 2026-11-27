@@ -1,3 +1,4 @@
+import {approvalTarget} from './account-approval.mjs';
 import {createHash,randomBytes} from 'node:crypto';
 
 const secretPattern=/^[A-Za-z0-9_-]{43}$/;
@@ -16,15 +17,18 @@ export function openNativeDeviceHandoff(db,now=Date.now){
     hash TEXT PRIMARY KEY,session TEXT NOT NULL REFERENCES account_sessions(hash) ON DELETE CASCADE,
     expires INTEGER NOT NULL
   ) STRICT;`);
+  if(!db.prepare('PRAGMA table_info(native_device_browsers)').all().some(field=>field.name==='target')){
+    db.exec('ALTER TABLE native_device_browsers ADD COLUMN target TEXT');
+  }
   const putTicket=db.prepare('INSERT INTO native_device_handoffs VALUES(?,?,?,?)');
   const takeTicket=db.prepare('DELETE FROM native_device_handoffs WHERE hash=? AND expires>? RETURNING session,code');
-  const putBrowser=db.prepare('INSERT INTO native_device_browsers VALUES(?,?,?)');
-  const findBrowser=db.prepare('SELECT session FROM native_device_browsers WHERE hash=? AND expires>?');
+  const putBrowser=db.prepare('INSERT INTO native_device_browsers VALUES(?,?,?,?)');
+  const findBrowser=db.prepare('SELECT session FROM native_device_browsers WHERE hash=? AND expires>? AND target IS ?');
   const cleanTickets=db.prepare('DELETE FROM native_device_handoffs WHERE expires<=? OR session=?');
   const expireBrowsers=db.prepare('DELETE FROM native_device_browsers WHERE expires<=?');
   return {
     issue(session,code){
-      if(!deviceCodePattern.test(code))return null;
+      if(!deviceCodePattern.test(code)&&!approvalTarget(code))return null;
       const key=secret(), time=now();
       cleanTickets.run(time,session);
       putTicket.run(hash(key),session,code,time+ticketLifetime);
@@ -37,12 +41,12 @@ export function openNativeDeviceHandoff(db,now=Date.now){
       if(!record||!validSession(record.session))return null;
       const key=secret();
       expireBrowsers.run(time);
-      putBrowser.run(hash(key),record.session,time+browserLifetime);
+      putBrowser.run(hash(key),record.session,time+browserLifetime,approvalTarget(record.code)?record.code:null);
       return {code:record.code,key,maxAge:browserLifetime/1000};
     },
-    browserSession(key){
+    browserSession(key,target=null){
       if(typeof key!=='string'||!secretPattern.test(key))return null;
-      return findBrowser.get(hash(key),now())?.session??null;
+      return findBrowser.get(hash(key),now(),target)?.session??null;
     },
   };
 }
@@ -63,8 +67,10 @@ export function nativeDeviceEntry(res){
     else fetch('/account/device/browser/exchange',{method:'POST',headers:{'Content-Type':'application/json','X-AuthNJS-Request':'device-review'},
       body:JSON.stringify({key}),credentials:'same-origin',redirect:'error'}).then(async response=>{
         const data=await response.json();
-        if(!response.ok||!/^[A-Z0-9]{6}$/.test(data.code))throw new Error('Unavailable');
-        location.replace('/device?code='+data.code);
+        if(!response.ok)throw new Error('Unavailable');
+        if(/^\\/(?:account-approval|app-approval)\\/[A-Za-z0-9_-]{43}$/.test(data.code))location.replace(data.code);
+        else if(/^[A-Z0-9]{6}$/.test(data.code))location.replace('/device?code='+data.code);
+        else throw new Error('Unavailable');
       }).catch(fail);
   </script></html>`);
 }

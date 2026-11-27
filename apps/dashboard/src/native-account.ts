@@ -28,14 +28,14 @@ export async function nativeRequest(path:string, token?:string, data?:object, me
 }
 
 const randomSecret=()=>btoa(String.fromCharCode(...Crypto.getRandomBytes(32))).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
-export async function nativePasskeySession(signUp=false,adding=false) {
+export async function nativePasskeySession(signUp=false,adding=false,qr=false) {
   const verifier=randomSecret();
   const state=randomSecret();
   const base64=await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256,verifier,{encoding:Crypto.CryptoEncoding.BASE64});
   const challenge=base64.replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
   const params=new URLSearchParams({challenge,state});
   const next='/native-session?'+params;
-  const result=await openAuthSessionAsync(accountHost+(signUp?'/signup':'/signin')+'?continue='+encodeURIComponent(next)+(adding?'&addAccount=1':''),returnTo);
+  const result=await openAuthSessionAsync(accountHost+(qr?'/account-approval/start':signUp?'/signup':'/signin')+'?continue='+encodeURIComponent(next)+(adding?'&addAccount=1':''),returnTo);
   if(result.type!=='success')return null;
   const callback=new URL(result.url);
   const code=callback.searchParams.get('code');

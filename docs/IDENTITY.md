@@ -89,3 +89,9 @@ Open **Sign-in & security** and select **View activity**. Recent account events 
 ## Sign out of connected apps
 
 From **Apps**, request **Sign out of connected apps** and confirm with a passkey when needed. X-Center ID revokes outstanding access tokens, refresh tokens and authorization codes for the current account's connected apps. The action preserves the app links, stored data and current permission choices. The next sign-in uses the same registered callback. An app that maintains its own independent session or offline cache can stay visually signed in until it checks X-Center ID or expires its own session.
+
+### Choose where to sign in
+
+Signed-out app authorization offers **Add an account on this device** and **Sign in on another device**. The QR appears after choosing the second option. It authorizes the requesting app and returns the original callback without creating a dashboard account session on the requesting device. On the main X-Center ID sign-in screen, the same explicit QR action adds an account to the requesting dashboard after approval. The native dashboard uses its existing state-bound session exchange for the return.
+
+The approval scanner accepts both first-party account and app authorization links. For manual entry use the six digits displayed on the requesting device. Legacy TV and console device codes continue through their existing flow. Native approval links use a short-lived, single-use browser handoff bound to the exact approval URL.

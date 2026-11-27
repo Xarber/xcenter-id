@@ -3,7 +3,7 @@ import {randomBytes} from 'node:crypto';
 import {test} from 'node:test';
 import {
   acceptDeviceHandoff,createDeviceSigningKey,createDeviceStorageKey,createHandoffKey,
-  createVault,recoverVault,deriveVaultScope,decryptObject,encryptObject,signApproval,signDeviceClaim,signObjectWrite,wrapDeviceHandoff,
+  createVault,recoverVault,deriveVaultScope,decryptObject,encryptObject,signApproval,signDeviceClaim,signDeviceRevocation,signObjectWrite,wrapDeviceHandoff,
 } from '../../packages/protected-storage/crypto.mjs';
 import {openProtectedVault} from './protected-vault.mjs';
 
@@ -81,6 +81,14 @@ test('pilot stores opaque ciphertext and gates app data and web approval on curr
   const protectedFile=await encryptObject(vault.key,plain,recoveryObject);
   assert.deepEqual(await decryptObject(enrolled.key,protectedFile,recoveryObject),plain);
   assert.equal(service.claim(owner,enrollment.id,session,{signature:claim}),null);
+  const revoke=service.prepareRevocation(owner,first.publicKey,newDevice.publicKey);
+  assert.equal(service.prepareRevocation(owner,first.publicKey,first.publicKey),null);
+  const signatureRevoke=await signDeviceRevocation(first.privateKey,revoke);
+  assert.equal(service.revokeDevice(owner,{nonce:revoke.nonce,device:wrong.publicKey,signature:signatureRevoke}),false);
+  assert.equal(service.revokeDevice(owner,{nonce:revoke.nonce,device:first.publicKey,signature:signatureRevoke}),true);
+  assert.equal(service.revokeDevice(owner,{nonce:revoke.nonce,device:first.publicKey,signature:signatureRevoke}),false);
+  assert.deepEqual(service.devices(owner).map(device=>device.signer),[first.publicKey]);
+  assert.deepEqual(service.pending(owner,newDevice.publicKey),[]);
   const expired=service.requestWeb(owner,'private',session,receiver.publicKey);
   now=expired.expires;
   assert.equal(service.claim(owner,expired.id,session),null);

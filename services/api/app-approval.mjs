@@ -7,9 +7,11 @@ const digest=key=>createHash('sha256').update(key).digest('hex');
 export function createAppApprovals(now=Date.now) {
   const byInteraction=new Map();
   const bySecret=new Map();
+  const byCode=new Map();
   function remove(entry){
     byInteraction.delete(entry.uid);
     bySecret.delete(digest(entry.key));
+    byCode.delete(entry.code);
   }
   function current(entry){
     if(!entry)return null;
@@ -20,18 +22,21 @@ export function createAppApprovals(now=Date.now) {
   return {
     forInteraction:uid=>current(byInteraction.get(uid)),
     forScan:key=>current(bySecret.get(digest(key))),
+    forCode:code=>current(byCode.get(code)),
     start(details){
       const prior=current(byInteraction.get(details.uid));
       if(prior)return prior;
       for(const entry of byInteraction.values())current(entry);
       if(byInteraction.size>=2048)return null;
       const key=randomBytes(32).toString('base64url');
-      const code=String(randomInt(1000000)).padStart(6,'0');
+      let code;
+      do{code=String(randomInt(1000000)).padStart(6,'0');}while(byCode.has(code));
       const expires=Math.min(now()+180000,details.exp*1000);
       if(!Number.isFinite(expires)||expires<=now())return null;
       const entry={uid:details.uid,key,code,expires,attempts:0,processing:false,result:null};
       byInteraction.set(details.uid,entry);
       bySecret.set(digest(key),entry);
+      byCode.set(code,entry);
       return entry;
     },
     matches(entry,code){

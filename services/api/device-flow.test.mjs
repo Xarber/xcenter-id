@@ -334,7 +334,10 @@ for(const environment of ['production','sandbox'])test(environment+' issuer veri
       selected=null;
       const start=await http('/auth?'+remoteParams,{browser:true});
       const originalPath=new URL(start.headers.get('location'),issuer).pathname;
-      const wait=await http(originalPath,{browser:true});
+      const choicePage=await (await http(originalPath,{browser:true})).text();
+      assert.match(choicePage,/Sign in on another device/);
+      assert.doesNotMatch(choicePage,/data-approval-url/);
+      const wait=await http(originalPath+'?qr=start',{browser:true});
       const waitHtml=await wait.text();
       assert.equal(wait.status,200,waitHtml.slice(0,400));
       assert.match(waitHtml,/Sign in to Remote browser approval/);

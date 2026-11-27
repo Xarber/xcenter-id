@@ -27,8 +27,9 @@ export default function DeviceSignIn({token,colors,back}: {token:string;colors:{
     setScanning(false);
     setStatus('');
     try {
-      const code=new URL(url).searchParams.get('code');
-      const session=await nativeRequest('device/browser',token,{code});
+      const review=new URL(url);
+      const request=review.pathname==='/device'?{code:review.searchParams.get('code')}:{target:review.pathname};
+      const session=await nativeRequest('device/browser',token,request);
       const entry=new URL(session.url);
       if(entry.origin!==accountHost||entry.pathname!=='/device/native'||entry.search||
         !/^#[A-Za-z0-9_-]{43}$/.test(entry.hash))throw new Error('Invalid device review URL.');
@@ -65,7 +66,7 @@ export default function DeviceSignIn({token,colors,back}: {token:string;colors:{
   return <View style={{gap:14}}>
     {action('Back to Devices',back)}
     <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Sign in on another device</Text>
-    <Text style={{color:colors.muted}}>Use the code shown on your TV or other device.</Text>
+    <Text style={{color:colors.muted}}>Use the code shown on the other device to approve an account or app sign-in.</Text>
     {scanning ? <>
       <CameraView zoom={zoom} style={{height:240,borderRadius:16,overflow:'hidden'}} barcodeScannerSettings={{barcodeTypes:['qr']}}
         onBarcodeScanned={({data})=>{

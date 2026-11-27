@@ -130,7 +130,7 @@ async function form(req) {
   return new URLSearchParams(value);
 }
 
-export function createIdentityProvider({ issuer, database, accounts, configuration, mail, registry, applicationData, notify=()=>{} }) {
+export function createIdentityProvider({ issuer, database, accounts, configuration, mail, registry, applicationData, approvals=createAppApprovals(), notify=()=>{} }) {
   const storageKey = Buffer.from(configuration.storageKey, 'hex');
   const subjectKey = Buffer.from(configuration.subjectKey, 'hex');
   if (subjectKey.length !== 32) throw new Error('Invalid stable subject key');
@@ -301,6 +301,12 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
                   update();
                   cells[Math.min(start + letters.length, cells.length - 1)].focus();
                 };
+                original.form?.addEventListener('submit', event => {
+                  if (/^[0-9]{6}$/.test(original.value)) {
+                    event.preventDefault();
+                    location.assign('/device?code='+original.value);
+                  }
+                });
                 cells.forEach((cell, index) => {
                   cell.addEventListener('focus', () => cell.select());
                   cell.addEventListener('input', () => enter(index, cell.value));
@@ -381,10 +387,10 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     result.interval=5;
   });
 
-  const approvals=createAppApprovals();
   async function interaction(req, res, path) {
     const scan=appApprovalPath.exec(path);
-    const remote=scan&&approvals.forScan(scan[1]);
+    const candidate=scan&&approvals.forScan(scan[1]);
+    const remote=candidate&&!candidate.account?candidate:null;
     const unavailable=()=>html(res,'<h1>Sign-in request expired</h1><p>Return to the app and start again.</p>',400);
     if(scan&&(!remote||remote.result))return unavailable();
     let details;
@@ -392,8 +398,8 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     catch { return html(res, '<h1>Sign-in request expired</h1><p>Return to the app and start again.</p>', 400); }
     if(!details||!remote&&path!=='/interaction/'+details.uid)return unavailable();
     const device=!!details.deviceCode;
-    const nativeDevice=device&&accounts.deviceBrowserSession?.(req);
-    const activeAccount=()=>device&&(accounts.deviceBrowserSession?.(req))||accounts.current(req);
+    const activeAccount=()=>((remote||device)&&accounts.deviceBrowserSession?.(req,remote?path:undefined))||accounts.current(req);
+    const nativeDevice=(remote||device)&&accounts.deviceBrowserSession?.(req,remote?path:undefined);
     const active=activeAccount();
     const person = active && accounts.identity(active.owner);
     const params=details.params;
@@ -461,12 +467,16 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     }
     if(!person){
       if(remote||device||details.prompt.name!=='login'||!callbackOrigin||req.method!=='GET')return redirect(signIn());
+      if(query.get('qr')!=='start')return html(res,`<h1>Sign in to ${escape(title)}</h1>
+        <div class="account-actions"><a class="action" href="${escape(signIn(true))}">Add an account on this device</a>
+        <a class="action" href="${path}?qr=start">Sign in on another device</a></div>
+        <p>Use another device to authorize only this app. The account stays off this device.</p>`,200,callbackOrigin,true);
       const entry=approvals.start(details);
       if(!entry)return redirect(signIn());
       const nonce=randomBytes(18).toString('base64');
       const scanUrl=issuer+'/app-approval/'+entry.key;
       return html(res,`<h1>Sign in to ${escape(title)}</h1><a class="action" href="${escape(signIn())}">Sign in here</a>
-        <h2>Use another device</h2><p>Scan with a device where you’re signed in to X-Center ID. Enter this code on that device to review the app’s permissions.</p>
+        <h2>Use another device</h2><p>Scan the QR code or enter the six digits in X-Center ID. Then confirm the app’s permissions.</p>
         <div data-approval-url="${escape(scanUrl)}">${approvalQr(scanUrl)}</div><p class="device-code">${entry.code}</p><p id="approval-status" role="status">Waiting for approval…</p>
         <form action="${path}?qr=finish" method="post" id="finish-approval" hidden></form>
         <script nonce="${nonce}">async function wait(){

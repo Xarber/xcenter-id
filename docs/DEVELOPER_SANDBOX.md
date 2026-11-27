@@ -21,3 +21,7 @@ Use a standard OpenID Connect client explicitly configured with the sandbox issu
 ## Live deployment
 
 The isolated issuer is available at https://id-sandbox.xcenter.it/developer. It uses the existing wildcard TLS certificate, its own upstream, signing keys and persistent data. Chrome with a virtual authenticator enrolled a synthetic sandbox passkey, saved the fixture profile, verified a loopback client and completed the PKCE exchange. Production denied the synthetic sandbox cookie and token. The fixture confirmed that its registration owner's test request list showed a successful token request.
+
+### Paused on 27 November
+
+The sandbox is offline and is hidden from the production portal and developer guides. Its web/API containers, databases, signing keys and proxy configuration are retained. The hostname returns 410 and no sandbox process serves traffic. Resume only after app SDK issuer selection and callback handling are verified.

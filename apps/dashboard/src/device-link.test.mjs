@@ -24,3 +24,15 @@ test('manual device input accepts a pasted code and rejects incomplete codes', a
   assert.equal(normalizeDeviceCode('a01239'),'A01239');
   assert.equal(deviceSignInUrl('https://id.xcenter.it/device?code=ei3yuo','https://id.xcenter.it'),'https://id.xcenter.it/device?code=EI3YUO');
 });
+
+test('scanner accepts both issuer approval routes and rejects forged destinations',()=>{
+  const issuer='https://id.xcenter.it',token='x'.repeat(43);
+  for(const path of ['account-approval','app-approval']){
+    const link=issuer+'/'+path+'/'+token;
+    assert.equal(deviceSignInUrl(link,issuer),link);
+    assert.equal(deviceSignInUrl(link+'?next=bad',issuer),null);
+    assert.equal(deviceSignInUrl(link+'#fragment',issuer),null);
+    assert.equal(deviceSignInUrl('https://elsewhere.invalid/'+path+'/'+token,issuer),null);
+  }
+  assert.equal(deviceSignInUrl(issuer+'/device?code=001234',issuer),issuer+'/device?code=001234');
+});

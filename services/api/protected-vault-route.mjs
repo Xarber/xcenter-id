@@ -14,6 +14,7 @@ export function protectedVaultRoute({vault,accounts}){
     try{
       if(req.method==='GET'){
         if(!action)return reply(200,{vault:vault.info(owner)});
+        if(action==='devices'&&!namespace)return reply(200,{devices:vault.devices(owner)});
         if(action==='object'&&objectId.test(namespace??'')&&objectId.test(id??'')&&url.pathname.split('/').length===6){
           const record=vault.object(owner,namespace,id);
           return record?reply(200,record):reply(404,{error:'Protected object unavailable.'});
@@ -27,7 +28,7 @@ export function protectedVaultRoute({vault,accounts}){
       const input=await readJson(req,action==='object'?134*1024:8192);
       const active=accounts.current(req);
       if(active?.owner!==owner||active.hash!==hash)return reply(403,{error:'Your session changed.'});
-      if(['initialize','approve','request-device','pending'].includes(action)&&!accounts.recentlyConfirmed(req)){
+      if(['initialize','approve','request-device','pending','prepare-revoke','revoke-device'].includes(action)&&!accounts.recentlyConfirmed(req)){
         return reply(403,{error:'Confirm your identity for this protected storage action.'});
       }
       if(action==='initialize'){
@@ -47,6 +48,13 @@ export function protectedVaultRoute({vault,accounts}){
       if(action==='claim'){
         const approved=typeof input.id==='string'&&requestPattern.test(input.id)&&vault.claim(owner,input.id,hash,input);
         return approved?reply(200,approved):reply(404,{error:'No approved access for this session.'});
+      }
+      if(action==='prepare-revoke'){
+        const challenge=vault.prepareRevocation(owner,input.device,input.target);
+        return challenge?reply(200,challenge):reply(409,{error:'Device cannot be revoked.'});
+      }
+      if(action==='revoke-device'){
+        return vault.revokeDevice(owner,input)?reply(200,{ok:true}):reply(409,{error:'Invalid device revocation.'});
       }
       if(action==='object'){
         const saved=vault.putObject(owner,input);

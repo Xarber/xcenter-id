@@ -159,3 +159,10 @@ export async function deriveVaultScope(deviceKey, rootEnvelope, rootScope, names
     finally { bytes.fill(0); }
   } finally { root.fill(0); }
 }
+
+export async function signDeviceRevocation(privateKey, {scope,nonce,target,expires}) {
+  checkScope([...scope,nonce,target]);
+  if(scope.length!==2||!Number.isSafeInteger(expires))throw new TypeError('Invalid device revocation.');
+  return encode(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},privateKey,
+    context('revoke device',...scope,nonce,target,String(expires))));
+}

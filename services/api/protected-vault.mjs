@@ -41,6 +41,8 @@ export function openProtectedVault({database,issuer,canProtectAppData,remaining=
     CREATE TABLE IF NOT EXISTS protected_vaults(owner TEXT PRIMARY KEY,vault TEXT NOT NULL UNIQUE,recovery TEXT NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS protected_devices(owner TEXT NOT NULL REFERENCES protected_vaults(owner) ON DELETE CASCADE,
       signer TEXT NOT NULL,created INTEGER NOT NULL,PRIMARY KEY(owner,signer)) STRICT;
+    CREATE TABLE IF NOT EXISTS protected_revocations(owner TEXT PRIMARY KEY REFERENCES protected_vaults(owner) ON DELETE CASCADE,
+      nonce TEXT NOT NULL, signer TEXT NOT NULL, target TEXT NOT NULL, expires INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS protected_requests(id TEXT PRIMARY KEY,owner TEXT NOT NULL REFERENCES protected_vaults(owner) ON DELETE CASCADE,
       namespace TEXT NOT NULL,session TEXT NOT NULL,target TEXT NOT NULL,expires INTEGER NOT NULL,approval TEXT,
       targetSigner TEXT) STRICT;
@@ -126,6 +128,27 @@ export function openProtectedVault({database,issuer,canProtectAppData,remaining=
         }
         query('DELETE FROM protected_requests WHERE id=?').run(id);
         return approval;
+      });
+    },
+    devices(owner){
+      return query('SELECT signer,created FROM protected_devices WHERE owner=? ORDER BY created,signer').all(owner);
+    },
+    prepareRevocation(owner,device,target){
+      if(typeof device!=='string'||typeof target!=='string'||!signer(owner,device)||!signer(owner,target)||device===target)return null;
+      const nonce=requestId(),expires=now()+lifetime,scope=[issuer,vault(owner).vault];
+      query('INSERT OR REPLACE INTO protected_revocations VALUES(?,?,?,?,?)').run(owner,nonce,device,target,expires);
+      return {nonce,target,expires,scope};
+    },
+    revokeDevice(owner,{nonce,device,signature}){
+      if(typeof nonce!=='string'||typeof device!=='string')return false;
+      return transaction(()=>{
+        const key=signer(owner,device);
+        const op=query('SELECT * FROM protected_revocations WHERE owner=? AND nonce=? AND signer=? AND expires>?').get(owner,nonce,device,now());
+        if(!key||!op||!matchesSignature(key,signature,['xcenter-protected-v1','revoke device',
+          issuer,vault(owner).vault,nonce,op.target,String(op.expires)]))return false;
+        query('DELETE FROM protected_revocations WHERE owner=?').run(owner);
+        query("DELETE FROM protected_requests WHERE owner=? AND (targetSigner=? OR json_extract(approval,'$.device')=?)").run(owner,op.target,op.target);
+        return query('DELETE FROM protected_devices WHERE owner=? AND signer=?').run(owner,op.target).changes===1;
       });
     },
     putObject(owner,{namespace,id,revision,envelope,device,signature}){

@@ -70,3 +70,20 @@ test('native device browser handoff is single use, expires and depends on the up
     assert.equal(flow.browserSession(session.key),null);
   }finally{db.close();}
 });
+
+test('native app approvals retain the signed-in account only for the exact review URL',async()=>{
+  const {openNativeDeviceHandoff}=await import('./native-device.mjs');
+  const db=new DatabaseSync(':memory:');
+  try{
+    db.exec("PRAGMA foreign_keys=ON; CREATE TABLE account_sessions(hash TEXT PRIMARY KEY); INSERT INTO account_sessions VALUES ('signed-in')");
+    const store=openNativeDeviceHandoff(db);
+    const target='/app-approval/'+'a'.repeat(43);
+    const ticket=store.issue('signed-in',target);
+    const exchanged=store.exchange(ticket,()=>true);
+    assert.equal(exchanged.code,target);
+    assert.equal(store.browserSession(exchanged.key,target),'signed-in');
+    assert.equal(store.browserSession(exchanged.key,'/app-approval/'+'b'.repeat(43)),null);
+    assert.equal(store.browserSession(exchanged.key),null);
+    assert.equal(store.exchange(ticket,()=>true),null);
+  }finally{db.close();}
+});

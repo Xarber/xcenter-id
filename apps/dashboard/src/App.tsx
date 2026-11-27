@@ -201,11 +201,11 @@ function NativeAccount() {
     catch(error){setError(error instanceof Error?error.message:'Could not switch accounts.');}
     finally{setPending(false);}
   }
-  async function signIn(signUp=false,adding=false){
+  async function signIn(signUp=false,adding=false,qr=false){
     if(pending||storedRef.current.length>=3)return;
     setPending(true);setError('');
     try {
-      const value=await nativePasskeySession(signUp,adding);
+      const value=await nativePasskeySession(signUp,adding,qr);
       if(value)await useSession(value);
     } catch(failure){
       setError(failure instanceof Error?failure.message:'Could not sign in.');
@@ -251,6 +251,7 @@ function NativeAccount() {
         <Ionicons name="chevron-forward" size={18} color={colors.muted}/>
       </Pressable>)}
       {stored.length<3&&action('Add another account','add-outline',()=>void signIn(false,true))}
+      {stored.length<3&&action('Sign in on another device','qr-code-outline',()=>void signIn(false,true,true))}
     </View>;
   }
   const signedOut=!loading&&!locked&&(!token||!account);
@@ -324,6 +325,7 @@ function NativeAccount() {
           <AccountEntry transparent={false} onSignIn={()=>{setPendingAction('passkey');void signIn();}} onCreateAccount={()=>{setPendingAction('signup');void signIn(true);}} pending={pending} pendingAction={pendingAction} error={error}
             onUsernameSubmit={async username=>{setEntryBusy(true);try{return await nativeRequest('login/username',undefined,{username});}finally{setEntryBusy(false);}}}
             onCodeSubmit={async(ticket,code)=>{setEntryBusy(true);try{const session=await nativeRequest('login/code',undefined,{ticket,code});await useSession(session.token);}finally{setEntryBusy(false);}}}/>
+          {action('Sign in on another device','qr-code-outline',()=>void signIn(false,false,true))}
           </>}
           </View>:
           <><Text accessibilityRole="header" style={[styles.title,{color:colors.ink}]}>{accountMessage(tab[0],tab[1])}</Text>

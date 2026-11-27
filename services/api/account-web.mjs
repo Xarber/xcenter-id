@@ -1,3 +1,5 @@
+import {createAppApprovals} from './app-approval.mjs';
+import {createAccountApprovalRoute} from './account-approval.mjs';
 import {openProtectedVault} from './protected-vault.mjs';
 import {protectedVaultRoute} from './protected-vault-route.mjs';
 import {validateSandbox} from './sandbox-config.mjs';
@@ -46,7 +48,9 @@ if(mailConfig&&process.env.AUTHNJS_LOCAL_SMTP_HOST){
 }
 const mailLimits=openMailLimits(join(process.env.AUTHNJS_DATA_DIR,'accounts.sqlite'),mailConfig?.externalLimits);
 let protectedVault;
+const approvals=createAppApprovals();
 const accounts = createAccounts({
+  resolveDeviceCode:code=>accountApproval.codePath(code),
   outboundMail:createOutboundMail(mailConfig,{limits:mailLimits,
     senderName:owner=>{const person=accounts.identity(owner);return person&&[person.givenName,person.surname].join(' ');},
     allowSender:(owner,from)=>accounts.mailboxSender(owner,from),
@@ -73,6 +77,7 @@ const accounts = createAccounts({
   database: join(process.env.AUTHNJS_DATA_DIR, 'accounts.sqlite'),
 });
 const origin = process.env.AUTHNJS_ACCOUNT_ORIGIN;
+const accountApproval=createAccountApprovalRoute({approvals,accounts,origin});
 const state = process.env.AUTHNJS_DATA_DIR;
 const storageVolumes=parseStorageVolumes(process.env.AUTHNJS_STORAGE_VOLUMES);
 const friends = configuration ? openFriends(join(state,'accounts.sqlite'),accounts.available) : null;
@@ -136,7 +141,7 @@ const vaultRoute=protectedVault&&protectedVaultRoute({vault:protectedVault,accou
 if(applicationData)registry.attachStorage(join(state,'app-data.sqlite'));
 const configurationRoute=appConfiguration({accounts,registry,applicationData});
 provider = configuration ? createIdentityProvider({
-  issuer: origin, database: join(state, 'oidc.sqlite'), accounts, configuration, mail:mailConfig?.publicDelivery?mail:null, registry,applicationData,notify:notifyAppChange,
+  issuer: origin, database: join(state, 'oidc.sqlite'), accounts, configuration, approvals, mail:mailConfig?.publicDelivery?mail:null, registry,applicationData,notify:notifyAppChange,
 }) : null;
 const store = configuration ? openStore(join(state, 'sample-data.sqlite'), Buffer.from(configuration.sampleKey, 'hex')) : null;
 const friendRecordRoutes = friends && store && createFriendRecordRoutes({ accounts, records:openFriendRecords({
@@ -261,7 +266,7 @@ const accountServer=createServer({ requestTimeout: 15_000, headersTimeout: 10_00
   if(sandbox)res.setHeader('X-Robots-Tag','noindex, nofollow');
   if(path==='/account/environment'&&req.method==='GET'){
     return res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify({
-      sandbox,issuer:origin,sandboxUrl:'https://id-sandbox.xcenter.it/developer',
+      sandbox,issuer:origin,
     }));
   }
   const forwardedOrigin='https://'+req.headers['x-forwarded-host'];
@@ -602,6 +607,10 @@ const accountServer=createServer({ requestTimeout: 15_000, headersTimeout: 10_00
     void developer(req, res);
     return;
   }
+  if(provider&&path.startsWith('/account-approval/')){
+    void accountApproval.handle(req,res,target).catch(()=>{if(!res.headersSent)res.writeHead(503,{'Cache-Control':'no-store'});res.end();});
+    return;
+  }
   if(provider&&path==='/device/native'&&req.method==='GET')return nativeDeviceEntry(res);
   if (provider && (path.startsWith('/interaction/')||/^\/app-approval\/[A-Za-z0-9_-]{43}$/.test(path))) {
     void provider.interaction(req, res, path).catch(() => {
@@ -612,7 +621,7 @@ const accountServer=createServer({ requestTimeout: 15_000, headersTimeout: 10_00
   }
   if (provider && oidcRoutes.test(path)) {
     if(path==='/device'){
-      if(req.method==='POST'){
+      if(req.method==='POST'||req.method==='GET'&&target.searchParams.has('code')){
         // The service is loopback-only. The reverse proxy appends the actual peer last.
         const peer=String(req.headers['x-forwarded-for']??req.socket.remoteAddress).split(',').at(-1).trim();
         const minute=Math.floor(Date.now()/60_000);
@@ -622,8 +631,11 @@ const accountServer=createServer({ requestTimeout: 15_000, headersTimeout: 10_00
           return res.writeHead(429,{'Cache-Control':'no-store','Retry-After':'60'}).end('Try again in a minute.');
         }
         deviceVerificationAttempts.set(peer,{minute,count:(previous?.count??0)+1});
-      }else if(req.method==='GET'){
+      }
+      if(req.method==='GET'){
         const code=target.searchParams.get('code')?.toUpperCase();
+        const path=code&&accountApproval.codePath(code);
+        if(path)return res.writeHead(303,{Location:path,'Cache-Control':'no-store'}).end();
         req.url=code&&provider.deviceCodePattern.test(code)?'/device?user_code='+code:'/device';
       }
     }

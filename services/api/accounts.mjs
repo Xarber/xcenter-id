@@ -1,3 +1,4 @@
+import {approvalTarget} from './account-approval.mjs';
 import {openMailCredentials} from './mail-credentials.mjs';
 import { openInboundVerification } from './inbound-verification.mjs';
 import { openEmailSignIn } from './email-signin.mjs';
@@ -60,7 +61,7 @@ async function body(req, limit=65536) {
   throw new AccountError(400, 'Invalid request.');
 }
 
-export function createAccounts({ database, origin, sendVerification, profileKey, outboundMail, canReceiveMail = false, externalMail = false, inboundVerification=false,appBrand=()=>null,purgeAccount=()=>{}, extraStorage=()=>0, mailboxNameTaken=()=>false }) {
+export function createAccounts({ database, origin, sendVerification, profileKey, outboundMail, canReceiveMail = false, externalMail = false, inboundVerification=false,appBrand=()=>null,purgeAccount=()=>{}, extraStorage=()=>0, mailboxNameTaken=()=>false, resolveDeviceCode=()=>null }) {
   const url = new URL(origin);
   if (url.origin !== origin || url.protocol !== 'https:') throw new Error('Set the exact HTTPS account origin');
   const rpID = url.hostname;
@@ -548,11 +549,13 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     }
     if(pathname==='/account/device/browser'){
       requireCondition(active&&nativeRequest(req),401,'Use the signed-in account manager.');
-      const {code}=await body(req);
-      requireCondition(typeof code==='string'&&deviceCodePattern.test(code),422,'Enter a valid device code.');
+      const {code,target}=await body(req);
+      const review=typeof target==='string'&&approvalTarget(target)?target:
+        typeof code==='string'&&/^\d{6}$/.test(code)?resolveDeviceCode(code):code;
+      requireCondition(typeof review==='string'&&(deviceCodePattern.test(review)||approvalTarget(review)),422,'Enter a valid device code.');
       const current=session(req);
       requireCondition(current?.hash===active.hash,401,'Sign in first.');
-      return {url:origin+'/device/native#'+deviceHandoff.issue(active.hash,code)};
+      return {url:origin+'/device/native#'+deviceHandoff.issue(active.hash,review)};
     }
     if(pathname==='/account/device/browser/exchange'){
       requireCondition(req.headers.origin===origin&&req.headers['x-authnjs-request']==='device-review',403,'Invalid device request.');
@@ -1006,8 +1009,13 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       q('UPDATE account_flags SET '+flag+'=? WHERE owner=?').run(Number(value),owner);
     },
     recentlyConfirmed:req=>confirmed(session(req)),
-    deviceBrowserSession(req){
-      const key=deviceHandoff.browserSession(cookie(req,deviceCookie));
+    finishApprovedSignIn(req,res,{owner,source}){
+      if(!available(owner)||lookupSession.get(source,now())?.owner!==owner)return false;
+      try{return !!login(req,res,owner);}
+      catch(error){if(error instanceof AccountError)return false;throw error;}
+    },
+    deviceBrowserSession(req,target){
+      const key=deviceHandoff.browserSession(cookie(req,deviceCookie),target);
       return key&&native.accepts(key)?lookupSession.get(key,now()):null;
     },
     profileBadges:owner=>available(owner)?badges(owner):{verified:false,admin:false},
