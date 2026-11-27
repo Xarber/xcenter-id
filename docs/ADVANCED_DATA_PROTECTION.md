@@ -34,3 +34,7 @@ Third-party apps never receive account keys. Apps with approved access can conti
 3. Add scoped web approval once the native trust path and independent security review pass. Expand to app records with a documented opt-in compatibility policy, account by account.
 
 This is a design proposal. No protection mode is available through the current release. Key custody and user-facing recovery decisions precede any live migration.
+
+## Developer compatibility declaration
+
+The developer can declare support under their app's storage settings. This defaults to off and is available to owners of active secure registrations after confirmation. Changing the declaration does not migrate anything or grant access. The provider's eligibility check requires the live declaration and an active app link for the account. The future migration endpoint must use that check at commit time, recheck the account's own approval, and stop if an app withdraws compatibility. Existing protected ciphertext must remain recoverable by its owner if an app withdraws support.

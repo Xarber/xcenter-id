@@ -4,6 +4,11 @@ export default function DeveloperDocumentation(){
  return <main className="xc-main xc-docs" style={{maxWidth:1000}}><a className="xc-brand" href="/">X-Center ID</a><h1>Build with X-Center ID</h1>
  <p>One registered identity integration, reusable sign-in and an optional hosted application database.</p>
  <nav className="xc-actions"><SdkReferenceLink/><a href="#register">Register an app</a><a href="#manual">Use OpenID Connect</a><a href="#install">Install the SDK</a><a href="#authentication">Secure sign-in</a><a href="#hosted-data">Hosted data</a><a href="/developer">Developer portal</a></nav>
+ <section className="xc-card xc-pad xc-stack" id="sandbox"><h2>Developer sandbox</h2>
+  <p>Register test clients on a separate issuer. Use a distinct test account and exact test callback. Set your test OAuth client's issuer from sandbox discovery and exchange codes only on that issuer.</p>
+  <div className="xc-actions"><a href="https://id-sandbox.xcenter.it/developer">Open developer sandbox</a>
+  <a href="https://id-sandbox.xcenter.it/.well-known/openid-configuration">Sandbox discovery</a></div>
+ </section>
  <section className="xc-card xc-pad xc-stack" id="register"><h2>1. Register and activate</h2><p>Open Apps → Developer portal. Create a distinct registration for each product. Choose Native for a public mobile client or Website for a confidential backend. Enter exact HTTPS callbacks on a domain you control, a name, icon and permission description.</p><p>Publish the DNS TXT challenge supplied by the portal, then verify ownership. Pending, restricted and revoked registrations cannot sign users in. A verification badge is separate from callback activation.</p></section>
  <section className="xc-card xc-pad xc-stack" id="manual"><h2>Connect from any platform</h2>
  <p>Install an OpenID Connect client library for your language, or use the standard HTTPS endpoints. Configure the issuer as <code>https://id.xcenter.it</code>, using the client ID and exact callback from the portal.</p>

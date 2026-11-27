@@ -196,6 +196,12 @@ test('container files are quota-bound, app-scoped, and browsed only with the per
   assert.equal(data.containers('player')[0].canManage,false);
   assert.equal(data.containers('player')[0].visibleBytes,600000);
 
+  assert.equal(data.canProtectAppData('player','backup'),false);
+  assert.equal((await call(portal,{cookie:'player',method:'POST',payload:{action:'protected-storage-support',enabled:true}})).status,403);
+  assert.equal((await manage({action:'protected-storage-support',enabled:true})).status,200);
+  assert.equal(data.canProtectAppData('player','backup'),true);
+  assert.equal((await manage({action:'protected-storage-support',enabled:false})).status,200);
+  assert.equal(data.canProtectAppData('player','backup'),false);
   assert.equal((await manage({action:'backup-policy',enabled:true,restore:false,version:1})).status,200);
   const beforeSnapshots=data.accountUsage('player');
   const largeSnapshots=[];

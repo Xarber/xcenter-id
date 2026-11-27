@@ -11,7 +11,7 @@ import type {DashboardTheme} from './native-surfaces';
 type Colors=DashboardTheme;
 export default function ApplicationStorage({id,token,colors,admin=false,back}:{id:string;token:string;colors:Colors;admin?:boolean;back:()=>void}){
   const showDialog=useDialog();
- const [data,setData]=useState<{name?:string;icon?:string|null;used:number;capacity:number;records:number;hasKey:boolean;showInFiles:boolean;canShowInFiles:boolean;canSetBackupPolicy:boolean;backupPolicy:BackupPolicy|null;canBrowseService?:boolean;shared:string[];requests:SharingRequest[];sources:SharingSource[];verified:boolean;unsecure:boolean}|null>(null);
+ const [data,setData]=useState<{name?:string;icon?:string|null;used:number;capacity:number;records:number;hasKey:boolean;showInFiles:boolean;canShowInFiles:boolean;canSetBackupPolicy:boolean;protectedStorageSupport:boolean;canSetProtectedStorageSupport:boolean;backupPolicy:BackupPolicy|null;canBrowseService?:boolean;shared:string[];requests:SharingRequest[];sources:SharingSource[];verified:boolean;unsecure:boolean}|null>(null);
  const [editing,setEditing]=useState(false),[status,setStatus]=useState(''),[secret,setSecret]=useState('');
  const [capacity,setCapacity]=useState('10'),[unit,setUnit]=useState(2);
  const [browsing,setBrowsing]=useState(false);
@@ -38,6 +38,12 @@ export default function ApplicationStorage({id,token,colors,admin=false,back}:{i
      {text:'Cancel',style:'cancel'},{text:'Save sharing',onPress:save},
    ]);else save();
  })}
+ {data.canSetProtectedStorageSupport&&<View style={{gap:8}}>
+   <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Advanced Data Protection</Text>
+   <Text style={{color:colors.muted}}>Declare compatibility only after your app can use protected data through X-Center ID.</Text>
+   <Switch accessibilityLabel="This app supports protected storage" value={data.protectedStorageSupport}
+     onValueChange={enabled=>void change({action:'protected-storage-support',enabled})}/>
+ </View>}
  {data.canSetBackupPolicy&&<View style={{gap:8}}>
   <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Account backups</Text>
   <Text style={{color:colors.ink}}>Allow users to make backups</Text>

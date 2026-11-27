@@ -14,6 +14,7 @@ X-Center ID is a passkey-first identity and consent service with an Expo account
 - [Testing](TESTING.md) documents source checks, isolated browser verification and device coverage.
 - [Navigation and preferences](NAVIGATION.md) describes the sidebar, main tabs and grouped editing.
 - [Hosted application data](HOSTED_DATA.md) documents private databases, recipient sharing, public flags and quotas.
+- [Developer sandbox](DEVELOPER_SANDBOX.md) explains test credentials and the separate issuer.
 - [Integration guide](INTEGRATION.md) covers registering apps, trust, and integrating web and Expo clients.
 - [X-Center preview](XCENTER_PREVIEW.md) records how to access and roll back the deployed web shell.
 - [X-Center ID integration](IDENTITY.md) covers production OIDC, developer activation and sample apps.

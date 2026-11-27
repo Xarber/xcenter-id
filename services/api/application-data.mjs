@@ -146,6 +146,9 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         db.exec('COMMIT');
       }catch(error){db.exec('ROLLBACK');throw error;}
     },
+    canProtectAppData(owner,client){
+      return accounts.available(owner)&&sourceLinked(owner,client)&&registry.supportsProtectedStorage(client);
+    },
     requested,
     sharing,
     prepareSharing,
@@ -329,9 +332,16 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
           const unsecure=!!registry.brand(client)?.local;
           db.prepare('INSERT OR IGNORE INTO app_storage(client) VALUES(?)').run(client);
           if(req.method==='GET')return answer(200,{name:registry.brand(client)?.name??'App storage',icon:registry.brand(client)?.iconUrl??registry.brand(client)?.icon??null,...usage(client),capacity:setting(client).capacity,hasKey:!!setting(client).secret,verified:serviceEnabled,unsecure,
-            ...sharing(client),backupPolicy:snapshots.policy(client)?{...snapshots.policy(client),selection:JSON.parse(snapshots.policy(client).selection)}:null,canSetBackupPolicy:!!owned,sources:this.sharingSources(client,session.owner),showInFiles:!!visible.get(client),canShowInFiles:!!(owned&&serviceEnabled),canBrowseService:!!(owned&&serviceEnabled)});
+            ...sharing(client),backupPolicy:snapshots.policy(client)?{...snapshots.policy(client),selection:JSON.parse(snapshots.policy(client).selection)}:null,canSetBackupPolicy:!!owned,protectedStorageSupport:registry.supportsProtectedStorage(client),canSetProtectedStorageSupport:!!owned&&!unsecure,sources:this.sharingSources(client,session.owner),showInFiles:!!visible.get(client),canShowInFiles:!!(owned&&serviceEnabled),canBrowseService:!!(owned&&serviceEnabled)});
           if(req.method!=='POST'||!accounts.allowsMutation(req)||!accounts.recentlyConfirmed(req))fail(403,'Confirm your identity before changing app storage.');
           const input=await body(req);
+          if(input.action==='protected-storage-support'){
+            if(!owned||accounts.current(req)?.owner!==session.owner||!accounts.recentlyConfirmed(req)||
+              !registry.setProtectedStorageSupport(session.owner,management,input.enabled)){
+              fail(403,'Only the owner of an active, secure app can change ADP compatibility.');
+            }
+            return answer(200,{ok:true});
+          }
           if(input.action==='backup-policy'){
             const selection=normalizeSnapshotSelection(input.selection);
             if(!owned||typeof input.enabled!=='boolean'||input.enabled&&(!Number.isSafeInteger(input.version)||input.version<1||!selection||typeof input.restore!=='boolean')){

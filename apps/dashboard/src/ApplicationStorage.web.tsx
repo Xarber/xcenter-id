@@ -11,7 +11,7 @@ import {formatBytes} from './storage-summary';
 import {confirmIdentity} from './Reauthenticate.web';
 export default function ApplicationStorage({id,admin=false}:{id:string;admin?:boolean}){
   const confirmAction=useConfirmDialog();
- const [state,setState]=useState<{name?:string;icon?:string|null;used:number;records:number;capacity:number;hasKey:boolean;showInFiles:boolean;canShowInFiles:boolean;canSetBackupPolicy:boolean;backupPolicy:BackupPolicy|null;canBrowseService?:boolean;verified:boolean;unsecure:boolean;shared:string[];requests:SharingRequest[];sources:SharingSource[]}|null>(null);
+ const [state,setState]=useState<{name?:string;icon?:string|null;used:number;records:number;capacity:number;hasKey:boolean;showInFiles:boolean;canShowInFiles:boolean;canSetBackupPolicy:boolean;protectedStorageSupport:boolean;canSetProtectedStorageSupport:boolean;backupPolicy:BackupPolicy|null;canBrowseService?:boolean;verified:boolean;unsecure:boolean;shared:string[];requests:SharingRequest[];sources:SharingSource[]}|null>(null);
  const [edit,setEdit]=useState(false),[status,setStatus]=useState(''),[secret,setSecret]=useState(''),[busy,setBusy]=useState(false);
  const [browsing,setBrowsing]=useState(false);
  const [sharing,setSharing]=useState<SharingConfig>({shared:[],requests:[]});
@@ -39,6 +39,11 @@ export default function ApplicationStorage({id,admin=false}:{id:string;admin?:bo
    if(state.unsecure&&!await confirmAction('Edit permissions for this unsecure app?','Save sharing','Its hosting domain has not been verified.',false))return;
    act({action:'sharing',confirmUnsecure:state.unsecure,...cleanSharing(sharing)});
  }}>Save sharing settings</button>
+ {state.canSetProtectedStorageSupport&&<fieldset className="xc-stack"><legend>Advanced Data Protection</legend>
+   <label><input type="checkbox" role="switch" checked={state.protectedStorageSupport} disabled={busy}
+     onChange={event=>act({action:'protected-storage-support',enabled:event.currentTarget.checked})}/> This app supports protected storage</label>
+   <p>Enable this only when your app can use protected data through the X-Center ID SDK. This declaration does not move anyone’s data.</p>
+ </fieldset>}
  {state.canSetBackupPolicy&&<fieldset className="xc-stack"><legend>Account backups</legend>
  <label><input type="checkbox" role="switch" checked={backupEnabled} onChange={event=>setBackupEnabled(event.currentTarget.checked)}/> Allow users to make backups</label>
  {backupEnabled&&<><label>Backup compatibility version<input type="number" min="1" step="1" value={backupVersion} onChange={event=>setBackupVersion(event.currentTarget.value)}/></label>

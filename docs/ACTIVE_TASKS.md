@@ -731,3 +731,11 @@ Provider `04e5439` and SDK `57c4930` are pushed to their respective `testing` br
 - AUTHN-175. Source tests verified account isolation, retention ordering and deletion. The activity UI loaded a synthetic permission event in Chrome at both viewport sizes.
 - AUTHN-177. An issuer integration test revoked access and refresh credentials while preserving permissions and another account's grant. Dashboard source checks passed. Native installed testing is still required.
 - AUTHN-176 remains queued. Next action is a separate issuer/storage design for sandbox credentials, fixtures and safe request diagnostics.
+
+### Sandbox and Advanced Data Protection implementation
+
+| ID | Request | State | Evidence and next action |
+| --- | --- | --- | --- |
+| AUTHN-176 | Isolate developer sandbox from production | Implemented | Independently generated keys and bound state, separate issuer, client ID prefix, sandbox-only diagnostic events, and portal labels. Local startup verified discovery, noindex and denial of anonymous diagnostics. Verify independent passkey/PKCE round trip and deploy on the separate host before advertising the URL. |
+| AUTHN-178 | Implement opt-in Advanced Data Protection | In Progress | Developer capability and live account/app eligibility are implemented. The next implementation is device-owned key generation and signed device enrollment, recovery envelope creation, and an encrypted pilot vault that calls the existing eligibility check at commit time. Privately verify lost-device recovery and approvals before migrating any production data. |
+| AUTHN-179 | Deploy the sandbox and ADP batch to X-Center | Queued | Depends on verified sandbox and ADP. Verify synthetic flows and production state, preserve rollback, then enable the two isolated upstreams and check public service behavior. |

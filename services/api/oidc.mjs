@@ -361,6 +361,20 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
   });
   // Only the loopback-bound application receives requests from the trusted reverse proxy.
   provider.proxy = true;
+  const sandboxEvents=new Map();
+  function sandboxEvent(ctx,event){
+    const client=ctx.oidc.client?.clientId;
+    if(!client||!knownClient(client))return;
+    if(!sandboxEvents.has(client)&&sandboxEvents.size>=512)sandboxEvents.delete(sandboxEvents.keys().next().value);
+    const recent=sandboxEvents.get(client)??[];
+    sandboxEvents.set(client,[{event,created:Date.now()},...recent.slice(0,19)]);
+  }
+  if(configuration.environment==='sandbox'){
+    provider.on('authorization.success',ctx=>sandboxEvent(ctx,'Authorization completed'));
+    provider.on('authorization.error',ctx=>sandboxEvent(ctx,'Authorization rejected'));
+    provider.on('grant.success',ctx=>sandboxEvent(ctx,'Token request completed'));
+    provider.on('grant.error',ctx=>sandboxEvent(ctx,'Token request rejected'));
+  }
   provider.on('device_authorization.success',(ctx,result)=>{
     result.verification_uri=issuer+'/device';
     result.verification_uri_complete=issuer+'/device?code='+result.user_code;
@@ -741,6 +755,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
 
   return {
     oidc: provider.callback(), interaction, connectedPermissions, deviceCodePattern,
+    testEvents:client=>sandboxEvents.get(client)??[],
     async changeClientSecret(client,action) {
       const previous=await clientsStorage.find(client);
       if(previous?.token_endpoint_auth_method!=='client_secret_basic')return null;
@@ -753,7 +768,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       return {clientId:client,clientSecret};
     },
     async provision(application) {
-      const client_id = 'xid-' + randomUUID();
+      const client_id = (configuration.environment==='sandbox'?'xid-test-':'xid-') + randomUUID();
       const client_secret = application.native?null:randomBytes(48).toString('base64url');
       const metadata = {
         client_id, client_name:application.name,

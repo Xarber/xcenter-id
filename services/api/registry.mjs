@@ -13,6 +13,7 @@ export function openRegistry(path) {
     CREATE TABLE IF NOT EXISTS client_brand(id TEXT PRIMARY KEY,developer_name TEXT NOT NULL,icon TEXT)
       STRICT;
     CREATE TABLE IF NOT EXISTS app_restrictions(id TEXT PRIMARY KEY, restricted INTEGER NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS app_protected_storage_support(id TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS app_administration_trust(id TEXT PRIMARY KEY) STRICT;
     CREATE TABLE IF NOT EXISTS app_peer_policy (
       id TEXT PRIMARY KEY,enabled INTEGER NOT NULL,discovery INTEGER NOT NULL,generation INTEGER NOT NULL DEFAULT 1
@@ -148,6 +149,17 @@ export function openRegistry(path) {
       }
       if(app.status!=='active'||!app.verified||!detailByClient.get(app.client)||isLocal.get(id))return false;
       db.prepare('INSERT OR IGNORE INTO app_administration_trust VALUES(?)').run(id);
+      return true;
+    },
+    supportsProtectedStorage(client){
+      const app=detailByClient.get(client);
+      return !!app&&!isLocal.get(app.id)&&!!db.prepare('SELECT 1 FROM app_protected_storage_support WHERE id=?').get(app.id);
+    },
+    setProtectedStorageSupport(owner,id,enabled){
+      const app=lookup.get(id,owner);
+      if(typeof enabled!=='boolean'||app?.status!=='active'||!detailByClient.get(app.client)||isLocal.get(id))return false;
+      if(enabled)db.prepare('INSERT OR IGNORE INTO app_protected_storage_support VALUES(?)').run(id);
+      else db.prepare('DELETE FROM app_protected_storage_support WHERE id=?').run(id);
       return true;
     },
     peerPolicy(client){

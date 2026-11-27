@@ -1,3 +1,4 @@
+import {validateSandbox} from './sandbox-config.mjs';
 import {createPeerJsGateway} from './peerjs-gateway.mjs';
 import {createAdminSearch} from './admin-search.mjs';
 import {nativeDeviceEntry} from './native-device.mjs';
@@ -40,6 +41,7 @@ if(mailConfig&&process.env.AUTHNJS_LOCAL_SMTP_HOST){
   mailConfig.localDelivery={host:process.env.AUTHNJS_LOCAL_SMTP_HOST};
 }
 const configuration = process.env.AUTHNJS_OIDC_CONFIG ? JSON.parse(readFileSync(process.env.AUTHNJS_OIDC_CONFIG, 'utf8')) : null;
+const sandbox=validateSandbox(configuration,process.env);
 const mailLimits=openMailLimits(join(process.env.AUTHNJS_DATA_DIR,'accounts.sqlite'),mailConfig?.externalLimits);
 const accounts = createAccounts({
   outboundMail:createOutboundMail(mailConfig,{limits:mailLimits,
@@ -238,6 +240,12 @@ setInterval(()=>accounts.retryDeletions(),5*60_000).unref();
 const accountServer=createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   const target = new URL(req.url, 'http://localhost');
   const path = target.pathname;
+  if(sandbox)res.setHeader('X-Robots-Tag','noindex, nofollow');
+  if(path==='/account/environment'&&req.method==='GET'){
+    return res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify({
+      sandbox,issuer:origin,sandboxUrl:'https://id-sandbox.xcenter.it/developer',
+    }));
+  }
   const forwardedOrigin='https://'+req.headers['x-forwarded-host'];
   if(consentTest&&forwardedOrigin==='https://consent-test.xcenter.it'&&req.headers['x-forwarded-proto']==='https'){
     const testUrl=new URL(forwardedOrigin);
@@ -469,6 +477,13 @@ const accountServer=createServer({ requestTimeout: 15_000, headersTimeout: 10_00
     res.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store'});
     res.end(JSON.stringify({apps:registry.published().filter(({client})=>!accounts.isDisconnected(session.owner,client))}));
     return;
+  }
+  const sandboxApp=/^\/account\/developer\/apps\/([0-9a-f-]{36})\/sandbox-events$/.exec(path)?.[1];
+  if(sandbox&&provider&&sandboxApp&&req.method==='GET'){
+    const owner=accounts.current(req)?.owner;
+    const app=owner&&registry.lookup(owner,sandboxApp);
+    return res.writeHead(app?.client?200:404,{'Content-Type':'application/json','Cache-Control':'no-store'})
+      .end(JSON.stringify(app?.client?{events:provider.testEvents(app.client)}:{error:'Test app unavailable.'}));
   }
   const configurationId=/^\/account\/developer\/apps\/([0-9a-f-]{36})\/configuration$/.exec(path)?.[1];
   if(configurationId){
