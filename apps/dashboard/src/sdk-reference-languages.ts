@@ -766,3 +766,16 @@ export function exampleFor(entry:Reference, language:Language):LanguageExample |
   }
   return {unavailable:unavailable[entry.id]??'This platform uses a different account component or sign-in adapter. See the setup and identity guides for the selected language.'};
 }
+
+for(const [id,method,withId] of [
+  ['list-app-backups','listAppBackups',false],
+  ['create-app-backup','createAppBackup',false],
+  ['delete-app-backup','deleteAppBackup',true],
+  ['request-app-backup-restore','requestAppBackupRestore',true],
+] as const){
+  dataExamples(id,'user',[
+    method+(withId?'(_ id: String)':'()'),
+    method+(withId?'(id: String)':'()'),
+    method+(withId?'(String id)':'()'),
+  ],withId?[idArg]:[],[method+(withId?'(id)':'()'),method+(withId?'(id)':'()'),method+(withId?'(id)':'()')]);
+}

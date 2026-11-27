@@ -28,7 +28,9 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
   const used=db.prepare('SELECT total(max(1,size)) AS bytes FROM app_files WHERE owner=? AND (? IS NULL OR client=?)');
   const materialize=db.prepare('INSERT INTO app_files(id,client,owner,size,created,browseable) VALUES(?,?,?,?,?,?)');
   const swap=db.prepare('UPDATE app_files SET content_id=?,size=? WHERE id=?');
+  const retained=id=>!!db.prepare('SELECT 1 FROM app_snapshot_files WHERE id=? OR content=? LIMIT 1').get(id,id);
   const clearChunks=db.prepare('DELETE FROM file_transfer_chunks WHERE id=?');
+  const unlink=db.prepare('DELETE FROM app_files WHERE id=?');
   const replacement=db.prepare('SELECT 1 FROM file_transfers WHERE owner=? AND client=? AND folder=? AND committed=0 AND updated>=?');
   const clearDrafts=db.prepare('DELETE FROM file_transfers WHERE owner=? AND client=? AND folder=? AND committed=0');
   const setBrowseable=db.prepare('UPDATE app_files SET browseable=? WHERE id=?');
@@ -86,12 +88,14 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
     return content.metadata.editable===true?{row,...content}:[405,{error:'This app file is read-only.'}];
   }
   function removeFile(row){
-    if(row.content_id)transfers.remove.run(row.owner,row.content_id);
+    unlink.run(row.id);
+    if(row.content_id&&!retained(row.content_id))transfers.remove.run(row.owner,row.content_id);
     clearDrafts.run(row.owner,row.client,row.id);
-    transfers.remove.run(row.owner,row.id);
+    if(!retained(row.id))transfers.remove.run(row.owner,row.id);
   }
 
   return {
+    editable:row=>committed(row).metadata.editable===true,
     totals:owner=>aggregate.all(owner),
     bytes:(owner,client=null)=>used.get(owner,client,client).bytes+reserve.get(owner,Date.now()-uploadIdleMs,client,client).bytes,
     removeAccount:owner=>transfers.removeOwner.run(owner),
@@ -139,7 +143,10 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
       }
       function pending(){
         const row=uploadId&&transfers.byId.get(owner,uploadId);
-        return row?.client===client&&!!row.folder===dashboard&&!transfers.isExpired(row)?row:null;
+        if(row?.client!==client||!!row.folder!==dashboard||transfers.isExpired(row))return null;
+        if(row.committed&&(file.get(owner,client,row.folder??row.id,0)?.content_id??row.folder??row.id)!==row.id)return null;
+        if(row.committed&&!file.get(owner,client,row.folder??row.id,0))return null;
+        return row;
       }
       if(uploading&&uploadId&&req.method==='GET'){
         const row=pending();
@@ -240,8 +247,9 @@ export function openApplicationFiles({db,key,hasDiskRoom,remaining}) {
           if(remaining(owner,client)<0)return [409,{error:'Storage quota exceeded.'}];
           swap.run(row.id,row.size,target.row.id);
           transfers.complete.run(row.id);
-          if(target.row.content_id)transfers.remove.run(owner,target.row.content_id);
-          else {
+          if(target.row.content_id){
+            if(!retained(target.row.content_id))transfers.remove.run(owner,target.row.content_id);
+          }else if(!retained(target.row.id)){
             clearChunks.run(target.row.id);
             digests.remove(target.row.id);
           }

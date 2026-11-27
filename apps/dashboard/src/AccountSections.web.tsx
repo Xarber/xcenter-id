@@ -524,6 +524,7 @@ export function ConnectedApps() {
     {apps?.length===0 && <div className="xc-empty">No apps have been authorized yet.</div>}
     {apps?.slice(page.start,page.end).map(item=><div className="xc-list-row" key={item.client}><div className="xc-row-head"><AppIcon key={item.icon} icon={item.icon}/><div><strong className="xc-identity-label">{item.label}<TrustBadges compact kind="app" verified={item.verified}/></strong><p>Last authorized {date(item.updated)}</p></div></div>
       <div className="xc-actions"><a href={'/permissions/'+encodeURIComponent(item.client)}>Manage data access</a>
+        <a className="xc-button xc-secondary" href={'/apps/'+encodeURIComponent(item.client)+'/backups'}>Backups</a>
         {confirm===item.client?<><span>This ends the app’s access and permanently deletes the copies it saved in your X-Center ID account.</span><button className="xc-button xc-secondary" disabled={busy} onClick={()=>{
           setBusy(true);
           void api('connected-apps/unlink',{client:item.client}).then(()=>{

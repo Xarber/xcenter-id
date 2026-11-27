@@ -323,7 +323,7 @@ const accountServer=createServer({ requestTimeout: 15_000, headersTimeout: 10_00
   if(path==='/account/app-data-permissions'&&req.method==='PUT'&&req.headers['x-authnjs-request']!=='account-consent'){
     res.writeHead(403,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify({error:'Change permissions from your account.'}));return;
   }
-  if(applicationData&&(/^\/(?:public|v1)\/apps\//.test(path)||path.startsWith('/account/app-storage/')||path.startsWith('/account/file-containers/')||path.startsWith('/account/app-files/')||path==='/account/app-data-permissions')){
+  if(applicationData&&(/^\/(?:public|v1)\/apps\//.test(path)||path.startsWith('/account/app-storage/')||path.startsWith('/account/file-containers/')||(path.startsWith('/account/app-files/')||path.startsWith('/account/app-backups/'))||path==='/account/app-data-permissions')){
     void applicationData.handle(req,res,target);return;
   }
   const appIcon=/^\/public\/app-icons\/([0-9a-f-]{36})$/.exec(path)?.[1];
@@ -625,7 +625,7 @@ const accountServer=createServer({ requestTimeout: 15_000, headersTimeout: 10_00
     return;
   }
   const webPages = new Set(['/mail-clients','/changelog','/docs','/','/signin','/signup','/native-session','/dashboard','/profile','/profile/visibility','/profile/username','/profile/developer','/security','/permissions','/settings','/developer','/apps','/devices','/storage','/files','/friends','/mail','/admin','/support','/reauth']);
-  const relative = webPages.has(path)||/^\/docs\/sdk(?:\/[a-z0-9-]{1,60})?$/.test(path)||/^\/changelog\/\d+\.\d+\.\d+$/.test(path)||/^\/developer\/storage\/[0-9a-f-]{36}$/.test(path)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(path)||
+  const relative = /^\/apps\/[A-Za-z0-9_-]{1,100}\/backups$/.test(path) || webPages.has(path)||/^\/docs\/sdk(?:\/[a-z0-9-]{1,60})?$/.test(path)||/^\/changelog\/\d+\.\d+\.\d+$/.test(path)||/^\/developer\/storage\/[0-9a-f-]{36}$/.test(path)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(path)||
     /^\/(?:mail\/[0-9a-f-]{36}|admin\/users\/[a-z0-9._-]{3,24})$/.test(path) ? 'index.html' : path.slice(1);
   const valid = /^(?:index\.html|offline\.html|revision\.txt|manifest\.webmanifest|service-worker\.js|authnjs-[\w-]+\.(?:svg|png)|(?:_expo|assets)\/[\w@./-]+)$/.test(relative);
   if (!valid || relative.split('/').some((part) => part === '.' || part === '..') ||

@@ -1,3 +1,4 @@
+import AppBackups from './AppBackups';
 import AccountActivity from './AccountActivity';
 import AdminSearch from './AdminSearch';
 import ListPages from './ListPages';
@@ -97,6 +98,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
 
   const [request,setRequest]=useState<{id:string;message:SupportMessage}|null>(null);
   const [devices,setDevices]=useState<Device[]>([]);
+  const [backupClient,setBackupClient]=useState('');
   const [permissionClient,setPermissionClient]=useState('');
   const [apps,setApps]=useState<ConnectedApp[]>([]);
   const [grants,setGrants]=useState<Grant[]>([]);
@@ -374,11 +376,13 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         {button('Add a passkey in secure browser',passkeys)}<AccountActivity key={token} token={token} colors={colors}/></>;
       break;
     case 'apps':
+      if(backupClient){content=<AppBackups key={backupClient} client={backupClient} token={token} colors={colors} back={()=>setBackupClient('')}/>;break;}
       content=<>{apps.length===0&&paragraph('No linked apps yet.')}
         {apps.slice(appsPage.start,appsPage.end).map(app=><View key={app.client} style={{gap:10,borderBottomWidth:1,borderColor:colors.soft,paddingVertical:12}}><View style={{flexDirection:'row',gap:12,alignItems:'center'}}>
           <AppIcon key={app.icon} icon={app.icon} color={colors.accent}/>
           <View style={{flexShrink:1,gap:4}}><Text style={{color:colors.ink,fontWeight:'700'}}>{app.label}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View></View>
           {button('Manage permissions',()=>{setPermissionClient(app.client);navigate('permissions');})}
+          {button('Backups',()=>setBackupClient(app.client))}
           {button('Unlink app',()=>confirm('Unlink '+app.label+'?','This ends the app’s access and permanently deletes the copies it saved in your X-Center ID account.',()=>run(()=>mutate('connected-apps/unlink',{client:app.client}),'App unlinked.')))}</View>)}
         {!!apps.length&&button('Sign out of connected apps',()=>confirm('Sign out of all connected apps?',
           'Your links, permissions and stored data are kept. Apps may ask you to sign in again.',

@@ -1,4 +1,4 @@
-export const sdkSource = 'https://github.com/Xarber/xcenter-id-sdk/tree/ed0d3f55fa1dbba44ac245ebdc1a58b1ad66e9f0';
+export const sdkSource = 'https://github.com/Xarber/xcenter-id-sdk/tree/57c4930abe34003dfb74923ec823ef6245a985ce';
 
 export const groups = {
   setup: 'Setup & configuration',
@@ -599,4 +599,23 @@ const containerFiles: Reference[] = [
     example:"const result = await user.appFiles.delete(id);",output:"{\"ok\":true}",related:"list-app-files"},
 ];
 
-export const reference: readonly Reference[] = [...setup,...identity,...profile,...data,...files,...components,...migration,...advanced,...accountAndTransport,...containerFiles];
+const appBackup:Reference[]=[
+  {group:'files',id:'list-app-backups',title:'List app backups',signature:'user.appBackups.list(options?)',
+    description:'List snapshots in the signed-in account’s app container. The developer must opt in and the account owner must separately allow the app to request backups. Inspect the selection and requested fields to see the restore scope and pending request.',
+    access:'app_data and the account’s backup permission',args:[signal],flow:['Linked app token','Check backup permission','Snapshot descriptors'],
+    example:'const {snapshots} = await user.appBackups.list();',output:JSON.stringify({policy:{version:1,restore:true,selection:{records:['settings'],files:'editable'}},allowApp:true,snapshots:[]}),related:'create-app-backup'},
+  {group:'files',id:'create-app-backup',title:'Create an app backup',signature:'user.appBackups.create(options?)',
+    description:'Capture eligible committed records and files under the developer’s backup policy. Unchanged file content shares physical storage across the live container and all snapshots.',
+    access:'app_data and the account’s backup permission',args:[signal],flow:['App requests snapshot','Capture matching versions','New snapshot ID'],
+    example:'const snapshot = await user.appBackups.create();',output:JSON.stringify({id:mockId,version:1,created:1795776000000,bytes:2050,records:1,files:1,appCreated:true,requested:null,selection:{records:['settings'],files:'editable'}}),related:'request-app-backup-restore'},
+  {group:'files',id:'delete-app-backup',title:'Delete an app-created backup',signature:'user.appBackups.delete(id, options?)',
+    description:'Remove a snapshot created by this app. The account owner manages manually created snapshots. Content retained by another snapshot or the live container remains available.',
+    access:'app_data and the account’s backup permission',args:[fileId,signal],flow:['App snapshot ID','Check ownership','Remove snapshot'],
+    example:'await user.appBackups.delete(id);',output:ok,related:'list-app-backups'},
+  {group:'files',id:'request-app-backup-restore',title:'Request an app backup restore',signature:'user.appBackups.requestRestore(id, options?)',
+    description:'Ask the account owner to restore a compatible snapshot. Open the shared dashboard with user.appBackups.managementURL() or /apps/{clientId}/backups on the issuer. The owner reviews and confirms the request there.',
+    access:'app_data and the account’s backup permission',args:[fileId,signal],flow:['Compatible snapshot','Request user confirmation','Pending restore'],
+    example:'await user.appBackups.requestRestore(id);\nconst reviewURL = user.appBackups.managementURL();',output:'{"pending":true}',related:'list-app-backups'},
+];
+
+export const reference: readonly Reference[] = [...setup,...identity,...profile,...data,...files,...components,...migration,...advanced,...accountAndTransport,...containerFiles,...appBackup];

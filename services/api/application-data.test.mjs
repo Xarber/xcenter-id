@@ -162,6 +162,9 @@ test('container files are quota-bound, app-scoped, and browsed only with the per
     ...(payload?{body:JSON.stringify(payload)}:{})});
   const files='/v1/apps/backup/files',uploads=files+'/uploads',browser='/account/app-files/backup';
   const portal='/account/app-storage/'+primary.id;
+  const backups='/account/app-backups/backup', appBackups='/v1/apps/backup/backups';
+  const backup=(path='',options={})=>call(backups+path,{cookie:'player',...options});
+
   const start=(token,payload)=>call(uploads,{token,payload,method:'POST'});
   const status=(token,id)=>call(uploads+'/'+id,{token});
   const write=(token,id,position,bytes)=>call(uploads+'/'+id,{token,method:'PUT',payload:{position,content:bytes.toString('base64')}});
@@ -192,6 +195,18 @@ test('container files are quota-bound, app-scoped, and browsed only with the per
   assert.equal(data.containers('player')[0].showInFiles,true);
   assert.equal(data.containers('player')[0].canManage,false);
   assert.equal(data.containers('player')[0].visibleBytes,600000);
+
+  assert.equal((await manage({action:'backup-policy',enabled:true,restore:false,version:1})).status,200);
+  const beforeSnapshots=data.accountUsage('player');
+  const largeSnapshots=[];
+  for(let index=0;index<3;index++){
+    const copy=await backup('',{method:'POST'});
+    assert.equal(copy.status,201);
+    largeSnapshots.push(await copy.json());
+  }
+  assert.equal(data.accountUsage('player')-beforeSnapshots,3*1024);
+  for(const copy of largeSnapshots)assert.equal((await backup('/'+copy.id,{method:'DELETE'})).status,200);
+  assert.equal((await manage({action:'backup-policy',enabled:false})).status,200);
   const result=await call(browser+'/'+id,{cookie:'player'});
   assert.equal(result.headers.get('content-type'),'application/octet-stream');
   assert.match(result.headers.get('content-disposition'),/attachment/);
@@ -236,6 +251,96 @@ test('container files are quota-bound, app-scoped, and browsed only with the per
   assert.equal(replaced.sha256,digest('xyz'));
   assert.notEqual(replaced.sha256,original.sha256);
   assert.equal(data.accountUsage('player'),3);
+  assert.equal((await backup('',{method:'POST'})).status,403);
+  assert.equal((await manage({action:'backup-policy',enabled:true,restore:true,version:1})).status,200);
+  assert.equal((await call(appBackups,{token:user,method:'POST'})).status,403);
+  assert.equal((await backup('/permission',{method:'PUT',payload:{enabled:true}})).status,200);
+  assert.equal((await call(appBackups,{token:wrongApp,method:'POST'})).status,403);
+  const notes='/v1/apps/backup/data/notes/first';
+  assert.equal((await call(notes,{token:user,method:'PUT',revision:'"0"',payload:{data:{name:'first'},public:false}})).status,200);
+  const createBackup=await call(appBackups,{token:user,method:'POST'});
+  assert.equal(createBackup.status,201,await createBackup.clone().text());
+  const saved=await createBackup.json();
+  assert.equal(saved.records,1);
+  assert.equal(saved.files,1);
+  const charged=data.accountUsage('player');
+  const manual=await backup('',{method:'POST'});
+  assert.equal(manual.status,201);
+  const secondSnapshot=await manual.json();
+  assert.equal(data.accountUsage('player')-charged,1024);
+  assert.equal((await call(appBackups+'/'+secondSnapshot.id,{token:user,method:'DELETE'})).status,404);
+  assert.equal((await call(appBackups+'/'+saved.id,{token:user,method:'DELETE'})).status,200);
+  assert.equal(data.accountUsage('player'),charged);
+  const restoreRequest=await call(appBackups+'/'+secondSnapshot.id+'/restore',{token:user,method:'POST'});
+  assert.equal(restoreRequest.status,202);
+  assert.ok((await (await backup()).json()).snapshots[0].requested);
+
+  const proof=await backup('',{cookie:'stranger'});
+  assert.deepEqual((await proof.json()).snapshots,[]);
+  assert.equal((await edit('/'+id,'DELETE')).status,200);
+  assert.equal((await call(files+'/'+id,{token:user})).status,404);
+  const previous=await (await call(notes,{token:user})).json();
+  assert.equal((await call(notes,{token:user,method:'PUT',revision:JSON.stringify(String(previous.revision)),payload:{data:{name:'changed'},public:false}})).status,200);
+  assert.equal((await manage({action:'backup-policy',enabled:true,restore:true,version:2})).status,200);
+  assert.equal((await backup('/'+secondSnapshot.id+'/restore',{method:'POST'})).status,409);
+  assert.equal((await manage({action:'backup-policy',enabled:true,restore:true,version:1})).status,200);
+  const restored=await backup('/'+secondSnapshot.id+'/restore',{method:'POST'});
+  assert.equal(restored.status,200,await restored.clone().text());
+  assert.equal(await (await call(files+'/'+id,{token:user})).text(),'xyz');
+  const restoredNote=await (await call(notes,{token:user})).json();
+  assert.deepEqual(restoredNote.data,{name:'first'});
+  assert.ok(restoredNote.revision>previous.revision+1);
+  const {snapshots}=await (await backup()).json();
+  assert.equal(snapshots.length,2);
+  for(const entry of snapshots)assert.equal((await backup('/'+entry.id,{method:'DELETE'})).status,200);
+  assert.equal((await call(notes,{token:user,method:'DELETE',revision:JSON.stringify(String(restoredNote.revision))})).status,200);
+
+
+  const makeExtra=async (name,browseable)=>{
+    const extra=(await (await start(user,{name,browseable,size:1})).json()).id;
+    assert.equal((await write(user,extra,0,Buffer.from('p'))).status,200);
+    assert.equal((await complete(user,extra)).status,201);
+    return extra;
+  };
+  const readOnly=await makeExtra('Read-only file',true);
+  const privateFile=await makeExtra('Private file',false);
+  const included='/v1/apps/backup/data/notes/included';
+  const ignored='/v1/apps/backup/data/notes/ignored';
+  const otherCollection='/v1/apps/backup/data/settings/display';
+  const putRecord=async(path,name,revision='0')=>call(path,{token:user,method:'PUT',revision:JSON.stringify(revision),payload:{data:{name},public:false}});
+  for(const path of [included,ignored,otherCollection])assert.equal((await putRecord(path,'before')).status,200);
+  const policy={action:'backup-policy',enabled:true,restore:true,version:3};
+  const selectedRecords=['notes/included','settings'];
+  for(const [files,expected] of [['none',0],['editable',1],['browseable',2],['all',3]]){
+    assert.equal((await manage({...policy,selection:{records:selectedRecords,files}})).status,200);
+    const snapshot=await (await backup('',{method:'POST'})).json();
+    assert.equal(snapshot.files,expected);
+    assert.equal(snapshot.records,2);
+    assert.equal((await backup('/'+snapshot.id,{method:'DELETE'})).status,200);
+  }
+  const partialPolicy={...policy,selection:{records:selectedRecords,files:'editable'}};
+  assert.equal((await manage(partialPolicy)).status,200);
+  const partial=await (await backup('',{method:'POST'})).json();
+  assert.equal(partial.files,1);
+  assert.equal((await putRecord(included,'changed','1')).status,200);
+  assert.equal((await putRecord(ignored,'keep changed','1')).status,200);
+  assert.equal((await edit('/'+id,'PUT',{name:'Different.zip'})).status,200);
+  assert.equal((await call(files+'/'+id,{token:user,method:'PUT',payload:{browseable:true,editable:false}})).status,200);
+  assert.equal((await backup('/'+partial.id+'/restore',{method:'POST'})).status,409);
+  assert.equal((await call(files+'/'+id,{token:user,method:'PUT',payload:{browseable:true,editable:true}})).status,200);
+
+  assert.equal((await backup('/'+partial.id+'/restore',{method:'POST'})).status,200);
+  assert.equal((await (await call(included,{token:user})).json()).data.name,'before');
+  assert.equal((await (await call(ignored,{token:user})).json()).data.name,'keep changed');
+  assert.equal((await (await call(files+'/'+id+'?metadata=1',{token:user})).json()).name,'renamed.zip');
+  assert.equal((await call(files+'/'+readOnly,{token:user})).status,200);
+  assert.equal((await call(files+'/'+privateFile,{token:user})).status,200);
+  for(const entry of (await (await backup()).json()).snapshots)assert.equal((await backup('/'+entry.id,{method:'DELETE'})).status,200);
+  for(const path of [included,ignored,otherCollection]){
+    const {revision}=await (await call(path,{token:user})).json();
+    assert.equal((await call(path,{token:user,method:'DELETE',revision:JSON.stringify(String(revision))})).status,200);
+  }
+  for(const item of [readOnly,privateFile])assert.equal((await call(files+'/'+item,{token:user,method:'DELETE'})).status,200);
   assert.equal((await edit('/'+id,'DELETE')).status,200);
   assert.equal(data.accountUsage('player'),0);
   assert.equal((await manage({action:'rotate-key'})).status,403);

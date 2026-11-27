@@ -1,3 +1,4 @@
+import {normalizeSnapshotSelection,openAppSnapshots} from './app-snapshots.mjs';
 import {appFileRoute, openApplicationFiles, serviceOwner} from './application-files.mjs';
 import {validateSharing,writeSharing} from './application-sharing.mjs';
 import {isUsername} from './identity-profile.mjs';
@@ -9,6 +10,7 @@ const hash=value=>createHash('sha256').update(value).digest('hex');
 const name=/^[a-zA-Z0-9_-]{1,80}$/;
 const clientPattern='([A-Za-z0-9_-]{1,100})';
 const registrationPattern='([0-9a-f-]{36})';
+const snapshotRoute=/^\/(v1\/apps|account\/app-backups)\/([A-Za-z0-9_-]{1,100})(?:\/backups)?(?:\/([0-9a-f-]{36}))?(?:\/(restore|permission|dismiss))?$/;
 const delegatedFiles=new RegExp('^/v1/apps/'+clientPattern+'/files'+appFileRoute);
 const accountBinaryFiles=new RegExp('^/account/app-files/'+clientPattern+appFileRoute);
 const serviceBinaryFiles=new RegExp('^/account/app-storage/'+registrationPattern+'/files'+appFileRoute);
@@ -45,7 +47,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
     const records=serviceUsage.get(client);
     return {...records,used:records.used+binary.bytes(serviceOwner,client)};
   };
-  const accountBytes=owner=>accountUsage.get(owner).used+binary.bytes(owner);
+  const accountBytes=owner=>accountUsage.get(owner).used+binary.bytes(owner)+snapshots.bytes(owner);
   const hasDiskRoom=()=>{
     if(path===':memory:')return true;
     const space=statfsSync(dirname(path));
@@ -54,6 +56,34 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
   const binary=openApplicationFiles({db,key,hasDiskRoom,remaining:(owner,client)=>owner===serviceOwner
     ?(setting(client)?.capacity??10485760)-usage(client).used
     :(accounts.storageCapacity?.(owner)??10485760)-accountBytes(owner)-otherUsage(owner)});
+  const snapshots=openAppSnapshots(db,{editable:binary.editable});
+  const remainingBackup=owner=>(accounts.storageCapacity?.(owner)??10485760)-accountBytes(owner)-otherUsage(owner);
+  function restoreRecords(snapshot){
+    const {id,owner,client}=snapshot;
+    const getCurrent=db.prepare('SELECT revision,public,readers FROM app_records WHERE owner=? AND client=? AND collection=? AND id=?');
+    const put=db.prepare(`INSERT INTO app_records VALUES(?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(client,owner,collection,id) DO UPDATE SET readers=excluded.readers,public=excluded.public,
+      revision=excluded.revision,bytes=excluded.bytes,envelope=excluded.envelope`);
+    const rows=db.prepare(`SELECT v.* FROM app_snapshot_records r JOIN app_snapshot_record_versions v USING(version)
+      WHERE r.snapshot=? AND v.owner=? AND v.client=?`).iterate(id,owner,client);
+    for(const saved of rows){
+      const current=getCurrent.get(owner,client,saved.collection,saved.id);
+      const content=Buffer.from(JSON.stringify(decode({...saved,owner,client}).data));
+      const row={...saved,owner,client,revision:Math.max(Date.now(),saved.revision+1,(current?.revision??0)+1),
+        public:current?.public??0,readers:current?.readers??'[]'};
+      const nonce=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key,nonce);
+      cipher.setAAD(aad(row));
+      const bytes=Buffer.concat([cipher.update(content),cipher.final()]);
+      put.run(client,owner,row.collection,row.id,row.public_key,row.readers,row.public,row.revision,
+        content.length+1024+JSON.parse(row.readers).length*256,Buffer.concat([nonce,cipher.getAuthTag(),bytes]));
+    }
+    if(JSON.parse(snapshot.selection).records===null){
+      const missing='NOT EXISTS(SELECT 1 FROM app_snapshot_records r JOIN app_snapshot_record_versions restored USING(version) WHERE r.snapshot=? AND restored.collection=';
+      db.prepare(`DELETE FROM app_readers WHERE owner=? AND client=? AND ${missing}app_readers.collection AND restored.id=app_readers.id)`).run(owner,client,id);
+      db.prepare(`DELETE FROM app_records WHERE owner=? AND client=? AND ${missing}app_records.collection AND restored.id=app_records.id)`).run(owner,client,id);
+    }
+    if(remainingBackup(owner)<0)fail(409,'There is not enough account storage to restore this backup.');
+  }
   const dashboardServiceClient=(req,id)=>{
     const owner=accounts.current(req)?.owner;
     const client=owner&&registry.lookup(owner,id)?.client;
@@ -111,6 +141,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         db.prepare('DELETE FROM app_data_grants WHERE owner=?').run(owner);
         db.prepare('DELETE FROM app_readers WHERE owner=? OR reader=?').run(owner,owner);
         db.prepare('DELETE FROM app_records WHERE owner=?').run(owner);
+        snapshots.removeOwner(owner);
         binary.removeAccount(owner);
         db.exec('COMMIT');
       }catch(error){db.exec('ROLLBACK');throw error;}
@@ -150,6 +181,7 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
         db.prepare('DELETE FROM app_data_grants WHERE owner=? AND (source=? OR destination=?)').run(owner,client,client);
         db.prepare('DELETE FROM app_readers WHERE client=? AND (owner=? OR reader=?)').run(client,owner,owner);
         db.prepare('DELETE FROM app_records WHERE client=? AND owner=?').run(client,owner);
+        snapshots.removeOwner(owner,client);
         binary.removeApp(owner,client);
         db.exec('COMMIT');
       }catch(error){db.exec('ROLLBACK');throw error;}
@@ -176,6 +208,53 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
       const answer=(code,data)=>res.writeHead(code,{...responseHeaders,'Content-Type':'application/json'}).end(JSON.stringify(data));
       try{
         if(req.method==='OPTIONS')return answer(204,{});
+        const backup=(url.pathname.startsWith('/account/app-backups/')||/^\/v1\/apps\/[^/]+\/backups(?:\/|$)/.test(url.pathname))&&snapshotRoute.exec(url.pathname);
+        if(backup){
+          const [,mode,client,id,action]=backup;
+          const delegated=mode==='v1/apps';
+          const owner=delegated?await authenticateFiles(req,client):accounts.current(req)?.owner;
+          if(!owner||owner===serviceOwner||!registered(client)||!sourceLinked(owner,client))fail(403,'App backup access is not granted.');
+          const settings=snapshots.policy(client);
+          const allowed=snapshots.allowed(owner,client);
+          if(delegated&&(!settings||!allowed||action&&action!=='restore'))fail(403,'This account has not granted app backups.');
+          if(req.method==='GET'&&!action&&!id)return answer(200,{
+            policy:settings?{version:settings.version,restore:!!settings.restore,selection:JSON.parse(settings.selection)}:null,allowApp:allowed,snapshots:snapshots.list(owner,client),
+          });
+          if(!delegated&&(!accounts.allowsMutation(req)||req.headers['x-authnjs-request']!=='account-consent')){
+            fail(403,'Change backups from your account.');
+          }
+          if(!delegated&&action==='permission'&&!id&&req.method==='PUT'){
+            const input=await body(req);
+            if(typeof input.enabled!=='boolean'||input.enabled&&!snapshots.policy(client))fail(422,'Choose an available backup permission.');
+            if(accounts.current(req)?.owner!==owner||!sourceLinked(owner,client))fail(403,'App backup access changed.');
+            snapshots.allow(owner,client,input.enabled);
+            return answer(200,{ok:true});
+          }
+          const remaining=()=>remainingBackup(owner);
+          if(req.method==='POST'&&!id&&!action){
+            if(!hasDiskRoom())fail(503,'Storage is temporarily unavailable.');
+            return answer(201,snapshots.create(owner,client,remaining,fail,delegated));
+          }
+          if(id&&!action&&req.method==='DELETE'){
+            if(!snapshots.delete(owner,client,id,delegated))fail(404,'Backup unavailable.');
+            return answer(200,{ok:true});
+          }
+          if(delegated&&id&&action==='restore'&&req.method==='POST'){
+            snapshots.requestRestore(owner,client,id,fail);
+            return answer(202,{pending:true});
+          }
+          if(!delegated&&id&&action==='dismiss'&&req.method==='POST'){
+            if(!snapshots.dismissRequest(owner,client,id))fail(404,'Backup unavailable.');
+            return answer(200,{ok:true});
+          }
+          if(!delegated&&id&&action==='restore'&&req.method==='POST'){
+            if(!accounts.recentlyConfirmed(req))fail(403,'Confirm your identity before restoring.');
+            if(!hasDiskRoom())fail(503,'Storage is temporarily unavailable.');
+            snapshots.restore(owner,client,id,remaining,restoreRecords,fail);
+            return answer(200,{ok:true});
+          }
+          fail(405,'Backup method unavailable.');
+        }
         const appFiles=delegatedFiles.exec(url.pathname);
         if(appFiles){
           const [,client,...route]=appFiles;
@@ -250,9 +329,18 @@ export function openApplicationData({path,key,registry,accounts,authenticate,oth
           const unsecure=!!registry.brand(client)?.local;
           db.prepare('INSERT OR IGNORE INTO app_storage(client) VALUES(?)').run(client);
           if(req.method==='GET')return answer(200,{name:registry.brand(client)?.name??'App storage',icon:registry.brand(client)?.iconUrl??registry.brand(client)?.icon??null,...usage(client),capacity:setting(client).capacity,hasKey:!!setting(client).secret,verified:serviceEnabled,unsecure,
-            ...sharing(client),sources:this.sharingSources(client,session.owner),showInFiles:!!visible.get(client),canShowInFiles:!!(owned&&serviceEnabled),canBrowseService:!!(owned&&serviceEnabled)});
+            ...sharing(client),backupPolicy:snapshots.policy(client)?{...snapshots.policy(client),selection:JSON.parse(snapshots.policy(client).selection)}:null,canSetBackupPolicy:!!owned,sources:this.sharingSources(client,session.owner),showInFiles:!!visible.get(client),canShowInFiles:!!(owned&&serviceEnabled),canBrowseService:!!(owned&&serviceEnabled)});
           if(req.method!=='POST'||!accounts.allowsMutation(req)||!accounts.recentlyConfirmed(req))fail(403,'Confirm your identity before changing app storage.');
           const input=await body(req);
+          if(input.action==='backup-policy'){
+            const selection=normalizeSnapshotSelection(input.selection);
+            if(!owned||typeof input.enabled!=='boolean'||input.enabled&&(!Number.isSafeInteger(input.version)||input.version<1||!selection||typeof input.restore!=='boolean')){
+              fail(422,'Choose a valid backup policy and version.');
+            }
+            if(accounts.current(req)?.owner!==session.owner||!accounts.recentlyConfirmed(req)||!registry.lookup(session.owner,management))fail(403,'Developer access changed.');
+            snapshots.set(client,input.enabled?{version:input.version,restore:input.restore,selection}:null);
+            return answer(200,{ok:true});
+          }
           if(!serviceEnabled&&(input.action!=='sharing'||!Array.isArray(input.shared)||input.shared.length))fail(403,'Service storage requires a verified app.');
           if(unsecure&&input.confirmUnsecure!==true)fail(422,'Confirm editing sharing for an unsecure app.');
           if(input.action==='file-visibility'){

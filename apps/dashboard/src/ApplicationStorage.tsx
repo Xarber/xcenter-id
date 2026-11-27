@@ -1,3 +1,4 @@
+import {backupFileModes,backupSelectors,type BackupFileMode,type BackupPolicy} from './app-backups';
 import AppFileContainer from './AppFileContainer';
 import SharingEditor from './SharingEditor';
 import {cleanSharing,type SharingConfig,type SharingSource,type SharingRequest} from './sharing-config';
@@ -10,12 +11,17 @@ import type {DashboardTheme} from './native-surfaces';
 type Colors=DashboardTheme;
 export default function ApplicationStorage({id,token,colors,admin=false,back}:{id:string;token:string;colors:Colors;admin?:boolean;back:()=>void}){
   const showDialog=useDialog();
- const [data,setData]=useState<{name?:string;icon?:string|null;used:number;capacity:number;records:number;hasKey:boolean;showInFiles:boolean;canShowInFiles:boolean;canBrowseService?:boolean;shared:string[];requests:SharingRequest[];sources:SharingSource[];verified:boolean;unsecure:boolean}|null>(null);
+ const [data,setData]=useState<{name?:string;icon?:string|null;used:number;capacity:number;records:number;hasKey:boolean;showInFiles:boolean;canShowInFiles:boolean;canSetBackupPolicy:boolean;backupPolicy:BackupPolicy|null;canBrowseService?:boolean;shared:string[];requests:SharingRequest[];sources:SharingSource[];verified:boolean;unsecure:boolean}|null>(null);
  const [editing,setEditing]=useState(false),[status,setStatus]=useState(''),[secret,setSecret]=useState('');
  const [capacity,setCapacity]=useState('10'),[unit,setUnit]=useState(2);
  const [browsing,setBrowsing]=useState(false);
  const [sharing,setSharing]=useState<SharingConfig>({shared:[],requests:[]});
- async function load(){const value=await nativeRequest('app-storage/'+id,token);setData(value);setCapacity(String(value.capacity/1024**2));setSharing({shared:value.shared,requests:value.requests});}
+ const [allBackupRecords,setAllBackupRecords]=useState(true),[backupRecords,setBackupRecords]=useState('');
+ const [backupFiles,setBackupFiles]=useState<BackupFileMode>('all');
+ const [backupEnabled,setBackupEnabled]=useState(false),[backupVersion,setBackupVersion]=useState('1'),[backupRestore,setBackupRestore]=useState(false);
+ async function load(){const value=await nativeRequest('app-storage/'+id,token);setData(value);setBackupEnabled(!!value.backupPolicy);setBackupVersion(String(value.backupPolicy?.version??1));setBackupRestore(!!value.backupPolicy?.restore);
+ setAllBackupRecords(value.backupPolicy?.selection?.records==null);setBackupRecords(value.backupPolicy?.selection?.records?.join(', ')??'');
+ setBackupFiles(value.backupPolicy?.selection?.files??'all');setCapacity(String(value.capacity/1024**2));setSharing({shared:value.shared,requests:value.requests});}
  useEffect(()=>{void load().catch(e=>setStatus(e.message));},[id,token]);
  async function change(body:object){try{if(!(await nativeRequest('session/access',token)).confirmed)await nativeReauthenticate(token);const result=await nativeRequest('app-storage/'+id,token,body);if(result.secret)setSecret(result.secret);await load();setStatus('Saved.');}catch(e){setStatus(e instanceof Error?e.message:'Could not save.');}}
  const action=(label:string,onPress:()=>void)=><Pressable accessibilityRole="button" onPress={onPress} style={{minHeight:44,padding:12,borderRadius:10,backgroundColor:colors.soft}}><Text style={{color:colors.accent}}>{label}</Text></Pressable>;
@@ -32,6 +38,24 @@ export default function ApplicationStorage({id,token,colors,admin=false,back}:{i
      {text:'Cancel',style:'cancel'},{text:'Save sharing',onPress:save},
    ]);else save();
  })}
+ {data.canSetBackupPolicy&&<View style={{gap:8}}>
+  <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Account backups</Text>
+  <Text style={{color:colors.ink}}>Allow users to make backups</Text>
+  <Switch accessibilityLabel="Allow users to make backups" value={backupEnabled} onValueChange={setBackupEnabled}/>
+  {backupEnabled&&<>{field('Backup compatibility version',backupVersion,setBackupVersion)}
+    <Text style={{color:colors.ink}}>Allow users to restore matching backups</Text>
+    <Switch accessibilityLabel="Allow users to restore matching backups" value={backupRestore} onValueChange={setBackupRestore}/>
+    <Text style={{color:colors.ink}}>Include all records</Text>
+    <Switch accessibilityLabel="Include all records" value={allBackupRecords} onValueChange={setAllBackupRecords}/>
+    {!allBackupRecords&&<>{field('Collections and records',backupRecords,setBackupRecords)}
+      <Text style={{color:colors.muted}}>Enter a collection name or collection/record ID on each line. Leave empty to exclude records.</Text></>}
+    {action('Files to include · '+backupFileModes[backupFiles],()=>showDialog('Files to include',undefined,[
+      ...Object.entries(backupFileModes).map(([value,text])=>({text,onPress:()=>setBackupFiles(value as BackupFileMode)})),
+      {text:'Cancel',style:'cancel'},
+    ]))}
+    <Text style={{color:colors.muted}}>Change the version when old snapshots are incompatible with the app’s current data.</Text></>}
+  {action('Save backup policy',()=>void change({action:'backup-policy',enabled:backupEnabled,version:Number(backupVersion),restore:backupRestore,selection:{records:allBackupRecords?null:backupSelectors(backupRecords),files:backupFiles}}))}
+ </View>}
  {data.canShowInFiles&&<View style={{gap:6}}>
   <Text style={{color:colors.ink}}>Show this app’s record container in Files</Text>
   <Text style={{color:colors.muted}}>You can manage records in your own linked account. Browseable files appear in account Files independently.</Text>

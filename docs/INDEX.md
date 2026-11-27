@@ -2,7 +2,7 @@
 
 X-Center ID is a passkey-first identity and consent service with an Expo account manager for web, iOS and Android. The replacement API lives in `services/api` and the account manager in `apps/dashboard`. A separate preview supports synthetic data. The [legacy review](LEGACY_REVIEW.md) documents the original AuthNJS code preserved in Git history.
 
-- [Proposed app snapshots](APP_SNAPSHOTS.md) covers developer opt-in, snapshot scope and restore behavior.
+- [Incremental app snapshots](APP_SNAPSHOTS.md) covers developer opt-in, snapshot scope and restore behavior.
 - [Binary files in app storage](APP_CONTAINER_FILES.md) describes uploads, visibility, quotas and recursive folder sizes.
 - [Legacy code review](LEGACY_REVIEW.md) inventories the runtime, user flows, data model, integrations and findings.
 - [Replacement API](API.md) documents routes, deployment configuration and API gaps.

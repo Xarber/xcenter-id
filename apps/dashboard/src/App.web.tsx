@@ -1,3 +1,4 @@
+import AppBackups from './AppBackups.web';
 import AccountActivity from './AccountActivity.web';
 import {developerModeKey,useDeveloperPanel} from './developer-panel';
 import AccountSwitcher, {type BrowserAccount} from './AccountSwitcher.web';
@@ -298,15 +299,16 @@ export default function WebApp(){
     try{localStorage.setItem(onboardingKey,'complete');}catch{}
     acknowledge();
   }
+  const backupRoute=/^apps\/([A-Za-z0-9_-]{1,100})\/backups$/.exec(path)?.[1];
   const permissionRoute=/^permissions\/([A-Za-z0-9_-]{1,100})$/.exec(path);
   const profileSection=/^profile\/(visibility|username|developer)$/.exec(path)?.[1];
   const invite=new URLSearchParams(window.location.hash.slice(1)).get('invite');
   const friendReturn=path==='friends'&&invite&&/^(?:[A-Za-z2-9]{10}|[A-Za-z0-9_-]{32})$/.test(invite)?'/friends#invite='+invite:'';
   const mailRoute=/^mail\/[0-9a-f-]{36}$/.test(path);
   const next=path==='native-session'||path==='reauth'?window.location.pathname+window.location.search:
-    new URLSearchParams(window.location.search).get('continue')??(friendReturn||(permissionRoute||mailRoute||profileSection?'/'+path:''));
+    new URLSearchParams(window.location.search).get('continue')??(friendReturn||(backupRoute||permissionRoute||mailRoute||profileSection?'/'+path:''));
   const nativeReturn=/^\/native-session\?challenge=[A-Za-z0-9_-]{43}&state=[A-Za-z0-9_-]{43}$/;
-  const continuation=/^\/friends#invite=(?:[A-Za-z2-9]{10}|[A-Za-z0-9_-]{32})$/.test(next)||/^\/profile\/(?:visibility|username|developer)$/.test(next)||/^\/reauth\?request=[A-Za-z0-9_-]{43}$/.test(next)||/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)||/^\/app-approval\/[A-Za-z0-9_-]{43}$/.test(next)||nativeReturn.test(next)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(next)||/^\/mail\/[0-9a-f-]{36}$/.test(next)?next:null;
+  const continuation=/^\/friends#invite=(?:[A-Za-z2-9]{10}|[A-Za-z0-9_-]{32})$/.test(next)||/^\/profile\/(?:visibility|username|developer)$/.test(next)||/^\/reauth\?request=[A-Za-z0-9_-]{43}$/.test(next)||/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)||/^\/app-approval\/[A-Za-z0-9_-]{43}$/.test(next)||/^\/apps\/[A-Za-z0-9_-]{1,100}\/backups$/.test(next)||nativeReturn.test(next)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(next)||/^\/mail\/[0-9a-f-]{36}$/.test(next)?next:null;
   const emailToken=new URLSearchParams(window.location.hash.slice(1)).get('verify-email');
   const authDestination=emailToken?'/profile'+window.location.hash:continuation??'/dashboard';
   async function load(){const result=await api('me');setAccount(result.account);setLocked(!!result.locked);}
@@ -422,7 +424,7 @@ export default function WebApp(){
   const picture=profile.hasPicture?'/account/avatar':null;
   const permissionClient=permissionRoute?.[1];
   const storageRoute=/^developer\/storage\/([0-9a-f-]{36})$/.exec(path)?.[1];
-  const page=profileSection?'profile':storageRoute?'developer':!path||path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':mailRoute?'mail':path.startsWith('admin/users/')?'admin':path;
+  const page=backupRoute?'apps':profileSection?'profile':storageRoute?'developer':!path||path==='signin'||path==='signup'?'dashboard':permissionClient?'permissions':mailRoute?'mail':path.startsWith('admin/users/')?'admin':path;
   const [title,summary]=titles[page]??[accountMessage('overviewTitle','Account overview'),accountMessage('overviewSummary','Manage the details, devices, and apps connected to your X-Center ID.')];
   const shortcutIcons = {
     profile:[UserRound,'xc-sky'],security:[Fingerprint,'xc-mint'],
@@ -430,7 +432,8 @@ export default function WebApp(){
   } as const;
 
   let content:ReactNode;
-  if(storageRoute)content=<ApplicationStorage id={storageRoute} admin={account.admin}/>;
+  if(backupRoute)content=<section className="xc-card"><AppBackups key={backupRoute} client={backupRoute}/></section>;
+  else if(storageRoute)content=<ApplicationStorage id={storageRoute} admin={account.admin}/>;
   else if(page==='profile')content=<>
     {emailToken&&<section className="xc-card xc-pad"><h2>Verify your email</h2>
       <button type="button" className="xc-button xc-primary" onClick={()=>void api('email/confirm',{token:emailToken}).then(async()=>{
