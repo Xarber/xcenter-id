@@ -231,3 +231,11 @@ Production web and API serve `d09ca93` on loopback 18852. The isolated candidate
 Seven SQLite snapshots passed quick checks under `/srv/xcenter/data/.xcenter-id-rollbacks/pre-dashboard-d09ca93.MciEyT`. The previous production process on 18851 is retained. Restore the saved site file from `/srv/xcenter/infra/changes/pre-dashboard-d09ca93/id.xcenter.it.conf` and reload validated Nginx for rollback. The isolated staging copies and container were removed. The live process showed zero restarts at verification.
 
 The [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45982724771) and [source quality workflow](https://github.com/Xarber/xcenter-id/actions/runs/45982719002) were dispatched for `d09ca93`. The installed native consent screen and physical camera still require verification.
+
+## 27 November snapshot fingerprints and documentation
+
+Production web and API serve `a227d2c` on loopback 18854. The staged and live checks verified revision, issuer discovery, encrypted storage documentation routing and anonymous backup denial. Public Chrome verified the ADP guide, backup examples in five languages and the SDK index. Snapshot capture, legacy digest backfill, deduplication and restore were tested against isolated data. No production backup was created for testing. The SDK source includes the descriptor type at `146c4fd` and passed all 17 tests.
+
+Seven SQLite snapshots passed integrity checks under `/srv/xcenter/data/.xcenter-id-rollbacks/pre-dashboard-a227d2c.UCZ21G`. The previous production process on 18852 is retained. Restore the site file from `/srv/xcenter/infra/changes/pre-dashboard-a227d2c/id.xcenter.it.conf` and reload validated Nginx to roll back. The added hash table does not alter the existing snapshot table. The isolated staging container and its copies were removed. Production had zero restarts at verification.
+
+The [quality workflow](https://github.com/Xarber/xcenter-id/actions/runs/45987154793) and [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45987159108) ran against this revision. The native Backups detail and clipboard interaction still need installed-device verification.

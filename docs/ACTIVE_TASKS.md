@@ -790,3 +790,5 @@ Production is on `b12b22b`, sandbox API on `a4e2e6d`, and SDK main on `57c4930`.
 The documentation review compared the live developer guide, language-switchable SDK catalog, SDK coverage matrix and maintained API index with snapshots, protection, native authorization, peer access, app settings and account controls. It filled the missing hosted encryption guide, snapshot management URL, account activity and connected-app sign-out, and stale resumable upload/trusted-scope guidance. Historical records and implemented compatibility routes were preserved.
 
 **Source evidence.** 64 API and 22 dashboard checks, Expo web export, TypeScript and structural UADS validation passed. SDK source and documentation updated at `146c4fd`.
+
+**Production.** `a227d2c` is live. AUTHN-186 passed isolated API behavior, migration and restore checks. AUTHN-187 passed live Chrome checks. The [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45987159108) has started. Installed backup details and clipboard verification remain pending. See the [cutover record](operations/XCENTER_ID_PRODUCTION.md#27-november-snapshot-fingerprints-and-documentation).
