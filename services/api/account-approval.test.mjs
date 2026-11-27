@@ -29,6 +29,7 @@ test('account QR waits for explicit approval and saves only to the originating b
   const cookie=start.headers.get('set-cookie').split(';')[0];
   const {code,image}=await start.json();
   assert.match(image,/^data:image\/svg\+xml;base64,/);
+  assert.match(Buffer.from(image.split(',')[1],'base64').toString(),/xmlns="http:\/\/www.w3.org\/2000\/svg"/);
   const path=codePath(code);
   assert.match(path,/^\/account-approval\//);
   assert.deepEqual(await (await call('/account-approval/status',{headers:{cookie}})).json(),{state:'waiting'});

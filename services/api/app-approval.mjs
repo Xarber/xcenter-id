@@ -48,7 +48,7 @@ export function approvalQr(url) {
   const pixels=toQR(url);
   const width=Math.sqrt(pixels.length);
   const marks=Array.from(pixels,(dark,i)=>dark?`M${i%width},${Math.floor(i/width)}h1v1h-1z`:'').join('');
-  return `<svg role="img" aria-label="QR code to approve sign-in" viewBox="-4 -4 ${width+8} ${width+8}" width="220" height="220" shape-rendering="crispEdges" style="display:block;max-width:100%;background:white"><path fill="black" d="${marks}"/></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QR code to approve sign-in" viewBox="-4 -4 ${width+8} ${width+8}" width="220" height="220" shape-rendering="crispEdges" style="display:block;max-width:100%;background:white"><path fill="black" d="${marks}"/></svg>`;
 }
 
 
