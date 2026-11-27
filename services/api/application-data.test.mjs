@@ -137,6 +137,12 @@ test('hosted payload ciphertext authenticates publication and recipient flags at
 });
 
 test('container files are quota-bound, app-scoped, and browsed only with the permitted visibility',async t=>{
+  const {mkdtempSync,rmSync}=await import('node:fs');
+  const {tmpdir}=await import('node:os');
+  const {join}=await import('node:path');
+  const {DatabaseSync}=await import('node:sqlite');
+  const dir=mkdtempSync(join(tmpdir(),'xcenter-snapshot-'));
+  const path=join(dir,'app-data.sqlite');
   const registry=openRegistry(':memory:');
   const primary=registry.submit('developer','Backup','https://backup.example.test/return');
   const other=registry.submit('developer','Other','https://other.example.test/return');
@@ -147,14 +153,14 @@ test('container files are quota-bound, app-scoped, and browsed only with the per
     [stranger,{owner:'stranger',client:'backup'}],[wrongApp,{owner:'player',client:'other'}],
   ]);
   const data=openApplicationData({
-    path:':memory:',key:Buffer.alloc(32,9),registry,authenticate:token=>principals.get(token),
+    path,key:Buffer.alloc(32,9),registry,authenticate:token=>principals.get(token),
     accounts:{storageCapacity:()=>700000,available:()=>true,linkedGrant:()=> 'linked',
       current:req=>req.headers.cookie?{owner:req.headers.cookie}:null,adminStatus:()=>403,
       allowsMutation:()=>true,recentlyConfirmed:()=>true},
   });
   const server=createServer((req,res)=>void data.handle(req,res,new URL(req.url,'http://localhost'))).listen(0,'127.0.0.1');
   await once(server,'listening');
-  t.after(async()=>{await new Promise(resolve=>server.close(resolve));data.close();registry.close();});
+  t.after(async()=>{await new Promise(resolve=>server.close(resolve));data.close();registry.close();rmSync(dir,{recursive:true,force:true});});
   const base='http://127.0.0.1:'+server.address().port;
   const call=(path,{token,cookie,method='GET',payload,revision}={})=>fetch(base+path,{method,
     headers:{...(token?{authorization:'Bearer '+token}:{}),...(cookie?{cookie}:{}),
@@ -267,19 +273,28 @@ test('container files are quota-bound, app-scoped, and browsed only with the per
   const createBackup=await call(appBackups,{token:user,method:'POST'});
   assert.equal(createBackup.status,201,await createBackup.clone().text());
   const saved=await createBackup.json();
+  assert.match(saved.id,/^[0-9a-f-]{36}$/);
+  assert.match(saved.sha256,/^[0-9a-f]{64}$/);
   assert.equal(saved.records,1);
   assert.equal(saved.files,1);
   const charged=data.accountUsage('player');
   const manual=await backup('',{method:'POST'});
   assert.equal(manual.status,201);
   const secondSnapshot=await manual.json();
+  assert.notEqual(secondSnapshot.id,saved.id);
+  assert.equal(secondSnapshot.sha256,saved.sha256);
   assert.equal(data.accountUsage('player')-charged,1024);
   assert.equal((await call(appBackups+'/'+secondSnapshot.id,{token:user,method:'DELETE'})).status,404);
   assert.equal((await call(appBackups+'/'+saved.id,{token:user,method:'DELETE'})).status,200);
   assert.equal(data.accountUsage('player'),charged);
   const restoreRequest=await call(appBackups+'/'+secondSnapshot.id+'/restore',{token:user,method:'POST'});
   assert.equal(restoreRequest.status,202);
-  assert.ok((await (await backup()).json()).snapshots[0].requested);
+  const db=new DatabaseSync(path);
+  db.prepare('DELETE FROM app_snapshot_hashes WHERE snapshot=?').run(secondSnapshot.id);
+  db.close();
+  const requested=(await (await backup()).json()).snapshots[0];
+  assert.ok(requested.requested);
+  assert.equal(requested.sha256,secondSnapshot.sha256);
 
   const proof=await backup('',{cookie:'stranger'});
   assert.deepEqual((await proof.json()).snapshots,[]);
@@ -298,6 +313,8 @@ test('container files are quota-bound, app-scoped, and browsed only with the per
   assert.ok(restoredNote.revision>previous.revision+1);
   const {snapshots}=await (await backup()).json();
   assert.equal(snapshots.length,2);
+  assert.equal(snapshots.find(item=>item.id===secondSnapshot.id).sha256,secondSnapshot.sha256);
+  assert.notEqual(snapshots.find(item=>item.id!==secondSnapshot.id).sha256,secondSnapshot.sha256);
   for(const entry of snapshots)assert.equal((await backup('/'+entry.id,{method:'DELETE'})).status,200);
   assert.equal((await call(notes,{token:user,method:'DELETE',revision:JSON.stringify(String(restoredNote.revision))})).status,200);
 

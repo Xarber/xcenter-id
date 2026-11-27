@@ -12,6 +12,7 @@ import screenshots from '../public/assets/onboarding/manifest.json';
 import MailClients from './MailClients.web';
 import ApplicationStorage from './ApplicationStorage.web';
 import DeveloperDocumentation from './DeveloperDocumentation.web';
+import EncryptionDocumentation from './EncryptionDocumentation.web';
 import SdkReference from './SdkReference.web';
 import PreferenceControls from './PreferenceControls.web';
 import {parsePreferences,preferencesKey,type Preferences} from './preferences';
@@ -421,6 +422,7 @@ export default function WebApp(){
     </main>;
   }
   if(path==='docs')return <DeveloperDocumentation/>;
+  if(path==='docs/encryption')return <EncryptionDocumentation/>;
   if(path==='docs/sdk'||path.startsWith('docs/sdk/'))return <SdkReference slug={path.slice('docs/sdk/'.length)||undefined}/>;
   const nativeConfirmation=new URLSearchParams(window.location.search).get('request');
   if(path==='reauth'&&nativeConfirmation)return <main className="xc-setup"><Logo href="/"/><Reauthenticate request={nativeConfirmation}/></main>;

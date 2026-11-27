@@ -1,5 +1,5 @@
 import {useEffect,useState} from 'react';
-import {ArchiveRestore,Archive,Trash2} from 'lucide-react';
+import {ArchiveRestore,Archive,Copy,Trash2} from 'lucide-react';
 import {canRestore,type Backups} from './app-backups';
 import {api} from './web-account';
 import {formatBytes} from './storage-summary';
@@ -13,6 +13,10 @@ export default function AppBackups({client,back}:{client:string;back?:()=>void})
   const confirm=useConfirmDialog();
   const path='app-backups/'+encodeURIComponent(client);
   const load=async()=>{setData(await api(path));};
+  async function copy(label:string,value:string){
+    try{await navigator.clipboard.writeText(value);setStatus(label+' copied.');}
+    catch{setStatus('Select the '+label+' to copy it.');}
+  }
   useEffect(()=>{void load().catch(error=>setStatus(error.message));},[client]);
   async function run(work:()=>Promise<unknown>,success:string){
     if(busy)return;
@@ -36,7 +40,14 @@ export default function AppBackups({client,back}:{client:string;back?:()=>void})
     {data?.snapshots.map(item=>{
       const when=new Date(item.created).toLocaleString();
       return <div className="xc-list-row" key={item.id}>
-        <div><strong>{when}</strong>{item.requested&&<p>Restore requested by app</p>}<p>{(item.selection.records!==null||item.selection.files!=='all')&&'Partial · '}{item.records} records · {item.files} files · {formatBytes(item.bytes)} · Version {item.version}</p></div>
+        <div style={{minWidth:0}}><strong>{when}</strong>{item.requested&&<p>Restore requested by app</p>}<p>{(item.selection.records!==null||item.selection.files!=='all')&&'Partial · '}{item.records} records · {item.files} files · {formatBytes(item.bytes)} · Version {item.version}</p>
+          <details><summary>Backup details</summary>
+            {[['Backup ID',item.id],['SHA-256',item.sha256]].map(([label,value])=>value&&<div className="xc-row-head" key={label}>
+              <div style={{minWidth:0,overflowWrap:'anywhere'}}><small>{label}</small><br/><code>{value}</code></div>
+              <button type="button" className="xc-file-icon" aria-label={'Copy '+label} onClick={()=>void copy(label!,value)}><Copy size={17}/></button>
+            </div>)}
+          </details>
+        </div>
         <div className="xc-actions">
           {item.requested&&<button type="button" className="xc-button xc-secondary" disabled={busy}
             onClick={()=>void run(()=>api(path+'/'+item.id+'/dismiss',{}),'Restore request dismissed.')}>Dismiss request</button>}

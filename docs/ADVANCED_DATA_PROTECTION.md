@@ -1,4 +1,4 @@
-# Proposed Advanced Data Protection
+# Advanced Data Protection design and pilot
 
 Advanced Data Protection would be an optional account setting. It would separate signing in to the account from unlocking its protected data. The service currently encrypts file content and record payloads at rest with server-held keys. That protects an offline copy of the databases and allows authorized server-side reads. The proposal changes who can decrypt protected content.
 
@@ -33,11 +33,11 @@ Third-party apps never receive account keys. Apps with approved access can conti
 2. Pilot trusted devices and recovery with private files and app-backup snapshots. Enrollment, lost-device recovery, interrupted migration, key revocation and rollback need physical-device tests. Make the trust decision and migration state tamper-evident. Retain readable legacy content until the client verifies the migration and recovery path. Protection against the operator begins only after old server-readable copies and applicable backups are retired.
 3. Add scoped web approval once the native trust path and independent security review pass. Expand to app records with a documented opt-in compatibility policy, account by account.
 
-This is a design proposal. No protection mode is available through the current release. Key custody and user-facing recovery decisions precede any live migration.
+The isolated pilot implements parts of this design. Production accounts have no ADP mode. Key custody and verified recovery precede any live migration.
 
 ## Developer compatibility declaration
 
-The developer can declare support under their app's storage settings. This defaults to off and is available to owners of active secure registrations after confirmation. Changing the declaration does not migrate anything or grant access. The provider's eligibility check requires the live declaration and an active app link for the account. The future migration endpoint must use that check at commit time, recheck the account's own approval, and stop if an app withdraws compatibility. Existing protected ciphertext must remain recoverable by its owner if an app withdraws support.
+The developer can declare support under their app's storage settings. This defaults to off and is available to owners of active secure registrations after confirmation. Changing the declaration does not migrate anything or grant access. The production SDK has no ADP read or write API. The provider's eligibility check requires the live declaration and an active app link for the account. The future migration endpoint must use that check at commit time, recheck the account's own approval, and stop if an app withdraws compatibility. Existing protected ciphertext must remain recoverable by its owner if an app withdraws support.
 
 ### First implementation boundary
 
@@ -53,4 +53,4 @@ Pilot routes under /account/protected-vault are available only when AUTHNJS_SAND
 
 The pilot gives direct testing of the cryptographic and API boundaries. An account-manager interface with device-safe native key persistence, a verified recovery ceremony for reinstall and lost devices, revocation and key rotation, web session lock and approval notifications, and the SDK broker and verified migration workflow are still required before production opt-in.
 
-The testing branch adds signed device revocation. Another enrolled device confirms with a short-lived challenge, and the server removes outstanding requests tied to the revoked signer. This stops new approvals and protected writes by that signer. Key rotation and re-encryption are still required to deny access to new versions after a revoked device has retained a key. The sandbox is paused and no ADP mode is active in production.
+The pilot supports signed device revocation. Another enrolled device confirms with a short-lived challenge, and the server removes outstanding requests tied to the revoked signer. This stops new approvals and protected writes by that signer. Key rotation and re-encryption are still required to deny access to new versions after a revoked device has retained a key. The sandbox is paused and no ADP mode is active in production.

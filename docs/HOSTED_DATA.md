@@ -4,7 +4,7 @@ The identity service provides encrypted JSON storage for active registered apps.
 
 ## Namespaces and credentials
 
-An app's user access token needs the `app_data` scope. The server resolves its actual client and account from the provider, checks the active registration and current grant, and never accepts a caller-supplied owner. Public native clients use the same supported data scope with PKCE and verified HTTPS callbacks. Existing legacy saved-place APIs retain their separate confidential-client restriction.
+An app's user access token needs the `app_data` scope. The server resolves its actual client and account from the provider, checks the active registration and current grant, and never accepts a caller-supplied owner. Public native clients use the same supported data scope with PKCE and verified HTTPS callbacks.
 
 Administrator-verified publishers can create one-time backend keys from the application's database page after passkey confirmation. Only a SHA-256 digest is stored. A key is scoped to one app and its app-owned namespace. It cannot impersonate a user, access user-owned private records or another app's database. Keep it off mobile clients. Replacing or revoking the key takes effect on the next request. Locking/deleting the publisher, restricting/deleting the app or removing app verification disables app-owned database access and public reads.
 
@@ -49,7 +49,7 @@ The normal user-token route stores records in the owner's account container for 
 
 The existing encrypted records already carry the app and owner IDs, so this accounting change preserves IDs, revisions, permissions, payloads, and API paths. Existing records are counted under their owner immediately. Writes that increase usage are blocked when the corresponding quota is full. Reads and deletions remain available. Both namespaces share the encrypted SQLite storage engine. The account quota covers hosted records, account metadata, mail and files. This change does not relocate records to a different physical volume.
 
-Unlinking deletes that app's hosted records and saved places from the user's account, removes its incoming and outgoing grants and ends its account access. The publisher's service records and other users' records are outside that deletion. The app storage capacity editor in Administration changes the publisher service database quota. The developer page shows usage without providing a capacity editor.
+Unlinking deletes that app's hosted records and files from the user's account, removes its incoming and outgoing grants and ends its account access. The publisher's service records and other users' records are outside that deletion. The app storage capacity editor in Administration changes the publisher service database quota. The developer page shows usage without providing a capacity editor.
 
 ## Cross-app consent and read-only account folders
 
@@ -57,7 +57,7 @@ Cross-app requests are grouped under the linked publisher's name and current ico
 
 Developers can enable **Show this app’s data in the Files browser** in database settings for their own active, verified app. It is off by default. Linked accounts see the app name, icon and storage used. The app developer can open the folder and browse, download, create, edit or remove JSON records in the developer’s own account. Other linked accounts see usage only. Admin storage views show metadata and size. Service records and records owned by another user stay outside the folder. Turning the setting off also closes its content endpoints. Writes use the record revision and preserve existing sharing settings.
 
-The dashboard Permissions directory lists linked apps. Applications declare cross-app collection requests under their own registration and X-Center ID presents the eligible requests in sign-in and reauthorization. Incoming and outgoing sections show the other app and a switch for each request. The dashboard no longer creates arbitrary cross-app grants. Existing older saved-place grants can still be revoked. Active linked apps retain private user-container storage before verification; app-owned service storage still requires verification.
+The dashboard Permissions directory lists linked apps. Applications declare cross-app collection requests under their own registration and X-Center ID presents the eligible requests in sign-in and reauthorization. Incoming and outgoing sections show the other app and a switch for each request. The dashboard no longer creates arbitrary cross-app grants. Active linked apps retain private user-container storage before verification; app-owned service storage still requires verification.
 
 
 ## Developer permissions and configuration
@@ -76,3 +76,8 @@ Open a registered app and choose **Manage app storage** or **Manage sharing requ
 A request has `source` (source client ID), `collection`, and `label` (the title). Optional fields include `name`, `description`, and `icon` selected from `records`, `folder`, `photo`, `calendar`, `location`, `heart`, and `shield`. Service storage and publishing require app verification, as does showing app folders in Files. Profile changes retain the verified callback origin and require app re-verification. The document excludes credentials, app approvals, user grants, capacity and database contents. Import applies to the selected registration only. Activation and consent still use their own flows.
 
 The first-party configuration route is `GET /account/developer/apps/:id/configuration`, returning `{ configuration, revision }`. The portal sends that revision with the updated configuration in a first-party `PUT`, requiring a recent passkey confirmation and rejecting stale edits. Registration and data settings are committed together. OAuth relying parties continue to use the documented authorization and data endpoints.
+
+
+## Backups and encryption
+
+[App snapshots](APP_SNAPSHOTS.md) capture a linked user's records, files or a selected subset. They share unchanged stored data across snapshots and expose a backup ID and SHA-256 manifest fingerprint. [Encryption and ADP](https://id.xcenter.it/docs/encryption) describes standard storage and the protected-storage compatibility declaration.

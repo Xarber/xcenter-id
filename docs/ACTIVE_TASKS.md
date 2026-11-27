@@ -781,3 +781,12 @@ Production is on `b12b22b`, sandbox API on `a4e2e6d`, and SDK main on `57c4930`.
 **Source evidence.** 64 API checks, 21 dashboard checks, TypeScript, Expo web export and 16 UADS declarations passed.
 
 **Production.** `d09ca93` is live. The browser initiated conditional mediation and cancelled it when switching to QR. The live native review API rejected anonymous requests. The [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45982724771) is running. See the [operations record](operations/XCENTER_ID_PRODUCTION.md#27-november-native-device-review-and-passkey-autofill).
+
+### Backup fingerprints and developer reference
+
+- **AUTHN-186 — Implemented.** Backup create and list return the existing UUID and a versioned SHA-256 manifest fingerprint. Existing backups gain hashes on list. API coverage verified identical captures, changed captures, existing-row backfill, account isolation and restore. Web and native Backups expose copyable metadata.
+- **AUTHN-187 — Implemented.** Hosted Encryption and ADP distinguishes standard encryption, the inactive pilot and the compatibility declaration. Removed Saved Places from active guides and examples. Chrome verified the new routes and backup output across all five SDK language choices.
+
+The documentation review compared the live developer guide, language-switchable SDK catalog, SDK coverage matrix and maintained API index with snapshots, protection, native authorization, peer access, app settings and account controls. It filled the missing hosted encryption guide, snapshot management URL, account activity and connected-app sign-out, and stale resumable upload/trusted-scope guidance. Historical records and implemented compatibility routes were preserved.
+
+**Source evidence.** 64 API and 22 dashboard checks, Expo web export, TypeScript and structural UADS validation passed. SDK source and documentation updated at `146c4fd`.

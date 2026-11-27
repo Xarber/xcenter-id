@@ -18,7 +18,7 @@ function readLanguage(): Language {
 function referenceUrl(language:Language,entry?:Reference,group?:string){
   return root+(entry?'/'+entry.id:'')+'?lang='+language+(group?'#'+group:'');
 }
-const icons = {setup:Settings2, identity:KeyRound, profile:UserRound, data:Database, files:FolderOpen, components:Globe2, migration:Database, advanced:Code2};
+const icons = {setup:Settings2, identity:KeyRound, profile:UserRound, data:Database, files:FolderOpen, components:Globe2, advanced:Code2};
 const collections = Object.entries(groups).map(([group, label])=>({
   group:group as keyof typeof groups, label, entries:reference.filter(entry=>entry.group===group),
 }));

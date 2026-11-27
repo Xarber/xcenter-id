@@ -24,6 +24,10 @@ export function openAppSnapshots(db,{editable}) {
       id TEXT PRIMARY KEY, owner TEXT NOT NULL, client TEXT NOT NULL, version INTEGER NOT NULL,
       created INTEGER NOT NULL, bytes INTEGER NOT NULL, records INTEGER NOT NULL, files INTEGER NOT NULL, app_created INTEGER NOT NULL, selection TEXT NOT NULL
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS app_snapshot_hashes(
+      snapshot TEXT PRIMARY KEY REFERENCES app_snapshots(id) ON DELETE CASCADE,
+      sha256 TEXT NOT NULL
+    ) STRICT;
     CREATE TABLE IF NOT EXISTS app_snapshot_requests(
       snapshot TEXT PRIMARY KEY REFERENCES app_snapshots(id) ON DELETE CASCADE,
       requested INTEGER NOT NULL
@@ -54,8 +58,9 @@ export function openAppSnapshots(db,{editable}) {
   const enable=db.prepare(`INSERT INTO app_snapshot_policies VALUES(?,?,?,?)
     ON CONFLICT(client) DO UPDATE SET version=excluded.version,restore=excluded.restore,selection=excluded.selection`);
   const disable=db.prepare('DELETE FROM app_snapshot_policies WHERE client=?');
-  const list=db.prepare(`SELECT s.id,s.version,s.created,s.bytes,s.records,s.files,s.app_created AS appCreated,s.selection,r.requested
+  const list=db.prepare(`SELECT s.id,s.version,s.created,s.bytes,s.records,s.files,s.app_created AS appCreated,s.selection,r.requested,h.sha256
     FROM app_snapshots s LEFT JOIN app_snapshot_requests r ON r.snapshot=s.id
+    LEFT JOIN app_snapshot_hashes h ON h.snapshot=s.id
     WHERE s.owner=? AND s.client=? ORDER BY s.created DESC,s.id`);
   const count=db.prepare('SELECT count(*) AS total FROM app_snapshots WHERE owner=? AND client=?');
   const find=db.prepare('SELECT * FROM app_snapshots WHERE owner=? AND client=? AND id=?');
@@ -79,6 +84,21 @@ export function openAppSnapshots(db,{editable}) {
     AND t.committed=1 AND t.owner=f.owner AND t.client=f.client AND t.size=f.size
     WHERE f.owner=? AND f.client=?`);
   const fileRef=db.prepare('INSERT INTO app_snapshot_files VALUES(?,?,?,?,?,?,?)');
+  const fingerprintRecords=db.prepare('SELECT version FROM app_snapshot_records WHERE snapshot=? ORDER BY version');
+  const fingerprintFiles=db.prepare('SELECT id,content,size,created,browseable,metadata FROM app_snapshot_files WHERE snapshot=? ORDER BY id');
+  const saveFingerprint=db.prepare('INSERT OR IGNORE INTO app_snapshot_hashes SELECT id,? FROM app_snapshots WHERE id=?');
+  function fingerprint(id,version,selection){
+    const digest=createHash('sha256');
+    const item=value=>digest.update(JSON.stringify(value)+'\n');
+    item(['xcenter-app-snapshot-v1',version,JSON.parse(selection)]);
+    for(const row of fingerprintRecords.iterate(id))item(['record',row.version]);
+    for(const row of fingerprintFiles.iterate(id)){
+      item(['file',row.id,row.content,row.size,row.created,row.browseable,Buffer.from(row.metadata).toString('base64')]);
+    }
+    const sha256=digest.digest('hex');
+    saveFingerprint.run(sha256,id);
+    return sha256;
+  }
   const setTotals=db.prepare('UPDATE app_snapshots SET bytes=?,records=?,files=? WHERE id=?');
   const discardUnreferenced=db.prepare(`DELETE FROM file_transfers WHERE owner=? AND (? IS NULL OR client=?) AND committed=1
     AND NOT EXISTS(SELECT 1 FROM app_files WHERE id=file_transfers.id OR content_id=file_transfers.id)
@@ -126,7 +146,7 @@ export function openAppSnapshots(db,{editable}) {
     }
     if(remaining()<0)fail(409,'There is not enough account storage for this backup.');
     setTotals.run(bytes,records,files,id);
-    return {id,version,created,bytes,records,files,appCreated,requested:null,selection:selected};
+    return {id,sha256:fingerprint(id,version,selection),version,created,bytes,records,files,appCreated,requested:null,selection:selected};
   }
   return {
     policy:client=>policy.get(client),
@@ -136,7 +156,10 @@ export function openAppSnapshots(db,{editable}) {
       if(enabled)db.prepare('INSERT OR IGNORE INTO app_snapshot_permissions VALUES(?,?)').run(owner,client);
       else db.prepare('DELETE FROM app_snapshot_permissions WHERE owner=? AND client=?').run(owner,client);
     },
-    list:(owner,client)=>list.all(owner,client).map(item=>({...item,appCreated:!!item.appCreated,selection:JSON.parse(item.selection)})),
+    list:(owner,client)=>list.all(owner,client).map(item=>({...item,
+      sha256:item.sha256??fingerprint(item.id,item.version,item.selection),
+      appCreated:!!item.appCreated,selection:JSON.parse(item.selection),
+    })),
     requestRestore(owner,client,id,fail){
       const snapshot=find.get(owner,client,id);
       if(!snapshot)fail(404,'Backup unavailable.');

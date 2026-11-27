@@ -8,9 +8,7 @@ The secure boundaries are the authenticated account, active friendship identity,
 
 ## App data
 
-The first supported dataset is `saved-place.v1`. The operator registers publishers that have opted in under `friendRecordPublishers` in the protected issuer configuration. Entries use the publisher's registered client `id` and display `name`. The capability defaults off. Reported records include the place label and coordinates, visible to the owner before sharing. A recipient sees the current version of the selected place through Friends. Removing the grant, disconnecting the friendship, deleting the record, disabling its publisher or removing that publisher's approval removes access. App access tokens cannot authorize this route. Automated coverage uses synthetic owners and publishers. No production publisher was enabled.
-
-A 390 px Chrome run against an isolated HTTPS issuer verified invitation, sharing a seeded record from an opted-in publisher, recipient visibility, and removal from the recipient's view after revocation. API coverage also verified recipient isolation and re-friending. Installed native verification remains open.
+An app can share its own records with users who have linked the same app. Developers can also publish collections for consented cross-app reads. See [hosted app data and permissions](HOSTED_DATA.md) for the supported APIs.
 
 ## Friend import by linked apps
 

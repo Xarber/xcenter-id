@@ -42,7 +42,7 @@ export default function ApplicationStorage({id,admin=false}:{id:string;admin?:bo
  {state.canSetProtectedStorageSupport&&<fieldset className="xc-stack"><legend>Advanced Data Protection</legend>
    <label><input type="checkbox" role="switch" checked={state.protectedStorageSupport} disabled={busy}
      onChange={event=>act({action:'protected-storage-support',enabled:event.currentTarget.checked})}/> This app supports protected storage</label>
-   <p>Enable this only when your app can use protected data through the X-Center ID SDK. This declaration does not move anyone’s data.</p>
+   <p>This declares compatibility only. Advanced Data Protection is not available for production accounts.</p>
  </fieldset>}
  {state.canSetBackupPolicy&&<fieldset className="xc-stack"><legend>Account backups</legend>
  <label><input type="checkbox" role="switch" checked={backupEnabled} onChange={event=>setBackupEnabled(event.currentTarget.checked)}/> Allow users to make backups</label>

@@ -29,3 +29,14 @@ test('each records credential has a complete documented surface', () => {
     }
   }
 });
+
+test('backup reference exposes IDs and manifest fingerprints without the old product dataset',()=>{
+  const byId=new Map(reference.map(entry=>[entry.id,entry]));
+  const created=JSON.parse(byId.get('create-app-backup').output);
+  const listed=JSON.parse(byId.get('list-app-backups').output).snapshots[0];
+  assert.match(created.id,/^[0-9a-f-]{36}$/);
+  assert.match(created.sha256,/^[0-9a-f]{64}$/);
+  assert.deepEqual(listed,created);
+  assert.ok(byId.has('app-backup-management-url'));
+  assert.ok(!reference.some(entry=>entry.id.startsWith('saved-places-')));
+});

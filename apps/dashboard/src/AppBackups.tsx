@@ -1,6 +1,7 @@
 import {useEffect,useState} from 'react';
 import {Pressable,Switch,Text,View} from 'react-native';
 import {Ionicons} from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import {canRestore,type Backups} from './app-backups';
 import {nativeReauthenticate,nativeRequest} from './native-account';
 import {formatBytes} from './storage-summary';
@@ -8,6 +9,7 @@ import {useDialog} from './dialog-model';
 
 export default function AppBackups({client,back,token,colors}:{client:string;back:()=>void;token:string;colors:{ink:string;muted:string;accent:string;line:string}}){
   const [data,setData]=useState<Backups|null>(null),[busy,setBusy]=useState(false),[status,setStatus]=useState('');
+  const [details,setDetails]=useState<string|null>(null);
   const dialog=useDialog();
   const path='app-backups/'+encodeURIComponent(client);
   const api=(route:string,body?:object,method?:string)=>nativeRequest(route,token,body,method);
@@ -21,7 +23,7 @@ export default function AppBackups({client,back,token,colors}:{client:string;bac
     catch(error){setStatus(error instanceof Error?error.message:'Backup unavailable.');}
     finally{setBusy(false);}
   }
-  function button(label:string,action:()=>void,icon?:'archive-outline'|'trash-outline'){
+  function button(label:string,action:()=>void,icon?:'archive-outline'|'trash-outline'|'copy-outline'){
     return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={busy} onPress={action}
       style={{minHeight:44,minWidth:44,justifyContent:'center',alignItems:icon?'center':'flex-start',opacity:busy?0.5:1}}>
       {icon?<Ionicons name={icon} size={19} color={colors.accent}/>:<Text style={{color:colors.accent,fontWeight:'700'}}>{label}</Text>}
@@ -43,9 +45,14 @@ export default function AppBackups({client,back,token,colors}:{client:string;bac
     {data?.snapshots.map(item=>{
       const when=new Date(item.created).toLocaleString();
       return <View key={item.id} style={{flexDirection:'row',alignItems:'center',gap:8,borderColor:colors.line,borderBottomWidth:1}}>
-        <View style={{flex:1,paddingVertical:8}}><Text style={{color:colors.ink,fontWeight:'700'}}>{when}</Text>
+        <View style={{flex:1,minWidth:0,paddingVertical:8}}><Text style={{color:colors.ink,fontWeight:'700'}}>{when}</Text>
           {item.requested&&<Text style={{color:colors.muted}}>Restore requested by app</Text>}
-          <Text style={{color:colors.muted}}>{(item.selection.records!==null||item.selection.files!=='all')&&'Partial · '}{item.records} records · {item.files} files · {formatBytes(item.bytes)} · Version {item.version}</Text></View>
+          <Text style={{color:colors.muted}}>{(item.selection.records!==null||item.selection.files!=='all')&&'Partial · '}{item.records} records · {item.files} files · {formatBytes(item.bytes)} · Version {item.version}</Text>
+          {button(details===item.id?'Hide backup details':'Backup details',()=>setDetails(details===item.id?null:item.id))}
+          {details===item.id&&[['Backup ID',item.id],['SHA-256',item.sha256]].map(([label,value])=>value&&<View key={label} style={{flexDirection:'row',alignItems:'center',gap:4}}>
+            <View style={{minWidth:0,flex:1}}><Text style={{color:colors.muted}}>{label}</Text><Text selectable style={{color:colors.ink}}>{value}</Text></View>
+            {button('Copy '+label,()=>void Clipboard.setStringAsync(value).then(copied=>setStatus(copied?label+' copied.':'Could not copy '+label+'.')).catch(()=>setStatus('Could not copy '+label+'.')),'copy-outline')}
+          </View>)}</View>
         {item.requested&&button('Dismiss request',()=>void run(()=>api(path+'/'+item.id+'/dismiss',{}),'Restore request dismissed.'))}
         {canRestore(data.policy,item)&&button('Restore backup from '+when,()=>dialog('Restore this backup?',
           'This restores the included records and files. Data outside the backup scope stays in place.',[

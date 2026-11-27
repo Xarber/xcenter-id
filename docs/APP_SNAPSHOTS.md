@@ -31,6 +31,8 @@ Restored records receive fresh revisions. Existing visibility and recipients are
 | DELETE | `/v1/apps/{clientId}/backups/{id}` | `{ok:true}`, for an app-created snapshot |
 | POST | `/v1/apps/{clientId}/backups/{id}/restore` | 202 with `{pending:true}` |
 
-Snapshot descriptors include `id`, `version`, `created` (Unix milliseconds), `bytes`, `records`, `files`, `appCreated` `requested` (Unix milliseconds or null), and `selection`. JavaScript exposes `user.appBackups` with `list`, `create`, `delete`, `requestRestore` and `managementURL`. Swift, Kotlin and Dart offer `listAppBackups`, `createAppBackup`, `deleteAppBackup`, and `requestAppBackupRestore`.
+Snapshot descriptors include `id` (UUID), `sha256` (64 lowercase hex characters), `version`, `created` (Unix milliseconds), `bytes`, `records`, `files`, `appCreated`, `requested` (Unix milliseconds or null), and `selection`. JavaScript exposes `user.appBackups` with `list`, `create`, `delete`, `requestRestore` and `managementURL`. Swift, Kotlin and Dart offer `listAppBackups`, `createAppBackup`, `deleteAppBackup`, and `requestAppBackupRestore`.
 
-Snapshots use the existing server-managed encryption. See the [Advanced Data Protection proposal](ADVANCED_DATA_PROTECTION.md) for a future device-managed alternative.
+Use `id` as the identity for an individual backup and for API actions. Use `sha256` to compare captured manifests within one account and app. The digest covers the compatibility version, record and file selection, stored record versions and committed file references with captured metadata in deterministic order. It excludes the backup ID, capture time, creator flag and pending restore status. Matching stored versions and policy can have the same hash under distinct IDs. Changing a captured version or policy changes the hash. This value fingerprints the logical manifest and differs from a file's byte SHA-256. It is calculated for existing snapshots on first list.
+
+Snapshots use standard server-managed encryption. See [encryption and Advanced Data Protection](https://id.xcenter.it/docs/encryption) for current guarantees and pilot status.

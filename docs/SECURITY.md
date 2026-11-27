@@ -11,7 +11,9 @@ The static review covered the legacy file save, upload, move, remove, list and d
 
 ## Encryption boundaries
 
-Saved-place payloads use a versioned AES-256-GCM envelope with a fresh 96-bit nonce and a 128-bit tag. Authenticated context includes account, source app, dataset, record ID and revision. Moving ciphertext between records or using a different key fails authentication. Schema version, owner and app IDs, grants and revisions remain relational metadata. Restrict filesystem access and encrypt database volumes and backups when that metadata needs confidentiality. This is server-side encryption at rest. The service can read authorized payloads. Key rotation, key version custody, disaster recovery and metadata encryption require completion before production.
+Standard hosted record payloads and file contents use authenticated AES-256-GCM encryption managed by the server. The authenticated context binds each payload to its permitted account or app namespace and record or file context. Quota information, identifiers, access indexes and routing metadata may remain visible to the service. Restrict deployment key material, database access and backup access independently.
+
+Advanced Data Protection is an opt-in design with a separately gated pilot. Production accounts use standard encryption. Current developer and recovery status is documented in [Encryption and ADP](https://id.xcenter.it/docs/encryption) and the [pilot design](ADVANCED_DATA_PROTECTION.md).
 
 The legacy code and pages are retained in Git history. Treat private historical backups as restricted material. Before a live migration, determine whether any historical key, session, account record or archive remains sensitive or in use. The account artifact provenance and exploitability of the original handlers were not established by this review.
 

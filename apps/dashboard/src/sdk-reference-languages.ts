@@ -465,33 +465,6 @@ native['native-backend-handoff'] = {
   ],'try await browser.authorizeWithPickup(\n    browserURL: attempt.url, backendOrigin: backendOrigin\n) {\n    try await redeemAndSaveProductSession(attempt)\n}',undefined,'The authentication sheet closes after the callback closure succeeds. Handle cancellation in the pickup flow.'),
 };
 
-native['saved-places-client'] = {
-  swift:snippet('XCenterSavedPlaces(clientId:accessToken:)',[appIDArg,userToken],
-    'import XCenterIDServer\n\nlet places = XCenterSavedPlaces(clientId: clientID) {\n    try await tokenSource.accessToken()\n}', 'Legacy saved-places adapter ready.'),
-  kotlin:snippet('XCenterSavedPlaces(accessToken: () -> String)',[userToken],
-    'import it.xcenter.id.server.XCenterSavedPlaces\n\nval places = XCenterSavedPlaces { tokenSource.accessToken() }','Legacy saved-places adapter ready.'),
-  dart:snippet('XCenterSavedPlaces(accessToken, {http.Client? transport})',[
-    userToken,argument('transport','http.Client?','Optional HTTP client. close() releases the transport.'),
-  ],'final places = XCenterSavedPlaces(tokenSource.accessToken);','Legacy saved-places adapter ready.'),
-};
-for(const method of ['list','create','update','delete'] as const){
-  const list=method==='list', update=method==='update', write=update||method==='create';
-  const base=list?[argument('source','String?','Optional delegated source registration.'),argument('after','String?','Continue with the previous page’s nextCursor.')]:method==='create'?[]:[idArg];
-  const swiftArgs:Args=[...base,...(update?[rev('Int')]:[]),...(write?[argument('place','XCenterSavedPlaces.Place','Contains label, latitude and longitude in decimal degrees.')]:[])];
-  const kotlinArgs:Args=[...base,...(update?[rev('Long')]:[]),...(write?[argument('place','JSONObject','Contains label, latitude and longitude in decimal degrees.')]:[])];
-  const dartArgs:Args=[...base,...(update?[rev('int')]:[]),...(write?[argument('place','Map<String, Object?>','Contains label, latitude and longitude in decimal degrees.')]:[])];
-  const inputsSwift=list?'after: cursor':write?(update?'id, revision: revision, place: ':'')+'.init(label: "Central station", latitude: 45.48, longitude: 9.20)':'id';
-  const inputsKotlin=list?'after = cursor':write?(update?'id, revision, ':'')+'JSONObject().put("label", "Central station").put("latitude", 45.48).put("longitude", 9.20)':'id';
-  const inputsDart=list?'after: cursor':write?(update?'id, revision, ':'')+"{'label': 'Central station', 'latitude': 45.48, 'longitude': 9.20}":'id';
-  const swiftSignature=list?'list(source: String? = nil, after: String? = nil)':update?'update(_ id: String, revision: Int, place: Place)':write?'create(_ place: Place)':'delete(_ id: String)';
-  const kotlinSignature=list?'list(source: String? = null, after: String? = null)':update?'update(id: String, revision: Long, place: JSONObject)':write?'create(place: JSONObject)':'delete(id: String)';
-  const dartSignature=list?'list({String? source, String? after})':update?'update(String id, int revision, Map<String, Object?> place)':write?'create(Map<String, Object?> place)':'delete(String id)';
-  native['saved-places-'+method]={
-    swift:snippet(swiftSignature+' async throws → Data',swiftArgs,'let bytes = try await places.'+method+'('+inputsSwift+')',undefined,nativeBytes.swift),
-    kotlin:snippet(kotlinSignature+': JSONObject',kotlinArgs,'val result = withContext(Dispatchers.IO) {\n    places.'+method+'('+inputsKotlin+')\n}',undefined,'Use the JVM server module and run requests on an IO dispatcher.'),
-    dart:snippet(dartSignature+' → Future<Uint8List>',dartArgs,'final bytes = await places.'+method+'('+inputsDart+');',undefined,nativeBytes.dart),
-  };
-}
 native['issuer-scopes']={
   swift:snippet('XCenterOAuth.supportedScopes: Set<String>',[],
     'let requested = ["openid", "files_read"].filter(XCenterOAuth.supportedScopes.contains)', '{"requested":["openid","files_read"]}'),
@@ -779,3 +752,13 @@ for(const [id,method,withId] of [
     method+(withId?'(String id)':'()'),
   ],withId?[idArg]:[],[method+(withId?'(id)':'()'),method+(withId?'(id)':'()'),method+(withId?'(id)':'()')]);
 }
+
+
+native['app-backup-management-url']={
+  swift:snippet('URL appendingPathComponent', [appIDArg],
+    'let url = issuer.appendingPathComponent("apps").appendingPathComponent(clientID).appendingPathComponent("backups")'),
+  kotlin:snippet('Uri.Builder.appendPath', [appIDArg],
+    'val url = issuer.buildUpon().appendPath("apps").appendPath(clientId).appendPath("backups").build()'),
+  dart:snippet('Uri.replace(pathSegments:)', [appIDArg],
+    "final url = issuer.replace(pathSegments: ['apps', clientId, 'backups']);"),
+};

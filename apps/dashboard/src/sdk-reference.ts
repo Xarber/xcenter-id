@@ -1,4 +1,4 @@
-export const sdkSource = 'https://github.com/Xarber/xcenter-id-sdk/tree/57c4930abe34003dfb74923ec823ef6245a985ce';
+export const sdkSource = 'https://github.com/Xarber/xcenter-id-sdk/tree/146c4fd9d49f18f8a15b114dcffe78e49038d7c7';
 
 export const groups = {
   setup: 'Setup & configuration',
@@ -7,7 +7,6 @@ export const groups = {
   data: 'Records & storage',
   files: 'Files & folders',
   components: 'Account components',
-  migration: 'Saved places migration',
   advanced: 'Transport & errors',
 } as const;
 
@@ -317,38 +316,6 @@ const components: Reference[] = [
     example:'<AccountOverview profile={profile} clientId={clientId}\n  iosBackendSignIn={{begin: prepareProofBoundSignIn}}\n  onSignOut={clearProductSession} />',output:'After approval the sign-in sheet closes and Settings shows the signed-in profile.',related:'create-server-oauth'},
 ];
 
-const migration: Reference[] = [{
-  group:'migration',id:'saved-places-client',title:'Connect to historical saved places',signature:'createSavedPlacesClient(options) → {list, create, update, delete}',
-  description:'Compatibility client for a legacy dataset used by existing integrations. Use app-owned record collections for new product data. The migration surface uses an authorized user token.',
-  access:'Confidential registration · delegated app_data',flow:['Existing migration integration','Use delegated user credential','Read or migrate saved places'],
-  args:[['getAccessToken','() => string | Promise<string>','Returns the current authorized user token.'],fetchOption],
-  example:'import {createSavedPlacesClient} from "@xcenter-id/server";\n\nconst places = createSavedPlacesClient({getAccessToken});',output:'{list, create, update, delete}',
-  variants:'Use XCenterSavedPlaces from the Swift, Kotlin, or Dart server module.',related:'saved-places-list',
-}];
-const placeWrite = [
-  ['body.label','string','Human-readable place name.'],
-  ['body.latitude','number','Latitude in decimal degrees, from -90 through 90.'],
-  ['body.longitude','number','Longitude in decimal degrees, from -180 through 180.'],
-] as const;
-const place = '{"id":"'+mockId+'","label":"Central station","latitude":45.48,"longitude":9.20,"revision":1}';
-for(const action of recordActions){
-  const legacyAction=action==='get'?'create':action==='put'?'update':action;
-  const list=legacyAction==='list';
-  const create=legacyAction==='create';
-  const update=legacyAction==='update';
-  const title=legacyAction[0].toUpperCase()+legacyAction.slice(1);
-  migration.push({group:'migration',id:'saved-places-'+legacyAction,title:title+(list?' saved places':' a saved place'),
-    signature:'places.'+legacyAction+'('+(list?'options?':create?'body, options?':update?'id, body, options':'id, options?')+')',
-    description:list?'Read the migration dataset page. Pass the returned nextCursor as after to resume.':create?'Insert one saved place into the legacy dataset.':update?'Replace label and coordinates after reading the current revision.':'Delete a legacy saved place by ID.',
-    access:'Confidential registration · delegated app_data',
-    flow:['Historical saved-place dataset',title+' through migration API',list?'Place list and cursor':legacyAction==='delete'?'Deletion confirmation':'Stored place and revision'],
-    args:[...(list?[['options.source?','string','Optional exported source client for a consented read.'] as const,['options.after?','string','Previous page’s nextCursor.'] as const]:create?[]:[recordId]),
-      ...(create||update?placeWrite:[]),...(update?[revision]:[]),signal],
-    example:'const result = await places.'+legacyAction+'('+(list?'':create?'{label:"Central station", latitude:45.48, longitude:9.20}':update?'current.id, {label:"Central station", latitude:45.48, longitude:9.20}, {revision:current.revision}':'current.id')+');',
-    output:list?page(place):legacyAction==='delete'?'{"deleted":true}':update?place.replace('"revision":1','"revision":2'):place,
-    variants:'Swift uses typed XCenterSavedPlaces.Place for mutation. Kotlin/JVM and Dart take their platform JSON object or map. '+platformData,related:'saved-places-client'});
-}
-
 const advanced: Reference[] = [
   {group:'advanced',id:'create-transport',title:'Construct a low-level transport',signature:'createTransport(options?) → request(path, options?)',description:'Builds an issuer-pinned request adapter. The named SDK methods provide the usual route and permission handling. Use this helper only for an explicitly documented issuer API.',
     flow:['Issuer-relative route','Send JSON or binary request','Decode response or throw XCenterError'],
@@ -599,23 +566,31 @@ const containerFiles: Reference[] = [
     example:"const result = await user.appFiles.delete(id);",output:"{\"ok\":true}",related:"list-app-files"},
 ];
 
+const backupId = ['id', 'string', 'Backup UUID returned by create or list. Use this ID for restore and deletion.'] as const;
+const sampleBackup = {id:mockId,sha256:'c6470efbb3fc69c2047a08059f8587fd8183c01fcbd2196683e4b6bc6b463b70',version:1,
+  created:1795776000000,bytes:2050,records:1,files:1,appCreated:true,requested:null,selection:{records:['settings'],files:'editable'}};
+
 const appBackup:Reference[]=[
   {group:'files',id:'list-app-backups',title:'List app backups',signature:'user.appBackups.list(options?)',
-    description:'List snapshots in the signed-in account’s app container. The developer must opt in and the account owner must separately allow the app to request backups. Inspect the selection and requested fields to see the restore scope and pending request.',
+    description:'List snapshots in the signed-in account’s app container. The developer must opt in and the account owner must separately allow the app to request backups. Every snapshot includes its UUID (id), SHA-256 manifest fingerprint (sha256), version, time, logical size, record and file counts, creator flag, pending restore timestamp and selection.',
     access:'app_data and the account’s backup permission',args:[signal],flow:['Linked app token','Check backup permission','Snapshot descriptors'],
-    example:'const {snapshots} = await user.appBackups.list();',output:JSON.stringify({policy:{version:1,restore:true,selection:{records:['settings'],files:'editable'}},allowApp:true,snapshots:[]}),related:'create-app-backup'},
+    example:'const {snapshots} = await user.appBackups.list();',output:JSON.stringify({policy:{version:1,restore:true,selection:{records:['settings'],files:'editable'}},allowApp:true,snapshots:[sampleBackup]},null,2),related:'create-app-backup'},
   {group:'files',id:'create-app-backup',title:'Create an app backup',signature:'user.appBackups.create(options?)',
-    description:'Capture eligible committed records and files under the developer’s backup policy. Unchanged file content shares physical storage across the live container and all snapshots.',
-    access:'app_data and the account’s backup permission',args:[signal],flow:['App requests snapshot','Capture matching versions','New snapshot ID'],
-    example:'const snapshot = await user.appBackups.create();',output:JSON.stringify({id:mockId,version:1,created:1795776000000,bytes:2050,records:1,files:1,appCreated:true,requested:null,selection:{records:['settings'],files:'editable'}}),related:'request-app-backup-restore'},
+    description:'Capture eligible committed records and files under the developer’s backup policy. Unchanged file content shares physical storage across the live container and all snapshots. Matching manifests share a fingerprint. Each backup still has its own ID for restore or deletion.',
+    access:'app_data and the account’s backup permission',args:[signal],flow:['App requests snapshot','Capture matching versions','New snapshot ID and SHA-256'],
+    example:'const snapshot = await user.appBackups.create();',output:JSON.stringify(sampleBackup,null,2),related:'request-app-backup-restore'},
   {group:'files',id:'delete-app-backup',title:'Delete an app-created backup',signature:'user.appBackups.delete(id, options?)',
     description:'Remove a snapshot created by this app. The account owner manages manually created snapshots. Content retained by another snapshot or the live container remains available.',
-    access:'app_data and the account’s backup permission',args:[fileId,signal],flow:['App snapshot ID','Check ownership','Remove snapshot'],
+    access:'app_data and the account’s backup permission',args:[backupId,signal],flow:['App snapshot ID','Check ownership','Remove snapshot'],
     example:'await user.appBackups.delete(id);',output:ok,related:'list-app-backups'},
   {group:'files',id:'request-app-backup-restore',title:'Request an app backup restore',signature:'user.appBackups.requestRestore(id, options?)',
     description:'Ask the account owner to restore a compatible snapshot. Open the shared dashboard with user.appBackups.managementURL() or /apps/{clientId}/backups on the issuer. The owner reviews and confirms the request there.',
-    access:'app_data and the account’s backup permission',args:[fileId,signal],flow:['Compatible snapshot','Request user confirmation','Pending restore'],
+    access:'app_data and the account’s backup permission',args:[backupId,signal],flow:['Compatible snapshot','Request user confirmation','Pending restore'],
     example:'await user.appBackups.requestRestore(id);\nconst reviewURL = user.appBackups.managementURL();',output:'{"pending":true}',related:'list-app-backups'},
+  {group:'files',id:'app-backup-management-url',title:'Open the app backups page',signature:'user.appBackups.managementURL() → URL',
+    description:'Build a link to the linked account’s backup page. Open it so the user can inspect their snapshots, approve a pending restore or delete old snapshots.',
+    flow:['Registered client ID','Build first-party dashboard link','User reviews their app backups'],args:[],
+    example:'const reviewUrl = user.appBackups.managementURL();',output:'https://id.xcenter.it/apps/CLIENT_ID/backups',related:'request-app-backup-restore'},
 ];
 
-export const reference: readonly Reference[] = [...setup,...identity,...profile,...data,...files,...components,...migration,...advanced,...accountAndTransport,...containerFiles,...appBackup];
+export const reference: readonly Reference[] = [...setup,...identity,...profile,...data,...files,...components,...advanced,...accountAndTransport,...containerFiles,...appBackup];

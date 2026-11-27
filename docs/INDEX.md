@@ -6,7 +6,7 @@ X-Center ID is a passkey-first identity and consent service with an Expo account
 - [Binary files in app storage](APP_CONTAINER_FILES.md) describes uploads, visibility, quotas and recursive folder sizes.
 - [Legacy code review](LEGACY_REVIEW.md) inventories the runtime, user flows, data model, integrations and findings.
 - [Replacement API](API.md) documents routes, deployment configuration and API gaps.
-- [Proposed Advanced Data Protection](ADVANCED_DATA_PROTECTION.md) describes opt-in trusted-device keys, recovery, web approval and app compatibility.
+- [Advanced Data Protection design and pilot](ADVANCED_DATA_PROTECTION.md) describes opt-in trusted-device keys, recovery, web approval and app compatibility.
 - [Security findings](SECURITY.md) covers file boundaries and encryption.
 - [Redevelopment plan](AUTHNJS_REDEVELOPMENT_PLAN.md) describes the planned passwordless identity service, Expo SDK and data-sharing contract.
 - [Dashboard development and testing](DASHBOARD.md) explains the Expo entry point, data isolation and checks.

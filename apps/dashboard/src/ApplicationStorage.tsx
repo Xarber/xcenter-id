@@ -40,7 +40,7 @@ export default function ApplicationStorage({id,token,colors,admin=false,back}:{i
  })}
  {data.canSetProtectedStorageSupport&&<View style={{gap:8}}>
    <Text accessibilityRole="header" style={{color:colors.ink,fontWeight:'700'}}>Advanced Data Protection</Text>
-   <Text style={{color:colors.muted}}>Declare compatibility only after your app can use protected data through X-Center ID.</Text>
+   <Text style={{color:colors.muted}}>This declares compatibility only. Advanced Data Protection is not available for production accounts.</Text>
    <Switch accessibilityLabel="This app supports protected storage" value={data.protectedStorageSupport}
      onValueChange={enabled=>void change({action:'protected-storage-support',enabled})}/>
  </View>}

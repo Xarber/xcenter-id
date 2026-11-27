@@ -59,7 +59,7 @@ Sources: [OAuth Security BCP](https://www.rfc-editor.org/rfc/rfc9700.html), [OAu
 
 ### Cross-app data contract
 
-Start with a typed record such as `saved-place.v1`. A source app publishes a minimal schema-compatible record with its provenance. A destination app requests read access to that dataset. The hosted consent screen shows the source app, destination app, exact data and permitted operation. After approval, the destination can display or import matching records without a direct integration with the source app.
+A source app publishes a minimal schema-compatible record in an app-owned collection, with its provenance. A destination app requests read access to that dataset. The hosted consent screen shows the source app, destination app, exact data and permitted operation. After approval, the destination can display or import matching records without a direct integration with the source app.
 
 - Store each grant with owner, source client, destination client, dataset/schema version, permitted operations, duration and revocation state. Resolve the caller from validated credentials, check ownership and live grant state at every request, and deny access whenever the policy cannot be evaluated. A general sign-in scope carries zero app-data access. Default grants to read-only. Writing into another app is a separately approved operation with explicit schema and conflict rules.
 - Track opaque resource IDs, schema version, revision, provenance and timestamps. Validate stored and returned fields with explicit allowlists. Use transactional writes, idempotency keys, version preconditions and quotas. Partition by account and app. Add binary attachments only if needed, with a separate validated access path and short-lived download authorization.
