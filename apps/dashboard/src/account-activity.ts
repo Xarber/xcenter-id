@@ -1,6 +1,6 @@
 export type ActivityEvent = {
   id:number;
-  kind:'sign-in'|'linked'|'permissions'|'unlinked';
+  kind:'sign-in'|'linked'|'permissions'|'unlinked'|'app-sign-out';
   subject:string|null;
   created:number;
   detail:null|{added?:string[];removed?:string[];sharedData?:boolean};
@@ -11,6 +11,7 @@ export const activityTitle:Record<ActivityEvent['kind'],string>={
   linked:'App linked',
   permissions:'App permissions changed',
   unlinked:'App unlinked',
+  'app-sign-out':'Signed out of connected apps',
 };
 
 const permissions:Record<string,string>={

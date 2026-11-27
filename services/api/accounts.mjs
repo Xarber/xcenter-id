@@ -1118,6 +1118,24 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       return q(`SELECT g.grant_id AS id FROM app_link_grants g JOIN connected_apps c ON c.owner=g.owner AND c.client=g.client
         WHERE g.owner=? AND g.client=? ORDER BY g.rowid DESC LIMIT 1`).get(owner,client)?.id;
     },
+    linkGrants(owner) {
+      return q('SELECT client,grant_id AS id FROM app_link_grants WHERE owner=? ORDER BY rowid').all(owner);
+    },
+    replaceLinkGrants(owner,expected,replacements) {
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        const live=q('SELECT client,grant_id AS id FROM app_link_grants WHERE owner=? ORDER BY rowid').all(owner);
+        if(!available(owner)||JSON.stringify(live)!==JSON.stringify(expected)){
+          db.exec('ROLLBACK');
+          return false;
+        }
+        for(const {client} of expected)q('INSERT OR IGNORE INTO app_disconnects VALUES(?,?)').run(owner,client);
+        q('DELETE FROM app_link_grants WHERE owner=?').run(owner);
+        for(const {client,id} of replacements)q('INSERT INTO app_link_grants VALUES(?,?,?)').run(owner,client,id);
+        db.exec('COMMIT');
+        return true;
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    },
     disconnect(owner,client) {
       db.exec('BEGIN IMMEDIATE');
       try {

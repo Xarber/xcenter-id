@@ -78,6 +78,21 @@ export function openOidcStore(path, key) {
         return !!grant;
       } catch(error) { db.exec('ROLLBACK'); throw error; }
     }
+    copyGrant(id,replacement,owner,client) {
+      const time=now();
+      const row=get.get('Grant',id,time);
+      const grant=decode(row);
+      if(!grant||grant.accountId!==owner||grant.clientId!==client)return false;
+      const selection=get.get('ClaimSelection',id,time);
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        put.run('Grant',replacement,null,null,null,row.expires,encode('Grant',replacement,{...grant,jti:replacement}));
+        if(selection)put.run('ClaimSelection',replacement,null,null,null,selection.expires,
+          encode('ClaimSelection',replacement,decode(selection)));
+        db.exec('COMMIT');
+        return true;
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    }
     async destroy(id) { rm.run(this.model,id); }
     async revokeByGrantId(id) { revoke.run(this.model,id); }
   };

@@ -380,6 +380,13 @@ export default function NativeSections({ section,token,account,colors,reload,exp
           <View style={{flexShrink:1,gap:4}}><Text style={{color:colors.ink,fontWeight:'700'}}>{app.label}</Text><TrustBadges kind="app" verified={app.verified} color={colors.ink}/></View></View>
           {button('Manage permissions',()=>{setPermissionClient(app.client);navigate('permissions');})}
           {button('Unlink app',()=>confirm('Unlink '+app.label+'?','This ends the app’s access and permanently deletes the copies it saved in your X-Center ID account.',()=>run(()=>mutate('connected-apps/unlink',{client:app.client}),'App unlinked.')))}</View>)}
+        {!!apps.length&&button('Sign out of connected apps',()=>confirm('Sign out of all connected apps?',
+          'Your links, permissions and stored data are kept. Apps may ask you to sign in again.',
+          ()=>run(async()=>{
+            if(!(await api('session/access')).confirmed&&!await nativeReauthenticate(token))return;
+            await api('connected-apps/sign-out',{});
+            setStatus('Connected app access ended.');
+          })))}
         {button('Manage developer apps',()=>navigate('developer'))}<ListPages state={appsPage} label="Authorized apps" colors={colors}/></>;
       break;
     case 'developer':

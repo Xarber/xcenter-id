@@ -10,7 +10,7 @@ import type { AppFileContainer as Container } from './account-file-containers';
 import TrustBadges from './TrustBadges.web';
 import AdminStorageVolumes from './AdminStorageVolumes.web';
 import AppIcon from './AppIcon.web';
-import Reauthenticate from './Reauthenticate.web';
+import Reauthenticate,{confirmIdentity} from './Reauthenticate.web';
 import { AdminAccounts, IconAction } from './AdminUsers.web';
 import { AdminUsernameChanges } from './UsernameChange.web';
 import { AdminSupport } from './Support.web';
@@ -512,6 +512,7 @@ function AdminContent() {
 }
 
 export function ConnectedApps() {
+  const confirmAction=useConfirmDialog();
   const [apps,setApps]=useState<{client:string;label:string;updated:number;icon?:string;verified?:boolean}[]|null>(null);
   const page=useListPage(apps?.length??0);
   const [status,setStatus]=useState('');
@@ -533,6 +534,17 @@ export function ConnectedApps() {
           :<button className="xc-button xc-secondary" disabled={busy} onClick={()=>setConfirm(item.client)}>Unlink app</button>}
       </div></div>)}
     <ListPages state={page} label="Authorized apps"/>
+    {!!apps?.length&&<button type="button" className="xc-button xc-secondary" disabled={busy} onClick={async()=>{
+      if(busy||!await confirmAction('Sign out of all connected apps?','Sign out','Your links, permissions and stored data are kept. Apps may ask you to sign in again.',false))return;
+      setBusy(true);
+      setStatus('');
+      try{
+        if(!(await api('session/access')).confirmed)await confirmIdentity();
+        await api('connected-apps/sign-out',{});
+        setStatus('Connected app access ended.');
+      }catch(error){setStatus(notice(error));}
+      finally{setBusy(false);}
+    }}>Sign out of connected apps</button>}
     {status&&<p role="status">{status}</p>}
   </div>;
 }

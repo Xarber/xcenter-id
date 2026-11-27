@@ -26,6 +26,12 @@ test('registered device flow confirms linking and issues a single nonce-bound to
     },
     grantAllowed:(owner,client,id)=>links.get(owner+':'+client)===id,
     linkedGrant:(owner,client)=>links.get(owner+':'+client),
+    linkGrants:owner=>[...links].filter(([name])=>name.startsWith(owner+':')).map(([name,id])=>({client:name.slice(owner.length+1),id})),
+    replaceLinkGrants:(owner,expected,replacements)=>{
+      for(const {client} of expected)links.delete(owner+':'+client);
+      for(const {client,id} of replacements)links.set(owner+':'+client,id);
+      return true;
+    },
     available:()=>true, allowsMutation:req=>req.headers.origin===issuer, recentlyConfirmed:()=>true,adminStatus:()=>403,
     rememberApp:(owner,client,_label,id)=>links.set(owner+':'+client,id), premiumEligible:()=>false,
   };
@@ -321,7 +327,7 @@ test('registered device flow confirms linking and issues a single nonce-bound to
     {
       const remoteClient=await register('Remote browser approval',true);
       const remoteState=randomBytes(32).toString('base64url');
-      const remoteParams=new URLSearchParams({...Object.fromEntries(browserParams),client_id:remoteClient.clientId,state:remoteState});
+      const remoteParams=new URLSearchParams({...Object.fromEntries(browserParams),client_id:remoteClient.clientId,state:remoteState,scope:'openid offline_access',prompt:'consent'});
       cookies.clear();
       selected=null;
       const start=await http('/auth?'+remoteParams,{browser:true});
@@ -341,7 +347,7 @@ test('registered device flow confirms linking and issues a single nonce-bound to
       assert.match(remoteReview,/@example/);
       const proof=remoteReview.match(/name="review_proof" value="([^"]+)"/)?.[1];
       assert.ok(proof);
-      const confirm={action:'approve',qr_code:code,review_proof:proof};
+      const confirm={action:'approve',qr_code:code,review_proof:proof,permission:'offline_access'};
       assert.equal((await http(scanned,{form:confirm})).status,403);
       assert.equal((await http(scanned,{scan:true,form:{...confirm,qr_code:code==='000000'?'111111':'000000'}})).status,409);
       selected=second;
@@ -367,6 +373,24 @@ test('registered device flow confirms linking and issues a single nonce-bound to
       }});
       assert.equal(redemption.status,200,await redemption.clone().text());
       assert.ok(accounts.linkedGrant(current.owner,remoteClient.clientId));
+      const approved=await redemption.json();
+      assert.ok(approved.refresh_token);
+      const oldGrant=accounts.linkedGrant(current.owner,remoteClient.clientId);
+      const otherGrant=accounts.linkedGrant(second.owner,webClient.clientId);
+      assert.equal(await provider.endAppSessions(current.owner,()=>false),false);
+      assert.equal(accounts.linkedGrant(current.owner,remoteClient.clientId),oldGrant);
+      assert.equal(await provider.endAppSessions(current.owner,()=>true),true);
+      assert.notEqual(accounts.linkedGrant(current.owner,remoteClient.clientId),oldGrant);
+      assert.equal(accounts.linkedGrant(second.owner,webClient.clientId),otherGrant);
+      assert.ok((await provider.connectedPermissions(current.owner,remoteClient.clientId)).some(item=>item.scope==='profile'&&item.enabled));
+      const rejected=await fetch('http://127.0.0.1:'+server.address().port+'/me',{
+        headers:{'x-forwarded-host':'id.example.test','x-forwarded-proto':'https',authorization:'Bearer '+approved.access_token},
+      });
+      assert.equal(rejected.status,401);
+      const refresh=await http('/token',{form:{client_id:remoteClient.clientId,grant_type:'refresh_token',refresh_token:approved.refresh_token}});
+      assert.equal(refresh.status,400);
+      assert.equal((await refresh.json()).error,'invalid_grant');
+
     }
 
   } finally {

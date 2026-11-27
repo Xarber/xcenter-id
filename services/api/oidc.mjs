@@ -730,6 +730,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       else{grant.rejectOIDCScope([scope]);current.delete(scope);}
       if(!accounts.grantAllowed(owner,client,linked)) return null;
       await grant.save();
+      if(!accounts.grantAllowed(owner,client,linked))return null;
       if(changed)notify(owner,client,'permissions',enabled?{added:[scope]}:{removed:[scope]});
     }
     return accountPermissions.filter(scope=>scope==='profile'||encountered.has(scope)||scope!=='app_data'&&required(scope)).map(scope=>({
@@ -765,6 +766,30 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         clientId:client_id, clientSecret:client_secret,
         discard: () => clientsStorage.destroy(client_id),
       };
+    },
+    async endAppSessions(owner,authorized) {
+      const expected=accounts.linkGrants(owner);
+      const replacements=[];
+      let committed=false;
+      try{
+        for(const client of new Set(expected.map(item=>item.client))){
+          const id=accounts.linkedGrant(owner,client);
+          const replacement=randomBytes(32).toString('base64url');
+          if(id&&grantStorage.copyGrant(id,replacement,owner,client))replacements.push({client,id:replacement});
+        }
+        if(!authorized()||!accounts.replaceLinkGrants(owner,expected,replacements))return false;
+        committed=true;
+        await Promise.all(expected.map(async ({id})=>{
+          await revokeGrant(id);
+          await selections.destroy(id);
+        }));
+        return true;
+      }finally{
+        if(!committed)await Promise.all(replacements.map(async ({id})=>{
+          await grantStorage.destroy(id);
+          await selections.destroy(id);
+        }));
+      }
     },
     async unlink(owner,client) {
       const grants=accounts.disconnect(owner,client);

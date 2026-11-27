@@ -85,3 +85,7 @@ The QR ticket expires after three minutes or with the issuer interaction, whiche
 ## Account activity
 
 Open **Sign-in & security** and select **View activity**. Recent account events include dashboard sign-in, app linking and unlinking, and permission changes made through the issuer. Events show the app or device label, timestamp, and scopes added or removed where available. Account owners see up to 100 events from the previous 90 days. Older events are evicted on new activity, and account deletion removes its activity. The log never includes tokens, addresses selected during consent, request payloads or stored records. Activity starts with this version.
+
+## Sign out of connected apps
+
+From **Apps**, request **Sign out of connected apps** and confirm with a passkey when needed. X-Center ID revokes outstanding access tokens, refresh tokens and authorization codes for the current account's connected apps. The action preserves the app links, stored data and current permission choices. The next sign-in uses the same registered callback. An app that maintains its own independent session or offline cache can stay visually signed in until it checks X-Center ID or expires its own session.

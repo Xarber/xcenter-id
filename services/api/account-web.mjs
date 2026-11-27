@@ -427,6 +427,19 @@ const accountServer=createServer({ requestTimeout: 15_000, headersTimeout: 10_00
     })().catch(error=>answer(error.status??503,{error:'Could not access app permissions.'}));
     return;
   }
+  if(provider&&req.method==='POST'&&path==='/account/connected-apps/sign-out'){
+    const owner=accounts.current(req)?.owner;
+    const answer=(status,value)=>res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(value));
+    const authorized=()=>owner&&accounts.current(req)?.owner===owner&&accounts.allowsMutation(req)&&
+      req.headers['x-authnjs-request']==='account-consent'&&accounts.recentlyConfirmed(req);
+    if(!authorized())return answer(403,{error:'Confirm your identity before signing out of connected apps.'});
+    void provider.endAppSessions(owner,authorized).then(ok=>{
+      if(!ok)return answer(409,{error:'App sessions changed. Try again.'});
+      try{accounts.recordActivity(owner,'app-sign-out');}catch{console.warn('Account activity could not be recorded.');}
+      return answer(200,{ok:true});
+    }).catch(()=>answer(503,{error:'Could not complete connected-app sign-out.'}));
+    return;
+  }
   if(provider && req.method==='POST' && path==='/account/connected-apps/unlink'){
     const identity=accounts.current(req);
     const answer=(status,result)=>res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(result));
