@@ -779,3 +779,5 @@ Production is on `b12b22b`, sandbox API on `a4e2e6d`, and SDK main on `57c4930`.
 - **AUTHN-185 — Implemented.** Supported browsers now register a conditional passkey request for the username field. An isolated Chrome harness verified conditional mediation, cancellation and both finish routes with a virtual authenticator and a simulated selection. The actual OS popover was not exercised.
 
 **Source evidence.** 64 API checks, 21 dashboard checks, TypeScript, Expo web export and 16 UADS declarations passed.
+
+**Production.** `d09ca93` is live. The browser initiated conditional mediation and cancelled it when switching to QR. The live native review API rejected anonymous requests. The [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45982724771) is running. See the [operations record](operations/XCENTER_ID_PRODUCTION.md#27-november-native-device-review-and-passkey-autofill).
