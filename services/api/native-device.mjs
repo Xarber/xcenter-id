@@ -1,4 +1,5 @@
 import {approvalTarget} from './account-approval.mjs';
+import {html} from './oidc.mjs';
 import {createHash,randomBytes} from 'node:crypto';
 
 const secretPattern=/^[A-Za-z0-9_-]{43}$/;
@@ -53,12 +54,8 @@ export function openNativeDeviceHandoff(db,now=Date.now){
 
 export function nativeDeviceEntry(res){
   const nonce=randomBytes(18).toString('base64');
-  res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer',
-    'X-Content-Type-Options':'nosniff',
-    'Content-Security-Policy':`default-src 'none'; script-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`});
-  res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-  <title>Review device sign-in · X-Center ID</title><main><h1>Review device sign-in</h1><p id="status" role="status">Opening your request…</p>
-  <a href="/device">Enter a code manually</a></main>
+  html(res,`<h1>Review device sign-in</h1><p id="status" role="status">Opening your request…</p>
+  <a href="/device">Enter a code manually</a>
   <script nonce="${nonce}">
     const key=location.hash.slice(1);
     history.replaceState(null,'',location.pathname);
@@ -72,5 +69,5 @@ export function nativeDeviceEntry(res){
         else if(/^[A-Z0-9]{6}$/.test(data.code))location.replace('/device?code='+data.code);
         else throw new Error('Unavailable');
       }).catch(fail);
-  </script></html>`);
+  </script>`,200,'',true,nonce);
 }

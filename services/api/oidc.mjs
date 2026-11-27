@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { errors, interactionPolicy, Provider } from 'oidc-provider';
 import { openOidcStore } from './oidc-store.mjs';
-import {appApprovalPath,approvalQr,createAppApprovals} from './app-approval.mjs';
+import {appApprovalPath,approvalDetails,approvalJson,createAppApprovals,returnToNativeReview} from './app-approval.mjs';
 
 const deviceGrant = 'urn:ietf:params:oauth:grant-type:device_code';
 const deviceCodePattern = /^[A-Z0-9]{6}$/;
@@ -40,7 +40,7 @@ function pageHeaders(callbackOrigin = '', scriptNonce = '') {
   };
 }
 
-function html(res, content, status = 200, callbackOrigin = '', consent = false, scriptNonce = '') {
+export function html(res, content, status = 200, callbackOrigin = '', consent = false, scriptNonce = '') {
   res.writeHead(status, pageHeaders(callbackOrigin, scriptNonce)).end(page(content, consent));
 }
 
@@ -233,7 +233,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
   const deviceAttempts=new Map();
   function devicePage(ctx,content,scriptNonce) {
     ctx.set(pageHeaders('',scriptNonce));
-    ctx.body=page(content+'<p><a class="device-back" href="/devices">Back to Devices</a> · <a class="device-back" href="/dashboard">Open dashboard</a></p>');
+    ctx.body=page(content+'<p><a class="device-back" href="/devices">Back to Devices</a> · <a class="device-back" href="/dashboard">Open dashboard</a></p>',true);
   }
   const provider = new Provider(issuer, {
     clients, adapter: Adapter, jwks: configuration.jwks,
@@ -407,12 +407,14 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const finish=async(result,options)=>{
       if(!remote)return provider.interactionFinished(req,res,result,options);
       remote.result=result.error?result:{login:{accountId:active.owner,ts:Math.floor(active.created/1000),remember:false},...result};
-      return html(res,result.error?'<h1>Request declined</h1>':'<h1>App sign-in approved</h1><p>Return to the browser where you started.</p>',200,'',true);
+      if(nativeDevice)return returnToNativeReview(res);
+      return html(res,(result.error?'<h1>Request declined</h1>':'<h1>App sign-in approved</h1><p>Return to the device where you started.</p>')+
+        '<a class="action" href="/devices">Done</a>',200,'',true);
     };
     const found = await provider.Client.find(params.client_id);
     const client = found && { client_id:found.clientId, client_name:found.clientName, host:new URL(found.redirectUris[0]).hostname };
     const callbackOrigin=found?.redirectUris.includes(params.redirect_uri)?new URL(params.redirect_uri).origin:'';
-    if (!client||!knownClient(client.client_id)||remote&&(device||details.prompt.name!=='login'||!callbackOrigin)) return html(res, '<h1>This app is unavailable</h1>', 404);
+    if (!client||!knownClient(client.client_id)||remote&&(device||!callbackOrigin)) return html(res, '<h1>This app is unavailable</h1>', 404);
     const brand=registry?.brand(client.client_id);
     const scopes=new Set(String(params.scope??'').split(' '));
     const missing=new Set(prompt.details.missingOIDCScope??[]);
@@ -449,8 +451,18 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     }
     const query=new URL(req.url,issuer).searchParams;
     const reviewProof=remote&&active&&createHmac('sha256',storageKey)
-      .update(JSON.stringify(['qr-review',remote.key,active.owner,active.created])).digest('base64url');
+      .update(JSON.stringify(['qr-review',remote.key,active.owner,active.hash])).digest('base64url');
     const existingApproval=!remote&&approvals.forInteraction(details.uid);
+    if(!remote&&query.get('qr')==='info'&&req.method==='GET'){
+      return approvalJson(res,{name:title,icon:brand?.iconUrl??null,canApproveRemotely:!device&&!!callbackOrigin});
+    }
+    if(!remote&&query.get('qr')==='start'&&!device&&callbackOrigin){
+      if(req.method==='GET')return redirect(signIn(!!person)+'&qr=1');
+      if(req.method!=='POST'||req.headers.origin!==issuer)return approvalJson(res,{error:'Invalid sign-in request.'},403);
+      const entry=approvals.start(details);
+      return entry?approvalJson(res,approvalDetails(issuer,'/app-approval/',entry)):
+        approvalJson(res,{error:'Could not start QR sign-in. Try again.'},429);
+    }
     if(!remote&&query.get('qr')==='status'&&req.method==='GET'){
       const state=existingApproval?.result?'ready':existingApproval?'waiting':'expired';
       return res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify({state}));
@@ -458,37 +470,20 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     if(!remote&&query.get('qr')==='finish'){
       if(req.method!=='POST'||req.headers.origin!==issuer||!existingApproval?.result)return unavailable();
       const {result}=existingApproval;
-      approvals.remove(existingApproval);
       if(result.login&&(!accounts.available(result.login.accountId)||!canUse(result.login.accountId,client.client_id)||
         !accounts.grantAllowed(result.login.accountId,client.client_id,result.consent.grantId))){
+        approvals.remove(existingApproval);
         return finish({error:'access_denied',error_description:'App authorization changed.'},{mergeWithLastSubmission:false});
       }
+      const pickup=await form(req).catch(()=>null);
+      if(!pickup||approvals.forInteraction(details.uid)!==existingApproval)return unavailable();
+      if(existingApproval.saveAccount&&pickup.get('save_account')!=='no'&&!accounts.finishApprovedSignIn(req,res,existingApproval.saveAccount)){
+        return html(res,'<h1>Could not add this account</h1><p>The app can still sign in without saving this account on this device.</p><form method="post"><button name="save_account" value="no">Continue to the app only</button></form>',409,callbackOrigin,true);
+      }
+      approvals.remove(existingApproval);
       return finish(result,{mergeWithLastSubmission:false});
     }
-    if(!person){
-      if(remote||device||details.prompt.name!=='login'||!callbackOrigin||req.method!=='GET')return redirect(signIn());
-      if(query.get('qr')!=='start')return html(res,`<h1>Sign in to ${escape(title)}</h1>
-        <div class="account-actions"><a class="action" href="${escape(signIn(true))}">Add an account on this device</a>
-        <a class="action" href="${path}?qr=start">Sign in on another device</a></div>
-        <p>Use another device to authorize only this app. The account stays off this device.</p>`,200,callbackOrigin,true);
-      const entry=approvals.start(details);
-      if(!entry)return redirect(signIn());
-      const nonce=randomBytes(18).toString('base64');
-      const scanUrl=issuer+'/app-approval/'+entry.key;
-      return html(res,`<h1>Sign in to ${escape(title)}</h1><a class="action" href="${escape(signIn())}">Sign in here</a>
-        <h2>Use another device</h2><p>Scan the QR code or enter the six digits in X-Center ID. Then confirm the app’s permissions.</p>
-        <div data-approval-url="${escape(scanUrl)}">${approvalQr(scanUrl)}</div><p class="device-code">${entry.code}</p><p id="approval-status" role="status">Waiting for approval…</p>
-        <form action="${path}?qr=finish" method="post" id="finish-approval" hidden></form>
-        <script nonce="${nonce}">async function wait(){
-          try{
-            const response=await fetch(location.pathname+'?qr=status',{cache:'no-store'});
-            const state=response.ok?(await response.json()).state:response.status===400?'expired':null;
-            if(state==='ready'){document.getElementById('finish-approval').requestSubmit();return;}
-            if(state==='expired'){document.getElementById('approval-status').textContent='Code expired. Reload to try again.';return;}
-          }catch{}
-          setTimeout(wait,2000);
-        }wait();</script>`,200,callbackOrigin,true,nonce);
-    }
+    if(!person)return redirect(signIn());
     if(remote&&String(params.prompt??'').split(' ').includes('login')&&active.created/1000<(details.iat??0))return redirect(signIn(true));
     if(remote&&params.max_age!==undefined&&(Number(params.max_age)===0?active.created/1000<(details.iat??0):Date.now()/1000-active.created/1000>=Number(params.max_age)))return redirect(signIn(true));
     if(existingApproval){
@@ -559,7 +554,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       if (req.headers.origin !== issuer) return html(res,'<h1>Could not verify the request</h1>',403);
       let input;
       try { input = await form(req); } catch { return html(res,'<h1>Invalid request</h1>',400); }
-      if(remote&&(input.get('review_proof')!==reviewProof||!approvals.matches(remote,input.get('qr_code'))))return html(res,'<h1>Code could not be confirmed</h1><p>Check the code on the original device and try again.</p>',409);
+      if(remote&&(input.get('review_proof')!==reviewProof||!approvals.pending(remote)))return html(res,'<h1>Approval could not be confirmed</h1><p>Start again from the original device.</p>',409,callbackOrigin,true);
       if(remote&&!['approve','deny'].includes(input.get('action')))return html(res,'<h1>Choose how to proceed</h1>',422);
       if (input.get('action') !== 'approve') {
         await finish({ error:'access_denied', error_description:'The user declined.' },{mergeWithLastSubmission:false});
@@ -614,6 +609,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         else if(dataChanged||scopeChanged||email&&email!==sharedEmail)notify(active.owner,client.client_id,'permissions',{
           added:after.filter(scope=>!existingScopes.has(scope)),removed:[...existingScopes].filter(scope=>!after.includes(scope)),sharedData:!!dataChanged,
         });
+        if(remote&&input.get('save_account')==='yes')remote.saveAccount={owner:active.owner,source:active.hash};
         await finish({ consent:{ grantId } });
         return;
       }finally{if(remote)remote.processing=false;}
@@ -705,7 +701,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
           ${accountPicker}${badgeRow(personBadges)}
         </section>
       </div>
-      <form method="post">${remote?`<input type="hidden" name="review_proof" value="${reviewProof}"><label>Code from the original device <input name="qr_code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" required></label>`:''}<h2>Permissions</h2>
+      <form method="post">${remote?`<input type="hidden" name="review_proof" value="${reviewProof}"><ul class="permission-list"><li><label class="permission-toggle">${glyph('id')}<span>Also sign in on the original device<small>Keep this X-Center ID on the device that started the request. Leave off to sign in to the app only.</small></span><input type="checkbox" role="switch" name="save_account" value="yes"></label></li></ul>`:''}<h2>Permissions</h2>
       <ul class="permission-list">
         ${fixed('id','Account ID, name, username and profile photo',requiredNote)}
         ${showAge&&!requiredAge?`<li><label class="permission-toggle">${glyph('age')}<span>Age range</span><input aria-label="Age range" type="checkbox" role="switch" name="permission" value="age_range"${existingScopes.has('age_range')?' checked':''}></label></li>`:''}

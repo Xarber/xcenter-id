@@ -225,6 +225,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
   const removeSession = q('DELETE FROM account_sessions WHERE hash=?');
   const deviceHandoff=openNativeDeviceHandoff(db,now);
   const challenges = new Map();
+  const deviceCodeAttempts = new Map();
+  let deviceCodeWindow = 0;
   let windowStart = 0;
   let attempts = 0;
 
@@ -368,6 +370,14 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     if (now() - windowStart >= 60_000) { windowStart = now(); attempts = 0; }
     requireCondition(++attempts <= 120, 429, 'Too many requests. Try again shortly.');
     for (const [id, flow] of challenges) if (flow.expires <= now()) challenges.delete(id);
+  }
+
+  function limitDeviceCodeLookup(owner) {
+    const minute=Math.floor(now()/60_000);
+    if(minute!==deviceCodeWindow){deviceCodeWindow=minute;deviceCodeAttempts.clear();}
+    const count=deviceCodeAttempts.get(owner)??0;
+    requireCondition(count<16&&(count>0||deviceCodeAttempts.size<2048),429,'Too many device code attempts. Try again shortly.');
+    deviceCodeAttempts.set(owner,count+1);
   }
 
   function nativeConfirmation(request){
@@ -550,8 +560,10 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     if(pathname==='/account/device/browser'){
       requireCondition(active&&nativeRequest(req),401,'Use the signed-in account manager.');
       const {code,target}=await body(req);
+      const entered=typeof code==='string'&&/^\d{6}$/.test(code);
+      if(entered)limitDeviceCodeLookup(active.owner);
       const review=typeof target==='string'&&approvalTarget(target)?target:
-        typeof code==='string'&&/^\d{6}$/.test(code)?resolveDeviceCode(code):code;
+        entered?resolveDeviceCode(code):code;
       requireCondition(typeof review==='string'&&(deviceCodePattern.test(review)||approvalTarget(review)),422,'Enter a valid device code.');
       const current=session(req);
       requireCondition(current?.hash===active.hash,401,'Sign in first.');

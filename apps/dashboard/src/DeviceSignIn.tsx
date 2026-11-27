@@ -1,5 +1,4 @@
-import {useDialog} from './dialog-model';
-import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
+import { openAuthSessionAsync, openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef, useState, type ComponentRef } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
@@ -7,7 +6,6 @@ import { deviceSignInUrl, isDeviceCode, normalizeDeviceCode } from './device-lin
 import { accountHost, nativeRequest } from './native-account';
 
 export default function DeviceSignIn({token,colors,back}: {token:string;colors:{ink:string;accent:string;muted:string;soft:string;line:string};back:()=>void}) {
-  const showDialog=useDialog();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
   const [zoom, setZoom] = useState(0);
@@ -33,21 +31,14 @@ export default function DeviceSignIn({token,colors,back}: {token:string;colors:{
       const entry=new URL(session.url);
       if(entry.origin!==accountHost||entry.pathname!=='/device/native'||entry.search||
         !/^#[A-Za-z0-9_-]{43}$/.test(entry.hash))throw new Error('Invalid device review URL.');
-      await openBrowserAsync(entry.href,{presentationStyle:WebBrowserPresentationStyle.PAGE_SHEET});
+      const approval=review.pathname!=='/device'||/^\d{6}$/.test(request.code??'');
+      if(approval){
+        const result=await openAuthSessionAsync(entry.href,'authnjs-dashboard://device-review');
+        if(result.type==='success')setCharacters(Array(6).fill(''));
+      }else await openBrowserAsync(entry.href,{presentationStyle:WebBrowserPresentationStyle.PAGE_SHEET});
     }
     catch { setStatus('Could not open the sign-in page.'); }
     finally { opening.current = false; }
-  }
-
-  function review(url:string) {
-    if (opening.current) return;
-    opening.current = true;
-    setScanning(false);
-    const dismiss = () => { opening.current = false; };
-    showDialog('Review device sign-in?', 'Continue only if the code is on a device you want to sign in. You’ll review the app on X-Center ID before approving.', [
-      {text:'Cancel',style:'cancel',onPress:dismiss},
-      {text:'Review sign-in',onPress:()=>{dismiss();void open(url);}},
-    ]);
   }
 
   async function scan() {
@@ -71,7 +62,7 @@ export default function DeviceSignIn({token,colors,back}: {token:string;colors:{
       <CameraView zoom={zoom} style={{height:240,borderRadius:16,overflow:'hidden'}} barcodeScannerSettings={{barcodeTypes:['qr']}}
         onBarcodeScanned={({data})=>{
           const url=deviceSignInUrl(data,accountHost);
-          if (url) review(url);
+          if (url) void open(url);
           else setStatus('Scan the X-Center ID QR code shown on your device.');
         }}/>
       <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>
@@ -106,12 +97,12 @@ export default function DeviceSignIn({token,colors,back}: {token:string;colors:{
           });
           if(letters)inputs.current[Math.min(start+letters.length,5)]?.focus();
         }}
-        onSubmitEditing={()=>{if(isDeviceCode(code))review(accountHost+'/device?code='+code);}}
+        onSubmitEditing={()=>{if(isDeviceCode(code))void open(accountHost+'/device?code='+code);}}
         style={{flex:1,minWidth:0,minHeight:52,borderWidth:1,borderColor:colors.line,borderRadius:10,
           backgroundColor:colors.soft,color:colors.ink,fontSize:22,fontWeight:'700',textAlign:'center',paddingHorizontal:0}}/>
       )}
     </View>
-    <Pressable accessibilityRole="button" disabled={!isDeviceCode(code)} onPress={()=>review(accountHost+'/device?code='+code)}
+    <Pressable accessibilityRole="button" disabled={!isDeviceCode(code)} onPress={()=>void open(accountHost+'/device?code='+code)}
       style={({pressed})=>({minHeight:44,justifyContent:'center',paddingHorizontal:12,borderRadius:12,backgroundColor:colors.soft,opacity:pressed||!isDeviceCode(code)?0.55:1})}>
       <Text style={{color:colors.accent,fontWeight:'700'}}>Review sign-in</Text>
     </Pressable>

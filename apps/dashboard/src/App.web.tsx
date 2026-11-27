@@ -1,6 +1,7 @@
 import AppBackups from './AppBackups.web';
 import AccountActivity from './AccountActivity.web';
 import {developerModeKey,useDeveloperPanel} from './developer-panel';
+import SignInQr, {type SignInApp} from './SignInQr.web';
 import AccountSwitcher, {type BrowserAccount} from './AccountSwitcher.web';
 import {confirmIdentity} from './Reauthenticate.web';
 import ReleaseNotes, {DeveloperRelease, FullRelease, ReleaseArchive} from './ReleaseNotes.web';
@@ -23,7 +24,7 @@ import { accountGreeting, accountShortcuts, accountStatus } from './account-over
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import {
   Menu, ArrowDownRight, ArrowLeft, ArrowRight, ChevronRight, CircleHelp, Code2, Fingerprint, FolderOpen,
-  Grid2X2, HardDrive, IdCard, KeyRound, Laptop, LockKeyhole, LogOut, Mail, MapPin, Settings, ShieldCheck, UserRound, X,
+  Grid2X2, HardDrive, IdCard, KeyRound, Laptop, LockKeyhole, LogOut, Mail, MapPin, QrCode, Settings, ShieldCheck, UserRound, X,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import DeveloperPortal from './DeveloperPortal';
@@ -113,12 +114,24 @@ function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,cre
   const [ticket,setTicket]=useState('');
   const [code,setCode]=useState('');
   const [offerPasskey,setOfferPasskey]=useState(false);
+  const [qr,setQr]=useState(new URLSearchParams(window.location.search).get('qr')==='1');
+  const [app,setApp]=useState<SignInApp|null>(null);
+  const appPath=continuation?.startsWith('/interaction/')?continuation:null;
+  useEffect(()=>{
+    if(!appPath)return;
+    const request=new AbortController();
+    void fetch(appPath+'?qr=info',{cache:'no-store',signal:request.signal}).then(async response=>{
+      if(response.ok)setApp(await response.json());
+    }).catch(()=>{});
+    return ()=>request.abort();
+  },[appPath]);
+  const canUseQr=!continuation||continuation.startsWith('/native-session?')||!!app?.canApproveRemotely;
   const busy=pending!==null;
   const query=new URLSearchParams();
   if(continuation)query.set('continue',continuation);
   if(adding)query.set('addAccount','1');
   const suffix=query.size?'?'+query:'';
-  const choose=previousAccounts.length>0&&!adding&&!signup&&!continuation;
+  const choose=previousAccounts.length>0&&!adding&&!signup&&(!continuation||!!appPath);
   return <div className="xc-auth-night">
     <div className="xc-auth">
       <header><Logo href="/"/><a href="/docs" className="xc-text-link">Developer documentation <ArrowDownRight size={15}/></a></header>
@@ -139,8 +152,13 @@ function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,cre
         <div className="xc-auth-caption"><p>One account for X-Center</p><span>Profile, devices, and apps in one place.</span></div>
       </div>
       <div className="xc-card xc-auth-card">
+        {app&&<div className="xc-auth-app">
+          <span className="xc-symbol xc-lavender">{app.icon?<img src={app.icon} alt=""/>:<Grid2X2 size={18}/>}</span>
+          <span>Signing into <strong>{app.name}</strong></span>
+        </div>}
+        {qr&&canUseQr&&!signup?<SignInQr continuation={continuation} back={()=>setQr(false)}/>:<>
         <span className="xc-symbol xc-lavender">{signup?<IdCard size={24}/>:<Fingerprint size={24}/>}</span>
-        {choose?<><h1>Select an account</h1><AccountSwitcher entries={previousAccounts} add={previousAccounts.length<3?'/signin?addAccount=1':undefined} onError={onError}/></>:<>
+        {choose?<><h1>Select an account</h1><AccountSwitcher entries={previousAccounts} add={previousAccounts.length<3?'/signin?'+new URLSearchParams({...Object.fromEntries(query),addAccount:'1'}):undefined} destination={continuation??undefined} onError={onError}/></>:<>
         <h1>{signup?'Create your X-Center ID':'Sign in to X-Center ID'}</h1>
         <p>{signup?'Choose your username, then save a passkey for it.':'Use your username or sign in directly with a passkey.'}</p>
         {signup ? <form onSubmit={event=>{event.preventDefault();create(username);}}>
@@ -175,11 +193,13 @@ function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,cre
             <Fingerprint size={19}/>{pending==='passkey'?'Waiting for your passkey…':'Sign in with a passkey'}
           </button>
         </>}
-        {!signup&&!ticket&&!continuation?.startsWith('/interaction/')&&!continuation?.includes('-approval/')&&
-          <a className="xc-button xc-secondary xc-full" href={'/account-approval/start'+(continuation?.startsWith('/native-session?')?'?continue='+encodeURIComponent(continuation):'')}>Sign in on another device</a>}
         {notice && <p className="xc-notice" role="alert">{notice}</p>}
         <div className="xc-auth-footer">{signup?'Already have an account?':'New to X-Center?'}{' '}
           <a href={(signup?'/signin':'/signup')+suffix}>{signup?'Sign in':'Create an account'}</a></div>
+        </>}
+        {!signup&&!ticket&&canUseQr&&<button className="xc-button xc-secondary xc-full xc-auth-qr-action" type="button" disabled={busy} onClick={()=>setQr(true)}>
+          <QrCode size={18}/> Sign in on another device
+        </button>}
         </>}
       </div>
     </div>

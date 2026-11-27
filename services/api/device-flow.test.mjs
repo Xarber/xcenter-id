@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { decodeJwt } from 'jose';
 import { createIdentityProvider } from './oidc.mjs';
+import { createAppApprovals } from './app-approval.mjs';
 import { openRegistry } from './registry.mjs';
 import { openApplicationData } from './application-data.mjs';
 
@@ -12,13 +13,18 @@ for(const environment of ['production','sandbox'])test(environment+' issuer veri
   const issuer='https://id.example.test';
   const registry=openRegistry(':memory:');
   const links=new Map();
-  const current={owner:'example-account',created:Date.now()};
+  const approvals=createAppApprovals();
+  const current={owner:'example-account',created:Date.now(),hash:'current-session'};
   const identity={username:'example',givenName:'Test',surname:'Person',ageRange:'adult',emails:[]};
-  const second={owner:'alternate-account',created:Date.now()};
+  const second={owner:'alternate-account',created:Date.now(),hash:'second-session'};
   const alternative={...identity,username:'alternate',givenName:'Second'};
   let selected=current;
   const accounts={
-    current:()=>selected, identity:owner=>owner===current.owner?identity:owner===second.owner?alternative:undefined,
+    current:()=>selected, finishApprovedSignIn(_req,res,session){
+      assert.deepEqual(session,{owner:current.owner,source:current.hash});
+      res.setHeader('set-cookie','dashboard-account=saved; Path=/; Secure; HttpOnly');
+      return true;
+    }, identity:owner=>owner===current.owner?identity:owner===second.owner?alternative:undefined,
     browserAccountOptions:()=>({canAdd:true,accounts:[identity,alternative].map((person,slot)=>({...person,slot,current:slot===Number(selected===second)}))}),
     activateBrowserAccount:(req,_res,slot)=>{
       if(req.headers.origin!==issuer||!([0,1].includes(slot)))return false;
@@ -37,7 +43,7 @@ for(const environment of ['production','sandbox'])test(environment+' issuer veri
   };
   const jwk=generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({format:'jwk'});
   const applicationData=openApplicationData({path:':memory:',key:Buffer.alloc(32,7),registry,accounts,authenticate:()=>null});
-  const provider=createIdentityProvider({issuer,database:':memory:',registry,accounts,applicationData,configuration:{
+  const provider=createIdentityProvider({issuer,database:':memory:',registry,accounts,applicationData,approvals,configuration:{
     environment,
     storageKey:'71'.repeat(32),subjectKey:'83'.repeat(32),cookieKeys:['e2'.repeat(32)],
     clients:[],jwks:{keys:[{...jwk,kid:'device-fixture',alg:'RS256',use:'sig'}]},
@@ -334,16 +340,18 @@ for(const environment of ['production','sandbox'])test(environment+' issuer veri
       selected=null;
       const start=await http('/auth?'+remoteParams,{browser:true});
       const originalPath=new URL(start.headers.get('location'),issuer).pathname;
-      const choicePage=await (await http(originalPath,{browser:true})).text();
-      assert.match(choicePage,/Sign in on another device/);
-      assert.doesNotMatch(choicePage,/data-approval-url/);
-      const wait=await http(originalPath+'?qr=start',{browser:true});
-      const waitHtml=await wait.text();
-      assert.equal(wait.status,200,waitHtml.slice(0,400));
-      assert.match(waitHtml,/Sign in to Remote browser approval/);
-      const scanned=new URL(waitHtml.match(/data-approval-url="([^"]+)"/)?.[1]).pathname;
-      const code=waitHtml.match(/class="device-code">(\d{6})</)?.[1];
-      assert.ok(code);
+      const signIn=await http(originalPath,{browser:true});
+      assert.equal(signIn.headers.get('location'),'/signin?continue='+encodeURIComponent(originalPath));
+      assert.deepEqual(await (await http(originalPath+'?qr=info',{browser:true})).json(),{
+        name:'Remote browser approval',icon:null,canApproveRemotely:true,
+      });
+      assert.equal((await http(originalPath+'?qr=info')).status,400);
+      assert.deepEqual(await (await http(originalPath+'?qr=status',{browser:true})).json(),{state:'expired'});
+      const wait=await http(originalPath+'?qr=start',{browser:true,form:{}});
+      const {code,image}=await wait.json();
+      assert.equal(wait.status,200);
+      assert.match(image,/^data:image\/svg\+xml;base64,/);
+      const scanned='/app-approval/'+approvals.forCode(code).key;
       assert.equal((await http(originalPath+'?qr=status',{scan:true})).status,400);
       assert.equal((await http(scanned,{scan:true})).status,303);
       selected=current;
@@ -352,9 +360,11 @@ for(const environment of ['production','sandbox'])test(environment+' issuer veri
       assert.match(remoteReview,/@example/);
       const proof=remoteReview.match(/name="review_proof" value="([^"]+)"/)?.[1];
       assert.ok(proof);
-      const confirm={action:'approve',qr_code:code,review_proof:proof,permission:'offline_access'};
+      assert.doesNotMatch(remoteReview,/name="qr_code"/);
+      assert.match(remoteReview,/role="switch" name="save_account" value="yes">/);
+      const confirm={action:'approve',review_proof:proof,permission:'offline_access'};
       assert.equal((await http(scanned,{form:confirm})).status,403);
-      assert.equal((await http(scanned,{scan:true,form:{...confirm,qr_code:code==='000000'?'111111':'000000'}})).status,409);
+      assert.equal((await http(scanned,{scan:true,form:{...confirm,review_proof:'invalid'}})).status,409);
       selected=second;
       assert.equal((await http(scanned,{scan:true,form:confirm})).status,409);
       selected=current;
@@ -370,6 +380,7 @@ for(const environment of ['production','sandbox'])test(environment+' issuer veri
         pickup=await http(pickup.headers.get('location'),{browser:true});
       }
       const remoteRedirect=new URL(pickup.headers.get('location'));
+      assert.equal(cookies.has('dashboard-account'),false);
       assert.equal(remoteRedirect.searchParams.get('state'),remoteState);
       assert.ok(remoteRedirect.searchParams.get('code'),remoteRedirect.href);
       assert.equal((await http(originalPath+'?qr=finish',{browser:true,form:{}})).status,400);
@@ -380,6 +391,22 @@ for(const environment of ['production','sandbox'])test(environment+' issuer veri
       assert.ok(accounts.linkedGrant(current.owner,remoteClient.clientId));
       const approved=await redemption.json();
       assert.ok(approved.refresh_token);
+      cookies.clear();
+      const secondStart=await http('/auth?'+remoteParams,{browser:true});
+      const secondPath=new URL(secondStart.headers.get('location'),issuer).pathname;
+      const nextQr=await (await http(secondPath+'?qr=start',{browser:true,form:{}})).json();
+      const nextReview='/app-approval/'+approvals.forCode(nextQr.code).key;
+      selected=current;
+      const nextProof=(await (await http(nextReview,{scan:true})).text()).match(/name="review_proof" value="([^"]+)"/)?.[1];
+      const kept=await http(nextReview,{scan:true,form:{...confirm,review_proof:nextProof,save_account:'yes'}});
+      assert.equal(kept.status,200,await kept.clone().text());
+      assert.equal(kept.headers.get('set-cookie'),null);
+      selected=null;
+      const keepPickup=await http(secondPath+'?qr=finish',{browser:true,form:{}});
+      assert.equal(keepPickup.status,303,await keepPickup.clone().text());
+      assert.equal(cookies.get('dashboard-account'),'saved');
+      assert.equal((await http(secondPath+'?qr=finish',{browser:true,form:{}})).status,400);
+
       const oldGrant=accounts.linkedGrant(current.owner,remoteClient.clientId);
       const otherGrant=accounts.linkedGrant(second.owner,webClient.clientId);
       assert.equal(await provider.endAppSessions(current.owner,()=>false),false);

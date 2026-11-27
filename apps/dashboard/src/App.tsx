@@ -251,7 +251,6 @@ function NativeAccount() {
         <Ionicons name="chevron-forward" size={18} color={colors.muted}/>
       </Pressable>)}
       {stored.length<3&&action('Add another account','add-outline',()=>void signIn(false,true))}
-      {stored.length<3&&action('Sign in on another device','qr-code-outline',()=>void signIn(false,true,true))}
     </View>;
   }
   const signedOut=!loading&&!locked&&(!token||!account);

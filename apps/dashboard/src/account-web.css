@@ -304,3 +304,12 @@ input:is([type=checkbox],[type=radio]){inline-size:1.2rem;block-size:1.2rem;min-
 .xc-list-pages select,.xc-list-pages input[type=text],.xc-list-pages input:not([type]){width:auto;min-width:3.8rem}
 .xc-list-pages input:not([type]){width:4.25rem;text-align:center}
 .xc-list-page-stepper button{width:44px;padding-inline:0}
+
+.xc-auth-app{display:flex;align-items:center;gap:10px;padding:9px 12px;margin-bottom:20px;border:1px solid var(--line);border-radius:13px;background:var(--soft);overflow-wrap:anywhere}
+.xc-auth-app .xc-symbol{width:32px;height:32px;flex:none;border-radius:8px;overflow:hidden}
+.xc-auth-app img{width:100%;height:100%;object-fit:cover}
+.xc-auth-qr-action{margin-top:16px}
+.xc-auth-qr-image{display:block;width:min(100%,220px);height:auto;aspect-ratio:1;margin:16px auto 9px;border-radius:12px;background:white}
+.xc-auth-qr-code{text-align:center;font-variant-numeric:tabular-nums;letter-spacing:.24em;font-size:1.25rem;font-weight:750}
+.xc-auth-card .xc-auth-qr form:empty{display:none}
+.xc-auth-qr .xc-button+.xc-button{margin-top:8px}

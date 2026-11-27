@@ -1,16 +1,13 @@
 import {createHash,randomBytes} from 'node:crypto';
-import {approvalQr} from './app-approval.mjs';
+import {approvalDetails,approvalJson,returnToNativeReview} from './app-approval.mjs';
+import {html} from './oidc.mjs';
 
 export const accountApprovalPath=/^\/account-approval\/([A-Za-z0-9_-]{43})$/;
 export const approvalTarget=path=>/^\/(?:account-approval|app-approval)\/[A-Za-z0-9_-]{43}$/.test(path);
 const cookieName='__Host-xid-account-approval';
 const nativeReturn=/^\/native-session\?challenge=[A-Za-z0-9_-]{43}&state=[A-Za-z0-9_-]{43}$/;
 const browserId=value=>createHash('sha256').update(value).digest('base64url');
-const page=(res,status,content,nonce='')=>res.writeHead(status,{
-  'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer',
-  'Content-Security-Policy':`default-src 'none'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'${nonce?`; script-src 'nonce-${nonce}'`:''}`,
-}).end(`<!doctype html><html lang="en"><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Sign in with X-Center ID</title>
-<style>body{color-scheme:light dark;font:1rem/1.55 system-ui;margin:0;padding:1.5rem}main{max-width:32rem;margin:auto}button,input{font:inherit;padding:.55rem}svg{border-radius:.6rem}</style><main>${content}</main></html>`);
+const page=(res,status,content)=>html(res,content,status,'',true);
 
 export function createAccountApprovalRoute({approvals,accounts,origin}){
   const session=req=>accounts.current(req);
@@ -24,21 +21,26 @@ export function createAccountApprovalRoute({approvals,accounts,origin}){
     if(scan){
       const entry=approvals.forScan(scan[1]);
       if(!entry?.account||entry.result)return ended();
-      const active=accounts.deviceBrowserSession(req,path)||session(req);
+      const native=accounts.deviceBrowserSession(req,path);
+      const active=native||session(req);
       if(!active)return res.writeHead(303,{Location:'/signin?continue='+encodeURIComponent(path),'Cache-Control':'no-store'}).end();
       const proof=browserId(entry.key+':'+active.hash);
       if(req.method==='GET')return page(res,200,`<h1>Sign in to X-Center ID on another device?</h1>
         <p>This adds your account to the device that started the request. Continue only if you started it.</p>
-        <form method="post"><input type="hidden" name="proof" value="${proof}"><label>Code from the original device <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" required></label>
-        <p><button type="submit">Approve sign-in</button></p></form>`);
+        <form method="post"><input type="hidden" name="proof" value="${proof}">
+        <p><button name="action" value="approve" type="submit">Approve sign-in</button><button name="action" value="cancel" type="submit">Cancel</button></p></form>`);
       if(req.method!=='POST'||req.headers.origin!==origin)return page(res,403,'<h1>Could not verify the request</h1>');
       let body='';
       for await(const chunk of req){body+=chunk;if(body.length>1024)return ended();}
       const input=new URLSearchParams(body);
       if(input.get('proof')!==proof||(accounts.deviceBrowserSession(req,path)||session(req))?.hash!==active.hash||
-        !approvals.matches(entry,input.get('code')))return page(res,409,'<h1>Code could not be confirmed</h1>');
+        !approvals.pending(entry))return page(res,409,'<h1>Approval could not be confirmed</h1>');
+      if(input.get('action')==='cancel')return native?returnToNativeReview(res):
+        res.writeHead(303,{Location:'/devices','Cache-Control':'no-store'}).end();
+      if(input.get('action')!=='approve')return page(res,422,'<h1>Choose how to proceed</h1>');
       entry.result={owner:active.owner,source:active.hash};
-      return page(res,200,'<h1>Sign-in approved</h1><p>Return to the device where you started.</p>');
+      if(native)return returnToNativeReview(res);
+      return page(res,200,'<h1>Sign-in approved</h1><p>Return to the device where you started.</p><a class="action" href="/devices">Done</a>');
     }
     if(path==='/account-approval/status'&&req.method==='GET'){
       const state=own?.result?'ready':own?'waiting':'expired';
@@ -50,22 +52,23 @@ export function createAccountApprovalRoute({approvals,accounts,origin}){
       if(!accounts.finishApprovedSignIn(req,res,own.result))return page(res,409,'<h1>Could not add this account</h1><a href="/signin?addAccount=1">Try again</a>');
       return res.writeHead(303,{Location:own.destination,'Cache-Control':'no-store'}).end();
     }
-    if(path!=='/account-approval/start'||req.method!=='GET')return ended();
+    if(path!=='/account-approval/start')return ended();
+    const destination=url.searchParams.get('continue')??'';
+    if(req.method==='GET'){
+      const params=new URLSearchParams({qr:'1'});
+      if(nativeReturn.test(destination))params.set('continue',destination);
+      if(session(req)||url.searchParams.has('addAccount'))params.set('addAccount','1');
+      return res.writeHead(303,{Location:'/signin?'+params,'Cache-Control':'no-store'}).end();
+    }
+    if(req.method!=='POST'||req.headers.origin!==origin)return approvalJson(res,{error:'Invalid sign-in request.'},403);
     if(own)approvals.remove(own);
     const secret=randomBytes(32).toString('base64url');
     const entry=approvals.start({uid:'browser:'+browserId(secret),exp:Date.now()/1000+180});
-    if(!entry)return page(res,429,'<h1>Try again in a moment</h1>');
+    if(!entry)return approvalJson(res,{error:'Try again in a moment.'},429);
     entry.account=true;
-    const destination=url.searchParams.get('continue')??'';
     entry.destination=nativeReturn.test(destination)?destination:'/dashboard';
     res.setHeader('Set-Cookie',cookieName+'='+secret+'; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=180');
-    const nonce=randomBytes(18).toString('base64');
-    return page(res,200,`<h1>Sign in on another device</h1><p>Scan in the signed-in X-Center ID app, or enter these digits on that device.</p>
-      ${approvalQr(origin+devicePath(entry))}<p><strong>${entry.code}</strong></p><p id="status" role="status">Waiting for approval…</p>
-      <form id="finish" action="/account-approval/finish" method="post" hidden></form><p><a href="/signin">Use a passkey instead</a></p>
-      <script nonce="${nonce}">async function poll(){try{const {state}=await (await fetch('/account-approval/status',{cache:'no-store'})).json();
-      if(state==='ready'){document.querySelector('#finish').requestSubmit();return;}
-      if(state==='expired'){document.querySelector('#status').textContent='Code expired. Reload to try again.';return;}}catch{}setTimeout(poll,2000);}poll();</script>`,nonce);
+    return approvalJson(res,approvalDetails(origin,'/account-approval/',entry));
   }
   return {handle,codePath:code=>{const entry=approvals.forCode(code);return entry&&!entry.result?devicePath(entry):null;}};
 }

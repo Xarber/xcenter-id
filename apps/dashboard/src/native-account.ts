@@ -35,7 +35,7 @@ export async function nativePasskeySession(signUp=false,adding=false,qr=false) {
   const challenge=base64.replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
   const params=new URLSearchParams({challenge,state});
   const next='/native-session?'+params;
-  const result=await openAuthSessionAsync(accountHost+(qr?'/account-approval/start':signUp?'/signup':'/signin')+'?continue='+encodeURIComponent(next)+(adding?'&addAccount=1':''),returnTo);
+  const result=await openAuthSessionAsync(accountHost+(signUp?'/signup':'/signin')+'?continue='+encodeURIComponent(next)+(adding||qr?'&addAccount=1':'')+(qr?'&qr=1':''),returnTo);
   if(result.type!=='success')return null;
   const callback=new URL(result.url);
   const code=callback.searchParams.get('code');

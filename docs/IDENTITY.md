@@ -78,9 +78,9 @@ In Administration → Registered apps, select **Approve callback URLs** after in
 
 ## Approve app authorization from another device
 
-When an unsigned-in browser starts a registered app's interactive authorization-code flow, the issuer can display a QR code and six-digit confirmation code. Scan the code using a browser on another device, sign in there if needed, enter the code shown on the first browser, and approve the usual application permissions. The approval page shows the app and account. It stays at X-Center ID; only the original browser continues to the already registered callback, using the original state and PKCE challenge. The SDK's authorization-code exchange stays the same.
+The standard sign-in page shows the registered app name and icon when an app initiates sign-in. Its **Sign in on another device** button replaces the sign-in form with a QR code and six digits while keeping the same background. Open the QR link or enter the digits in **Devices** on the approving device. That opens the review directly. The review identifies the app and account and requires an explicit decision. Switch on **Also sign in on the original device** to save the account there as well. The switch starts off.
 
-The QR ticket expires after three minutes or with the issuer interaction, whichever comes first. The original browser's issuer interaction cookie is needed to pick up approval. The ticket is single-use, the confirmation code is attempt-limited, and a form rendered for a different account session is rejected. There is no new dashboard login on the original device. The OAuth device code flow remains the separate flow for TVs and other input-limited clients. The operating system camera can open the app approval URL.
+The ticket expires after three minutes or with the issuer interaction, whichever comes first. Numeric lookup is rate-limited. The issuer checks the approving account session, same-origin confirmation and exact pending request before accepting a single-use approval. Only the original browser can recover the result through its issuer interaction cookie. It returns to the registered callback with the original state and PKCE challenge. The SDK's exchange stays the same. Existing OAuth device authorization for TVs and consoles keeps its own confirmation flow.
 
 ## Account activity
 
@@ -92,6 +92,6 @@ From **Apps**, request **Sign out of connected apps** and confirm with a passkey
 
 ### Choose where to sign in
 
-Signed-out app authorization offers **Add an account on this device** and **Sign in on another device**. The QR appears after choosing the second option. It authorizes the requesting app and returns the original callback without creating a dashboard account session on the requesting device. On the main X-Center ID sign-in screen, the same explicit QR action adds an account to the requesting dashboard after approval. The native dashboard uses its existing state-bound session exchange for the return.
+The same sign-in page offers QR for dashboard sign-in and **Add another account**. In those flows approval saves the account on the originating device, subject to the three-account limit. In an app flow, optional dashboard sign-in is applied at callback pickup and also respects that limit.
 
-The approval scanner accepts both first-party account and app authorization links. For manual entry use the six digits displayed on the requesting device. Legacy TV and console device codes continue through their existing flow. Native approval links use a short-lived, single-use browser handoff bound to the exact approval URL.
+The native account manager scans either issuer approval link or looks up the same six-digit code. It opens the styled review through a short-lived, single-use browser handoff bound to the exact approval URL. After approving or cancelling it returns to the native manager. The requesting client completes sign-in separately through its original authorization callback or the dashboard’s state-bound native session exchange.

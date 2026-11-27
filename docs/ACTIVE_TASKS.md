@@ -763,3 +763,10 @@ Production is on `b12b22b`, sandbox API on `a4e2e6d`, and SDK main on `57c4930`.
 - **AUTHN-178** adds signed, single-use device revocation to the isolated ADP implementation. Test coverage verifies signature, replay rejection and loss of approval privileges. Native protected key custody, key rotation, notification and data migration remain open.
 
 **Verification.** Provider `8ee2a37` is live. The [quality run](https://github.com/Xarber/xcenter-id/actions/runs/45973951190) passed 64 API and 21 dashboard checks. Public Chrome verified the opt-in QR screen and six-digit lookup. AUTHN-180 is verified for web and source, with physical scanner and native installed verification pending. The [native matrix](https://github.com/Xarber/xcenter-id/actions/runs/45974131772) was submitted. AUTHN-181 is verified. AUTHN-178 device revocation is verified in isolation. Continue with vault key rotation after device revocation and native custody before enabling the production vault.
+
+### Inline QR sign-in
+
+- **AUTHN-182 — Implemented.** The main sign-in route retains its animated background and username/passkey form, shows registered app branding, and swaps the form for QR only on request. Add another account and native browser sign-in reuse this page.
+- **AUTHN-183 — Implemented.** Code entry and scanning open the review directly. Explicit approval checks the approving session and the pending request. The default-off switch can save a dashboard account at app callback pickup. Native approval returns to the signed-in app when submitted. Numeric lookup is rate-limited on web and native.
+
+**Evidence.** 64 API checks, 21 dashboard checks, TypeScript, 16 UADS declarations and the Expo web export passed. Two isolated Chrome contexts verified app branding, default sign-in, in-place QR, single code entry, both save choices, original-state callback, and the second-account QR action at 390 px and 1280 px. The native completion redirect passed an API test. Installed phone scanning, keyboard and browser-sheet dismissal remain pending.
