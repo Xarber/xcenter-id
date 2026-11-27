@@ -721,3 +721,13 @@ The SHA-256 digest follows the exact downloaded bytes. File and share permission
 | AUTHN-177 | End connected-app sessions with no new app integration requirement. | Implemented | Web and native issue an authenticated provider-side sign-out that preserves links and permissions. Integration checks verify access and refresh revocation and that another account is unaffected. An independent app session expires according to that app’s own policy. |
 
 QR authorization was moved ahead of the storage implementation to complete and verify the independent browser flow. Snapshot captures and restores are separate from trusted-device key management.
+
+### 27 November verification checkpoint
+
+Provider `04e5439` and SDK `57c4930` are pushed to their respective `testing` branches. The [provider checks](https://github.com/Xarber/xcenter-id/actions/runs/45960745371) and [SDK quality matrix](https://github.com/Xarber/xcenter-id-sdk/actions/runs/45960643139) passed. The SDK matrix verified browser, Swift, Android and Flutter source. This batch has no production or native release.
+
+- AUTHN-172. The API regression verified developer opt-in, user permission, cross-app and cross-owner isolation, app-created snapshot deletion, user-approved restore, version refusal, and separate exact record and collection selection. Three snapshots of an unchanged 600,000-byte file added 3,072 bytes of manifest overhead while the file stayed live. All four file policies passed. A partial restore kept unrelated data and rejected a file that had lost Editable visibility. Chrome using synthetic responses verified the shared backup route, opt-in, create, delete and restore prompts at 390 and 1,280 px.
+- AUTHN-174. Two isolated Chrome contexts completed QR consent and the original browser's callback. The issuer integration test independently checked replay, wrong code, changed account, missing origin, callback state and PKCE redemption. No physical camera was used.
+- AUTHN-175. Source tests verified account isolation, retention ordering and deletion. The activity UI loaded a synthetic permission event in Chrome at both viewport sizes.
+- AUTHN-177. An issuer integration test revoked access and refresh credentials while preserving permissions and another account's grant. Dashboard source checks passed. Native installed testing is still required.
+- AUTHN-176 remains queued. Next action is a separate issuer/storage design for sandbox credentials, fixtures and safe request diagnostics.
