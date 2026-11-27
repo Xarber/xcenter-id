@@ -75,3 +75,9 @@ Account handles use 3–24 lowercase letters, digits, underscores, dashes and in
 ### Administrator callback approval
 
 In Administration → Registered apps, select **Approve callback URLs** after independently verifying that the developer controls every listed HTTPS callback. This approval is tied to the exact pending registration and callback list. A callback change removes the approval. The developer sees an approval notice and can activate the registration and claim credentials after confirming their identity. Confidential clients receive their client secret once. Public native clients receive the client ID for PKCE and still need OS-level link association. Administrators do not see the credentials. Callback approval is independent of the app verification badge and service database eligibility.
+
+## Approve app authorization from another device
+
+When an unsigned-in browser starts a registered app's interactive authorization-code flow, the issuer can display a QR code and six-digit confirmation code. Scan the code using a browser on another device, sign in there if needed, enter the code shown on the first browser, and approve the usual application permissions. The approval page shows the app and account. It stays at X-Center ID; only the original browser continues to the already registered callback, using the original state and PKCE challenge. The SDK's authorization-code exchange stays the same.
+
+The QR ticket expires after three minutes or with the issuer interaction, whichever comes first. The original browser's issuer interaction cookie is needed to pick up approval. The ticket is single-use, the confirmation code is attempt-limited, and a form rendered for a different account session is rejected. There is no new dashboard login on the original device. The OAuth device code flow remains the separate flow for TVs and other input-limited clients. The operating system camera can open the app approval URL.

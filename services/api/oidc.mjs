@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { errors, interactionPolicy, Provider } from 'oidc-provider';
 import { openOidcStore } from './oidc-store.mjs';
+import {appApprovalPath,approvalQr,createAppApprovals} from './app-approval.mjs';
 
 const deviceGrant = 'urn:ietf:params:oauth:grant-type:device_code';
 const deviceCodePattern = /^[A-Z0-9]{6}$/;
@@ -35,7 +36,7 @@ const escape = (value) => String(value).replace(/[&<>"']/g, (c) => ({
 function pageHeaders(callbackOrigin = '', scriptNonce = '') {
   return {
     'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'same-origin',
-    'Content-Security-Policy': `default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'self' ${callbackOrigin}; base-uri 'none'${scriptNonce ? `; script-src 'nonce-${scriptNonce}'` : ''}`,
+    'Content-Security-Policy': `default-src 'none'; connect-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'self' ${callbackOrigin}; base-uri 'none'${scriptNonce ? `; script-src 'nonce-${scriptNonce}'` : ''}`,
   };
 }
 
@@ -366,21 +367,32 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     result.interval=5;
   });
 
+  const approvals=createAppApprovals();
   async function interaction(req, res, path) {
+    const scan=appApprovalPath.exec(path);
+    const remote=scan&&approvals.forScan(scan[1]);
+    const unavailable=()=>html(res,'<h1>Sign-in request expired</h1><p>Return to the app and start again.</p>',400);
+    if(scan&&(!remote||remote.result))return unavailable();
     let details;
-    try { details = await provider.interactionDetails(req,res); }
+    try { details = remote?await provider.Interaction.find(remote.uid):await provider.interactionDetails(req,res); }
     catch { return html(res, '<h1>Sign-in request expired</h1><p>Return to the app and start again.</p>', 400); }
-    if (path !== '/interaction/' + details.uid) return html(res, '<h1>Sign-in request expired</h1>', 400);
+    if(!details||!remote&&path!=='/interaction/'+details.uid)return unavailable();
     const device=!!details.deviceCode;
     const nativeDevice=device&&accounts.deviceBrowserSession?.(req);
     const activeAccount=()=>device&&(accounts.deviceBrowserSession?.(req))||accounts.current(req);
     const active=activeAccount();
     const person = active && accounts.identity(active.owner);
-    const { prompt, params } = details;
+    const params=details.params;
+    const prompt=remote?{name:'consent',details:{missingOIDCScope:String(params.scope??'').split(' ')}}:details.prompt;
+    const finish=async(result,options)=>{
+      if(!remote)return provider.interactionFinished(req,res,result,options);
+      remote.result=result.error?result:{login:{accountId:active.owner,ts:Math.floor(active.created/1000),remember:false},...result};
+      return html(res,result.error?'<h1>Request declined</h1>':'<h1>App sign-in approved</h1><p>Return to the browser where you started.</p>',200,'',true);
+    };
     const found = await provider.Client.find(params.client_id);
     const client = found && { client_id:found.clientId, client_name:found.clientName, host:new URL(found.redirectUris[0]).hostname };
     const callbackOrigin=found?.redirectUris.includes(params.redirect_uri)?new URL(params.redirect_uri).origin:'';
-    if (!client||!knownClient(client.client_id)) return html(res, '<h1>This app is unavailable</h1>', 404);
+    if (!client||!knownClient(client.client_id)||remote&&(device||details.prompt.name!=='login'||!callbackOrigin)) return html(res, '<h1>This app is unavailable</h1>', 404);
     const brand=registry?.brand(client.client_id);
     const scopes=new Set(String(params.scope??'').split(' '));
     const missing=new Set(prompt.details.missingOIDCScope??[]);
@@ -415,19 +427,63 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         <div class="account-actions">${saved.canAdd?`<a class="action" href="${escape(signIn(true))}">Add another account</a>`:''}
         <a class="device-back" href="${path}">Back</a></div>`,200,callbackOrigin,true);
     }
-    if(!person)return redirect(signIn());
-    if(req.method==='GET'&&(prompt.name==='login'||details.session?.accountId!==active.owner)){
+    const query=new URL(req.url,issuer).searchParams;
+    const reviewProof=remote&&active&&createHmac('sha256',storageKey)
+      .update(JSON.stringify(['qr-review',remote.key,active.owner,active.created])).digest('base64url');
+    const existingApproval=!remote&&approvals.forInteraction(details.uid);
+    if(!remote&&query.get('qr')==='status'&&req.method==='GET'){
+      const state=existingApproval?.result?'ready':existingApproval?'waiting':'expired';
+      return res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify({state}));
+    }
+    if(!remote&&query.get('qr')==='finish'){
+      if(req.method!=='POST'||req.headers.origin!==issuer||!existingApproval?.result)return unavailable();
+      const {result}=existingApproval;
+      approvals.remove(existingApproval);
+      if(result.login&&(!accounts.available(result.login.accountId)||!canUse(result.login.accountId,client.client_id)||
+        !accounts.grantAllowed(result.login.accountId,client.client_id,result.consent.grantId))){
+        return finish({error:'access_denied',error_description:'App authorization changed.'},{mergeWithLastSubmission:false});
+      }
+      return finish(result,{mergeWithLastSubmission:false});
+    }
+    if(!person){
+      if(remote||device||details.prompt.name!=='login'||!callbackOrigin||req.method!=='GET')return redirect(signIn());
+      const entry=approvals.start(details);
+      if(!entry)return redirect(signIn());
+      const nonce=randomBytes(18).toString('base64');
+      const scanUrl=issuer+'/app-approval/'+entry.key;
+      return html(res,`<h1>Sign in to ${escape(title)}</h1><a class="action" href="${escape(signIn())}">Sign in here</a>
+        <h2>Use another device</h2><p>Scan with a device where you’re signed in to X-Center ID. Enter this code on that device to review the app’s permissions.</p>
+        <div data-approval-url="${escape(scanUrl)}">${approvalQr(scanUrl)}</div><p class="device-code">${entry.code}</p><p id="approval-status" role="status">Waiting for approval…</p>
+        <form action="${path}?qr=finish" method="post" id="finish-approval" hidden></form>
+        <script nonce="${nonce}">async function wait(){
+          try{
+            const response=await fetch(location.pathname+'?qr=status',{cache:'no-store'});
+            const state=response.ok?(await response.json()).state:response.status===400?'expired':null;
+            if(state==='ready'){document.getElementById('finish-approval').requestSubmit();return;}
+            if(state==='expired'){document.getElementById('approval-status').textContent='Code expired. Reload to try again.';return;}
+          }catch{}
+          setTimeout(wait,2000);
+        }wait();</script>`,200,callbackOrigin,true,nonce);
+    }
+    if(remote&&String(params.prompt??'').split(' ').includes('login')&&active.created/1000<(details.iat??0))return redirect(signIn(true));
+    if(remote&&params.max_age!==undefined&&(Number(params.max_age)===0?active.created/1000<(details.iat??0):Date.now()/1000-active.created/1000>=Number(params.max_age)))return redirect(signIn(true));
+    if(existingApproval){
+      if(existingApproval.processing)return html(res,'<h1>Approval in progress</h1><p>Wait for the other device and reload.</p>',409);
+      approvals.remove(existingApproval);
+    }
+    if(!remote&&req.method==='GET'&&(prompt.name==='login'||details.session?.accountId!==active.owner)){
       const authTime=Math.floor(active.created/1000);
       const wantsFresh=String(params.prompt??'').split(' ').includes('login')&&authTime<(details.iat??0);
       const expired=params.max_age!==undefined&&(Number(params.max_age)===0?authTime<(details.iat??0):Date.now()/1000-authTime>=Number(params.max_age));
       if(wantsFresh||expired)return redirect(signIn(true));
-      await provider.interactionFinished(req,res,{login:{accountId:active.owner,ts:authTime}},{mergeWithLastSubmission:false});
+      await finish({login:{accountId:active.owner,ts:authTime}},{mergeWithLastSubmission:false});
       return;
     }
-    if(req.method==='POST'&&details.session?.accountId!==active.owner){
+    if(!remote&&req.method==='POST'&&details.session?.accountId!==active.owner){
       return html(res,`<h1>The signed-in account changed</h1><p><a href="${path}">Review this authorization again</a></p>`,409,callbackOrigin);
     }
     if(!canUse(active.owner,client.client_id)){
+      if(remote)return html(res,`<h1>You don’t have permission to use this app</h1><p>${escape(title)} is private. Switch to an account with access.</p>${accountPicker}`,403,'',true);
       const access=registry.access(active.owner,client.client_id);
       if(req.method==='POST'){
         if(req.headers.origin!==issuer)return html(res,'<h1>Could not verify the request</h1>',403);
@@ -438,7 +494,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
           return html(res,`<h1>Access requested</h1><p>Return to the app after its developer approves your request.</p>${accountPicker}<p><a href="/dashboard">Open dashboard</a></p>`,200,callbackOrigin,true);
         }
         if(input.get('action')==='deny'){
-          await provider.interactionFinished(req,res,{error:'access_denied',error_description:"You don't have permission to use this app."},{mergeWithLastSubmission:false});
+          await finish({error:'access_denied',error_description:"You don't have permission to use this app."},{mergeWithLastSubmission:false});
           return;
         }
         return html(res,'<h1>Invalid request</h1>',400);
@@ -464,10 +520,13 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       ? trustedScopes.filter(scope=>scopes.has(scope)||existingScopes.has(scope)) : [];
     if(!canRequestTrusted(client.client_id,scopes)){
       if(req.method==='GET'||req.headers.origin===issuer){
-        await provider.interactionFinished(req,res,{error:'invalid_scope',error_description:trustError},{mergeWithLastSubmission:false});
+        await finish({error:'invalid_scope',error_description:trustError},{mergeWithLastSubmission:false});
         return;
       }
       return html(res,'<h1>Could not verify the request</h1>',403);
+    }
+    if(remote&&((requiredEmail&&!scopes.has('email'))||(requiredAge&&!scopes.has('age_range')))){
+      return html(res,'<h1>The app is missing a required permission</h1>',400);
     }
     const requestedFileScopes=fileScopes.filter(scope=>scopes.has(scope));
     const previouslyAllowed=scope=>existingScopes.has(scope);
@@ -476,11 +535,13 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       if (req.headers.origin !== issuer) return html(res,'<h1>Could not verify the request</h1>',403);
       let input;
       try { input = await form(req); } catch { return html(res,'<h1>Invalid request</h1>',400); }
+      if(remote&&(input.get('review_proof')!==reviewProof||!approvals.matches(remote,input.get('qr_code'))))return html(res,'<h1>Code could not be confirmed</h1><p>Check the code on the original device and try again.</p>',409);
+      if(remote&&!['approve','deny'].includes(input.get('action')))return html(res,'<h1>Choose how to proceed</h1>',422);
       if (input.get('action') !== 'approve') {
-        await provider.interactionFinished(req,res,{ error:'access_denied', error_description:'The user declined.' },{mergeWithLastSubmission:false});
+        await finish({ error:'access_denied', error_description:'The user declined.' },{mergeWithLastSubmission:false});
         return;
       }
-      if (prompt.name !== 'consent' || details.session?.accountId !== active.owner || activeAccount()?.owner!==active.owner || !canUse(active.owner,client.client_id)) {
+      if (prompt.name !== 'consent' || !remote&&details.session?.accountId !== active.owner || activeAccount()?.owner!==active.owner || !canUse(active.owner,client.client_id)) {
         return html(res,'<h1>The signed-in account changed</h1><p>Start again from the app.</p>',409);
       }
       if(emailUnavailable)return html(res,'<h1>Email permission unavailable</h1><p>Unlink this app from your account, then link it again to choose a verified address.</p><a href="/apps">Manage linked apps</a>',409);
@@ -492,41 +553,44 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       if(sensitiveScopes.some(scope=>scopes.has(scope)&&selectedPermissions.has(scope)&&!existingScopes.has(scope)&&!confirmed.has(scope))){
         return html(res,'<h1>Confirm sensitive permissions</h1><p>Go back to confirm the permission or leave it turned off.</p>',400);
       }
-      const eligible = accounts.premiumEligible(active.owner);
-      const premium = (selected === 'premium'||selected==='masked') && eligible && mail?.premiumAvailable ? mail?.premiumAlias(active.owner,client.client_id) : null;
-      if(selected === 'premium' && !premium) return html(res,'<h1>Premium Hide My Email is unavailable</h1>',409);
-      const alias = selected === 'masked' && !premium && !(eligible&&mail?.premiumAvailable) ? mail?.alias(active.owner,client.client_id) : null;
-      if (selected === 'masked' && !alias && !premium) return html(res,'<h1>Hide My Email is unavailable</h1>',409);
-      if(selected==='primary'&&!mail)return html(res,'<h1>Select a verified address</h1>',400);
-      const primary=selected==='primary';
-      const email = selected==='current'?sharedEmail:premium || alias || (primary?person.username+'@mail.xcenter.it':selected);
-      if (selected!=='current' && email && !alias && !premium && !primary && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
-      if(appData&&brand?.local&&input.get('confirm-unsecure')!=='yes')return html(res,'<h1>Confirm unsecure app access</h1><p>Confirm the warning in the authorization form.</p>',400);
-      const dataChanged=appData&&applicationData?.authorize(active.owner,client.client_id,input.getAll('data-permission'));
-      const trustedAllowed=requestTrusted.filter(scope=>selectedPermissions.has(scope));
-      const fileAllowed=requestedFileScopes.filter(scope=>selectedPermissions.has(scope));
-      const fileDenied=requestedFileScopes.filter(scope=>!selectedPermissions.has(scope));
-      const keepSession=showOffline&&input.getAll('permission').includes('offline_access');
-      const shareFriends=showFriends&&input.getAll('permission').includes('friends');
-      const ageAllowed=scopes.has('age_range')&&showAge&&(requiredAge||input.getAll('permission').includes('age_range'));
-      const allowed=['openid','profile',...fileAllowed,...trustedAllowed,...(ageAllowed?['age_range']:[]),...(appData?['app_data']:[]),...(shareFriends?['friends']:[]),...(keepSession?['offline_access']:[]),...(email||scopes.has('email')&&sharedEmail&&(!existingGrant||requiredEmail)?['email']:[])];
-      const denied=[...fileDenied,...requestTrusted.filter(scope=>!selectedPermissions.has(scope)),...(showAge&&!ageAllowed?['age_range']:[]),...((chooseEmail&&!email||linked&&scopes.has('email')&&!existingScopes.has('email')&&!allowed.includes('email'))?['email']:[]),...(showFriends&&!shareFriends?['friends']:[]),...(showOffline&&!keepSession?['offline_access']:[])];
-      const grant=existingGrant||new provider.Grant({accountId:active.owner,clientId:client.client_id});
-      approveScopes(grant, allowed);
-      if(denied.length)grant.rejectOIDCScope(denied);
-      const grantId = await grant.save();
-      if (email && selected!=='current') await selections.upsert(grantId,premium||alias ? { privateAddress:email, client:client.client_id } : primary?{primary:true}:{ email });
-      else if(sharedEmail&&linked!==grantId) {
-        const selection=await selections.find(linked);
-        if(selection)await selections.upsert(grantId,selection);
-      }
-      accounts.rememberApp(active.owner,client.client_id,client.client_name ?? client.client_id,grantId);
-      const after=grant.getOIDCScope().split(' ');
-      const scopeChanged=after.length!==existingScopes.size||after.some(scope=>!existingScopes.has(scope));
-      if(!linked)notify(active.owner,client.client_id,'linked');
-      else if(dataChanged||scopeChanged||email&&email!==sharedEmail)notify(active.owner,client.client_id,'permissions');
-      await provider.interactionFinished(req,res,{ consent:{ grantId } });
-      return;
+      if(remote)remote.processing=true;
+      try{
+        const eligible = accounts.premiumEligible(active.owner);
+        const premium = (selected === 'premium'||selected==='masked') && eligible && mail?.premiumAvailable ? mail?.premiumAlias(active.owner,client.client_id) : null;
+        if(selected === 'premium' && !premium) return html(res,'<h1>Premium Hide My Email is unavailable</h1>',409);
+        const alias = selected === 'masked' && !premium && !(eligible&&mail?.premiumAvailable) ? mail?.alias(active.owner,client.client_id) : null;
+        if (selected === 'masked' && !alias && !premium) return html(res,'<h1>Hide My Email is unavailable</h1>',409);
+        if(selected==='primary'&&!mail)return html(res,'<h1>Select a verified address</h1>',400);
+        const primary=selected==='primary';
+        const email = selected==='current'?sharedEmail:premium || alias || (primary?person.username+'@mail.xcenter.it':selected);
+        if (selected!=='current' && email && !alias && !premium && !primary && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
+        if(appData&&brand?.local&&input.get('confirm-unsecure')!=='yes')return html(res,'<h1>Confirm unsecure app access</h1><p>Confirm the warning in the authorization form.</p>',400);
+        const dataChanged=appData&&applicationData?.authorize(active.owner,client.client_id,input.getAll('data-permission'));
+        const trustedAllowed=requestTrusted.filter(scope=>selectedPermissions.has(scope));
+        const fileAllowed=requestedFileScopes.filter(scope=>selectedPermissions.has(scope));
+        const fileDenied=requestedFileScopes.filter(scope=>!selectedPermissions.has(scope));
+        const keepSession=showOffline&&input.getAll('permission').includes('offline_access');
+        const shareFriends=showFriends&&input.getAll('permission').includes('friends');
+        const ageAllowed=scopes.has('age_range')&&showAge&&(requiredAge||input.getAll('permission').includes('age_range'));
+        const allowed=['openid','profile',...fileAllowed,...trustedAllowed,...(ageAllowed?['age_range']:[]),...(appData?['app_data']:[]),...(shareFriends?['friends']:[]),...(keepSession?['offline_access']:[]),...(email||scopes.has('email')&&sharedEmail&&(!existingGrant||requiredEmail)?['email']:[])];
+        const denied=[...fileDenied,...requestTrusted.filter(scope=>!selectedPermissions.has(scope)),...(showAge&&!ageAllowed?['age_range']:[]),...((chooseEmail&&!email||linked&&scopes.has('email')&&!existingScopes.has('email')&&!allowed.includes('email'))?['email']:[]),...(showFriends&&!shareFriends?['friends']:[]),...(showOffline&&!keepSession?['offline_access']:[])];
+        const grant=existingGrant||new provider.Grant({accountId:active.owner,clientId:client.client_id});
+        approveScopes(grant, allowed);
+        if(denied.length)grant.rejectOIDCScope(denied);
+        const grantId = await grant.save();
+        if (email && selected!=='current') await selections.upsert(grantId,premium||alias ? { privateAddress:email, client:client.client_id } : primary?{primary:true}:{ email });
+        else if(sharedEmail&&linked!==grantId) {
+          const selection=await selections.find(linked);
+          if(selection)await selections.upsert(grantId,selection);
+        }
+        accounts.rememberApp(active.owner,client.client_id,client.client_name ?? client.client_id,grantId);
+        const after=grant.getOIDCScope().split(' ');
+        const scopeChanged=after.length!==existingScopes.size||after.some(scope=>!existingScopes.has(scope));
+        if(!linked)notify(active.owner,client.client_id,'linked');
+        else if(dataChanged||scopeChanged||email&&email!==sharedEmail)notify(active.owner,client.client_id,'permissions');
+        await finish({ consent:{ grantId } });
+        return;
+      }finally{if(remote)remote.processing=false;}
     }
     if (req.method !== 'GET') return html(res,'<h1>Method unavailable</h1>',405);
     const personBadges=[person.verified&&'<span class="badge">✓ Verified profile</span>',person.admin&&'<span class="badge">◆ Administrator</span>'].filter(Boolean).join('');
@@ -601,7 +665,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       <span class="avatar">${person.hasPicture?'<img alt="" src="/account/avatar">':glyph('user')}</span>${glyph('link')}
       <span class="avatar">${brand?.icon?`<img alt="" src="${escape(brand.iconUrl??'data:image/png;base64,'+brand.icon)}">`:visual?glyph(visual):escape(title.slice(0,2).toUpperCase())}</span></div>
       <h1>${incremental?'Authorize logging back into '+escape(title)+'?':'Link '+escape(title)+' to X-Center ID'}</h1>
-      ${device?'<p>You’re approving sign-in on your other device.</p>':''}
+      ${device||remote?'<p>You’re approving sign-in on your other device. Continue only if you started the request.</p>':''}
       ${incremental?`<p>${escape(title)} is already linked to your X-Center ID. Review its permissions before continuing.</p>`:''}
       ${brand?.description?`<p>${escape(brand.description)}</p>`:''}
       ${brand?.local?'<p role="alert">Unsecure app. Its hosting domain has not been verified. Continue only if you trust this installation.</p>':''}
@@ -615,7 +679,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
           ${accountPicker}${badgeRow(personBadges)}
         </section>
       </div>
-      <form method="post"><h2>Permissions</h2>
+      <form method="post">${remote?`<input type="hidden" name="review_proof" value="${reviewProof}"><label>Code from the original device <input name="qr_code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" required></label>`:''}<h2>Permissions</h2>
       <ul class="permission-list">
         ${fixed('id','Account ID, name, username and profile photo',requiredNote)}
         ${showAge&&!requiredAge?`<li><label class="permission-toggle">${glyph('age')}<span>Age range</span><input aria-label="Age range" type="checkbox" role="switch" name="permission" value="age_range"${existingScopes.has('age_range')?' checked':''}></label></li>`:''}

@@ -708,3 +708,16 @@ Updated the provider docs, SDK reference, cross-platform SDKs and installed inte
 | AUTHN-171 | Include content hashes in all file metadata and listings for app-owned indexes, then deploy to production. | Verified | Provider 0.21.0 is live at `6be04fe`. Synthetic authenticated API tests covered all file namespaces, rename and replacement. Public HTTPS and Chrome confirmed the new documentation and unauthenticated metadata denial. SDK `19da834` passed quality checks and reached testing, beta and main. |
 
 The SHA-256 digest follows the exact downloaded bytes. File and share permissions still gate access to metadata. The digest cache is encrypted and keyed by immutable content; replacement preserves the public ID while switching the hash. See [file metadata and hashes](APP_CONTAINER_FILES.md#file-metadata-and-content-hashes).
+
+### App snapshots, protected storage and authorization
+
+| ID | Request | State | Next action |
+| --- | --- | --- | --- |
+| AUTHN-172 | Add a snapshot API and manual app backups with developer opt-in. | Queued | Define the app policy and versioned snapshot contract. Capture the linked user's own records and committed files, with quota, retention and unlink/deletion semantics. Add user and app snapshot creation, and a separate confirmed, version-aware restore with a rollback snapshot. Cover web, native, SDK and docs. |
+| AUTHN-173 | Propose optional Advanced Data Protection before changing encryption. | Verified | [Design proposal](ADVANCED_DATA_PROTECTION.md) describes account key custody, trusted-device enrollment, recovery, temporary web access, app compatibility and staged migration. Review with the user before implementing key changes. |
+| AUTHN-174 | Approve third-party app authorization by QR on another device and return to the initiating browser. | Implemented | Normal browser authorization resumes with the original callback, state and PKCE. Run source and browser checks. Physical camera and installed-device checks remain open. |
+| AUTHN-175 | Add account activity and permission history. | Queued | Add an owner-scoped event log for sign-in, app grants, permission changes and revocations. Define retention and avoid storing private payloads, email addresses or tokens. Add web and native activity views. |
+| AUTHN-176 | Add an isolated developer sandbox. | Queued | Design separate test registrations, credentials, accounts and storage. Add consent preview, safe request diagnostics, and test fixtures for callbacks and permissions. |
+| AUTHN-177 | End connected-app sessions with no new app integration requirement. | Queued | Add central revocation of provider-issued access and refresh tokens while preserving grants and stored data. Apps that rely on X-Center APIs pick up revocation automatically. Ending independent app-issued sessions requires integration and is outside the no-adaptation target. |
+
+QR authorization was moved ahead of the storage implementation to complete and verify the independent browser flow. Snapshot captures and restores are separate from trusted-device key management.

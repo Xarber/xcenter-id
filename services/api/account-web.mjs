@@ -554,7 +554,7 @@ const accountServer=createServer({ requestTimeout: 15_000, headersTimeout: 10_00
     return;
   }
   if(provider&&path==='/device/native'&&req.method==='GET')return nativeDeviceEntry(res);
-  if (provider && path.startsWith('/interaction/')) {
+  if (provider && (path.startsWith('/interaction/')||/^\/app-approval\/[A-Za-z0-9_-]{43}$/.test(path))) {
     void provider.interaction(req, res, path).catch(() => {
       if (!res.headersSent) res.writeHead(500, { 'Cache-Control': 'no-store' });
       res.end('The sign-in request could not be completed.');

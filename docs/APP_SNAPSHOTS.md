@@ -1,0 +1,9 @@
+# Proposed app snapshots
+
+Apps explicitly opt into backups for the data they own in a user's X-Center ID container. The default is off. The developer publishes a compatibility version and can allow snapshot creation while keeping restore disabled. User approval is required before an app can request snapshots, and the user can create a snapshot from their own Connected Apps page. Existing external backup mechanisms can continue independently.
+
+A snapshot captures the user's own committed app records and binary files consistently. It excludes other people's records, account files outside the app container, service storage and unfinished transfers. Record and binary payloads stay encrypted at rest. Preserve immutable file content by reference where safe and account for retained data in quota. Capture manifests atomically and retain content until the final live or snapshot reference is removed. Large operations should be resumable and avoid blocking the issuer.
+
+Restore should show the snapshot date, version and exact impact before confirmation. A user-confirmed restore must verify current developer opt-in and compatibility, prevent stale clients from overwriting newly restored data, and offer rollback through a pre-restore snapshot. A restore cannot grant account, public profile, app-to-app or recipient permissions. Account and app deletion, unlinking, storage quotas, and retention must all be tested against snapshots. Existing apps never acquire restore permission automatically.
+
+Advanced Data Protection would use the same snapshot lifecycle with encrypted manifests and client-held keys. Snapshot retention must preserve the wrapped keys needed to decrypt retained versions. A server-managed restore of strictly protected data works on authenticated ciphertext and must not receive the account's decryption key.

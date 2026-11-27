@@ -305,7 +305,7 @@ export default function WebApp(){
   const next=path==='native-session'||path==='reauth'?window.location.pathname+window.location.search:
     new URLSearchParams(window.location.search).get('continue')??(friendReturn||(permissionRoute||mailRoute||profileSection?'/'+path:''));
   const nativeReturn=/^\/native-session\?challenge=[A-Za-z0-9_-]{43}&state=[A-Za-z0-9_-]{43}$/;
-  const continuation=/^\/friends#invite=(?:[A-Za-z2-9]{10}|[A-Za-z0-9_-]{32})$/.test(next)||/^\/profile\/(?:visibility|username|developer)$/.test(next)||/^\/reauth\?request=[A-Za-z0-9_-]{43}$/.test(next)||/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)||nativeReturn.test(next)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(next)||/^\/mail\/[0-9a-f-]{36}$/.test(next)?next:null;
+  const continuation=/^\/friends#invite=(?:[A-Za-z2-9]{10}|[A-Za-z0-9_-]{32})$/.test(next)||/^\/profile\/(?:visibility|username|developer)$/.test(next)||/^\/reauth\?request=[A-Za-z0-9_-]{43}$/.test(next)||/^\/interaction\/[A-Za-z0-9_-]{10,160}$/.test(next)||/^\/app-approval\/[A-Za-z0-9_-]{43}$/.test(next)||nativeReturn.test(next)||/^\/permissions\/[A-Za-z0-9_-]{1,100}$/.test(next)||/^\/mail\/[0-9a-f-]{36}$/.test(next)?next:null;
   const emailToken=new URLSearchParams(window.location.hash.slice(1)).get('verify-email');
   const authDestination=emailToken?'/profile'+window.location.hash:continuation??'/dashboard';
   async function load(){const result=await api('me');setAccount(result.account);setLocked(!!result.locked);}

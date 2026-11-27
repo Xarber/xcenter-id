@@ -53,7 +53,7 @@ test('registered device flow confirms linking and issues a single nonce-bound to
   const server=createServer((req,res)=>{
     const url=new URL(req.url,issuer);
     if(url.pathname.startsWith('/account/app-storage/'))return void applicationData.handle(req,res,url);
-    if(url.pathname.startsWith('/interaction/')){
+    if(url.pathname.startsWith('/interaction/')||url.pathname.startsWith('/app-approval/')){
       void provider.interaction(req,res,url.pathname).catch(error=>{
         if(!res.headersSent)res.writeHead(500);
         res.end(error.message);
@@ -66,13 +66,13 @@ test('registered device flow confirms linking and issues a single nonce-bound to
   await once(server,'listening');
   const cookies=new Map();
   const nonce=randomBytes(32).toString('base64url');
-  async function http(path,{form,credentials,browser=false}={}){
+  async function http(path,{form,credentials,browser=false,scan=false}={}){
     const target=new URL(path,issuer);
     const headers={'x-forwarded-host':'id.example.test','x-forwarded-proto':'https',...(browser?{
       cookie:[...cookies].map(([name,value])=>name+'='+value).join('; '),origin:issuer,
     }:{}),...(credentials?.clientSecret?{
       authorization:'Basic '+Buffer.from(credentials.clientId+':'+credentials.clientSecret).toString('base64'),
-    }:{})};
+    }:{}),...(scan?{origin:issuer}:{})};
     const response=await fetch('http://127.0.0.1:'+server.address().port+target.pathname+target.search,{
       method:form?'POST':'GET',headers,body:form?new URLSearchParams(form):undefined,redirect:'manual',
     });
@@ -317,6 +317,57 @@ test('registered device flow confirms linking and issues a single nonce-bound to
     assert.ok(accounts.linkedGrant(second.owner,webClient.clientId));
     assert.equal(accounts.linkedGrant(current.owner,webClient.clientId),undefined);
     assert.ok(accounts.linkedGrant(current.owner,readingApp.clientId));
+
+    {
+      const remoteClient=await register('Remote browser approval',true);
+      const remoteState=randomBytes(32).toString('base64url');
+      const remoteParams=new URLSearchParams({...Object.fromEntries(browserParams),client_id:remoteClient.clientId,state:remoteState});
+      cookies.clear();
+      selected=null;
+      const start=await http('/auth?'+remoteParams,{browser:true});
+      const originalPath=new URL(start.headers.get('location'),issuer).pathname;
+      const wait=await http(originalPath,{browser:true});
+      const waitHtml=await wait.text();
+      assert.equal(wait.status,200,waitHtml.slice(0,400));
+      assert.match(waitHtml,/Sign in to Remote browser approval/);
+      const scanned=new URL(waitHtml.match(/data-approval-url="([^"]+)"/)?.[1]).pathname;
+      const code=waitHtml.match(/class="device-code">(\d{6})</)?.[1];
+      assert.ok(code);
+      assert.equal((await http(originalPath+'?qr=status',{scan:true})).status,400);
+      assert.equal((await http(scanned,{scan:true})).status,303);
+      selected=current;
+      const remoteReview=await (await http(scanned,{scan:true})).text();
+      assert.match(remoteReview,/Link Remote browser approval to X-Center ID/);
+      assert.match(remoteReview,/@example/);
+      const proof=remoteReview.match(/name="review_proof" value="([^"]+)"/)?.[1];
+      assert.ok(proof);
+      const confirm={action:'approve',qr_code:code,review_proof:proof};
+      assert.equal((await http(scanned,{form:confirm})).status,403);
+      assert.equal((await http(scanned,{scan:true,form:{...confirm,qr_code:code==='000000'?'111111':'000000'}})).status,409);
+      selected=second;
+      assert.equal((await http(scanned,{scan:true,form:confirm})).status,409);
+      selected=current;
+      const approval=await http(scanned,{scan:true,form:confirm});
+      assert.equal(approval.status,200,await approval.clone().text());
+      assert.equal(approval.headers.get('location'),null);
+      assert.match(await approval.text(),/App sign-in approved/);
+      assert.equal((await http(scanned,{scan:true,form:confirm})).status,400);
+      selected=null;
+      assert.deepEqual(await (await http(originalPath+'?qr=status',{browser:true})).json(),{state:'ready'});
+      let pickup=await http(originalPath+'?qr=finish',{browser:true,form:{}});
+      for(let step=0;step<5&&pickup.status===303&&new URL(pickup.headers.get('location'),issuer).origin===issuer;step++){
+        pickup=await http(pickup.headers.get('location'),{browser:true});
+      }
+      const remoteRedirect=new URL(pickup.headers.get('location'));
+      assert.equal(remoteRedirect.searchParams.get('state'),remoteState);
+      assert.ok(remoteRedirect.searchParams.get('code'),remoteRedirect.href);
+      assert.equal((await http(originalPath+'?qr=finish',{browser:true,form:{}})).status,400);
+      const redemption=await http('/token',{form:{client_id:remoteClient.clientId,
+        grant_type:'authorization_code',code:remoteRedirect.searchParams.get('code'),redirect_uri:callback,code_verifier:verifier,
+      }});
+      assert.equal(redemption.status,200,await redemption.clone().text());
+      assert.ok(accounts.linkedGrant(current.owner,remoteClient.clientId));
+    }
 
   } finally {
     await new Promise(resolve=>server.close(resolve));
