@@ -8,7 +8,7 @@ import { createIdentityProvider } from './oidc.mjs';
 import { openRegistry } from './registry.mjs';
 import { openApplicationData } from './application-data.mjs';
 
-test('registered device flow confirms linking and issues a single nonce-bound token response', async () => {
+for(const environment of ['production','sandbox'])test(environment+' issuer verifies registered device and browser flows', async () => {
   const issuer='https://id.example.test';
   const registry=openRegistry(':memory:');
   const links=new Map();
@@ -38,12 +38,14 @@ test('registered device flow confirms linking and issues a single nonce-bound to
   const jwk=generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({format:'jwk'});
   const applicationData=openApplicationData({path:':memory:',key:Buffer.alloc(32,7),registry,accounts,authenticate:()=>null});
   const provider=createIdentityProvider({issuer,database:':memory:',registry,accounts,applicationData,configuration:{
+    environment,
     storageKey:'71'.repeat(32),subjectKey:'83'.repeat(32),cookieKeys:['e2'.repeat(32)],
     clients:[],jwks:{keys:[{...jwk,kid:'device-fixture',alg:'RS256',use:'sig'}]},
   }});
   async function register(name,native=false,local=false){
     const registration=registry.submit(name.startsWith('Velunivo')?current.owner:'developer',name,local?'http://127.0.0.1:8400/callback':'https://tv.example.test/callback',undefined,native,undefined,local);
     const credentials=await provider.provision(registration);
+    assert.match(credentials.clientId,environment==='sandbox'?/^xid-test-/:/^xid-[0-9a-f]/);
     registry.approve(registration.id,credentials.clientId);
     return credentials;
   }

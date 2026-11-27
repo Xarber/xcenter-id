@@ -35,13 +35,13 @@ import { openStore } from './store.mjs';
 import { createIdentityProvider } from './oidc.mjs';
 
 const root = resolve(process.env.AUTHNJS_WEB_ROOT ?? '/web');
+const configuration = process.env.AUTHNJS_OIDC_CONFIG ? JSON.parse(readFileSync(process.env.AUTHNJS_OIDC_CONFIG, 'utf8')) : null;
+const sandbox=validateSandbox(configuration,process.env);
 const mailConfig = process.env.AUTHNJS_MAIL_CONFIG
   ? JSON.parse(readFileSync(process.env.AUTHNJS_MAIL_CONFIG,'utf8')) : null;
 if(mailConfig&&process.env.AUTHNJS_LOCAL_SMTP_HOST){
   mailConfig.localDelivery={host:process.env.AUTHNJS_LOCAL_SMTP_HOST};
 }
-const configuration = process.env.AUTHNJS_OIDC_CONFIG ? JSON.parse(readFileSync(process.env.AUTHNJS_OIDC_CONFIG, 'utf8')) : null;
-const sandbox=validateSandbox(configuration,process.env);
 const mailLimits=openMailLimits(join(process.env.AUTHNJS_DATA_DIR,'accounts.sqlite'),mailConfig?.externalLimits);
 const accounts = createAccounts({
   outboundMail:createOutboundMail(mailConfig,{limits:mailLimits,
