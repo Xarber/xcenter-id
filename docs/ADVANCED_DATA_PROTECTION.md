@@ -38,3 +38,9 @@ This is a design proposal. No protection mode is available through the current r
 ## Developer compatibility declaration
 
 The developer can declare support under their app's storage settings. This defaults to off and is available to owners of active secure registrations after confirmation. Changing the declaration does not migrate anything or grant access. The provider's eligibility check requires the live declaration and an active app link for the account. The future migration endpoint must use that check at commit time, recheck the account's own approval, and stop if an app withdraws compatibility. Existing protected ciphertext must remain recoverable by its owner if an app withdraws support.
+
+### First implementation boundary
+
+Use a separate private vault in the pilot. Sign-in and OAuth continue through the existing issuer. A trusted client generates a random account vault key and device signing/agreement key pairs. Store the device private keys in the native protected store. A device transition signs the issuer, account, previous trust-state digest, new device public keys, purpose, nonce and expiry. The server verifies the signature from a currently enrolled device and atomically advances the trust state. The recipient verifies the signed transition before unwrapping keys. Use standard, independently reviewed cryptographic libraries for key agreement, authenticated key wrapping and signed manifests.
+
+Start with a client-encrypted recovery envelope and a synthetic round trip. The server should validate the package structure, scope and proof. It should never receive raw device keys, vault keys or the recovery phrase. Validate key rotation and client trust-state rollback detection before enabling production accounts. Add protected app records behind the live compatibility and account-consent checks. Preserve the standard container until the newly protected copy has been read back and verified under the user's recovery policy.
