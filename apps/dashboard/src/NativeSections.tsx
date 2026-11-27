@@ -1,3 +1,4 @@
+import AccountActivity from './AccountActivity';
 import AdminSearch from './AdminSearch';
 import ListPages from './ListPages';
 import {useListPage} from './list-page';
@@ -370,7 +371,7 @@ export default function NativeSections({ section,token,account,colors,reload,exp
         {selectedKey&&<>{field('Passkey name',keyName,setKeyName,{maxLength:64})}{button('Save name',()=>run(async()=>{
           await mutate('passkey/rename',{id:selectedKey,name:keyName});setSelectedKey(null);
         },'Passkey renamed.'))}</>}
-        {button('Add a passkey in secure browser',passkeys)}</>;
+        {button('Add a passkey in secure browser',passkeys)}<AccountActivity key={token} token={token} colors={colors}/></>;
       break;
     case 'apps':
       content=<>{apps.length===0&&paragraph('No linked apps yet.')}

@@ -586,8 +586,10 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         accounts.rememberApp(active.owner,client.client_id,client.client_name ?? client.client_id,grantId);
         const after=grant.getOIDCScope().split(' ');
         const scopeChanged=after.length!==existingScopes.size||after.some(scope=>!existingScopes.has(scope));
-        if(!linked)notify(active.owner,client.client_id,'linked');
-        else if(dataChanged||scopeChanged||email&&email!==sharedEmail)notify(active.owner,client.client_id,'permissions');
+        if(!linked)notify(active.owner,client.client_id,'linked',{added:after});
+        else if(dataChanged||scopeChanged||email&&email!==sharedEmail)notify(active.owner,client.client_id,'permissions',{
+          added:after.filter(scope=>!existingScopes.has(scope)),removed:[...existingScopes].filter(scope=>!after.includes(scope)),sharedData:!!dataChanged,
+        });
         await finish({ consent:{ grantId } });
         return;
       }finally{if(remote)remote.processing=false;}
@@ -728,7 +730,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       else{grant.rejectOIDCScope([scope]);current.delete(scope);}
       if(!accounts.grantAllowed(owner,client,linked)) return null;
       await grant.save();
-      if(changed)notify(owner,client,'permissions');
+      if(changed)notify(owner,client,'permissions',enabled?{added:[scope]}:{removed:[scope]});
     }
     return accountPermissions.filter(scope=>scope==='profile'||encountered.has(scope)||scope!=='app_data'&&required(scope)).map(scope=>({
       scope,required:required(scope),enabled:scope==='profile'||current.has(scope)&&(scope!=='email'||!!email),

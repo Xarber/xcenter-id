@@ -85,11 +85,14 @@ const registry = openRegistry(join(state, 'apps.sqlite'));
 const reviewApps=createAdminAppRoutes({accounts,registry});
 const mail = mailConfig?.inboundDomains?.length ? openMailStore({ configuration:mailConfig,
   accountService:accounts,accountsPath:join(state,'accounts.sqlite'), mailPath:join(state,'mail.sqlite') }) : null;
-function notifyAppChange(owner,client,kind){
-  if(!mail||!accounts.available(owner))return;
+function notifyAppChange(owner,client,kind,detail){
+  if(!accounts.available(owner))return;
+  const name=registry.publicDetails(client)?.name??accounts.linkedAppLabel(owner,client)??'A connected app';
+  try{accounts.recordActivity(owner,kind,name,detail);}
+  catch{console.warn('Account activity could not be recorded.');}
+  if(!mail)return;
   const username=accounts.username(owner);
   if(!username)return;
-  const name=registry.publicDetails(client)?.name??accounts.linkedAppLabel(owner,client)??'A connected app';
   const message={
     linked:['New app linked',name+' was linked to your X-Center ID.'],
     permissions:['App permissions updated','Permissions for '+name+' were updated.'],

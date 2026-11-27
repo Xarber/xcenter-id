@@ -79,6 +79,11 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       id TEXT UNIQUE NOT NULL, hash TEXT PRIMARY KEY REFERENCES account_sessions(hash) ON DELETE CASCADE,
       label TEXT NOT NULL
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS account_activity (
+      id INTEGER PRIMARY KEY, owner TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL, subject TEXT, detail TEXT, created INTEGER NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS account_activity_owner ON account_activity(owner,id DESC);
     CREATE TABLE IF NOT EXISTS connected_apps (
       owner TEXT NOT NULL REFERENCES accounts(id), client TEXT NOT NULL, label TEXT NOT NULL,
       updated INTEGER NOT NULL, PRIMARY KEY(owner,client)
@@ -298,7 +303,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     q(`INSERT INTO account_restrictions VALUES(?,'deleted') ON CONFLICT(owner) DO UPDATE SET status='deleted'`).run(owner);
     q('INSERT OR IGNORE INTO retired_usernames VALUES(?)').run(username);
     for(const table of ['passkeys','account_sessions','email_signins','connected_apps','app_link_grants','app_disconnects','account_entitlements',
-      'account_storage_caps','mail_credentials','account_email_addresses','inbound_verification_results','account_flags','identity_profiles',
+      'account_activity','account_storage_caps','mail_credentials','account_email_addresses','inbound_verification_results','account_flags','identity_profiles',
       'signup_usernames','verified_emails','email_verifications','username_change_requests','inbound_verifications','inbound_verification_rates']){
       q('DELETE FROM '+table+' WHERE owner=?').run(owner);
     }
@@ -311,6 +316,14 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       purgeAccount(owner);
       q('DELETE FROM account_deletion_jobs WHERE owner=?').run(owner);
     }catch(error){console.error('account_deletion_cleanup_pending',error?.constructor?.name);}
+  }
+
+  function recordActivity(owner,kind,subject=null,detail=null){
+    const stale=now()-90*86400_000;
+    q('DELETE FROM account_activity WHERE owner=? AND (created<? OR id IN (SELECT id FROM account_activity WHERE owner=? ORDER BY id DESC LIMIT -1 OFFSET 99))')
+      .run(owner,stale,owner);
+    q('INSERT INTO account_activity(owner,kind,subject,detail,created) VALUES (?,?,?,?,?)')
+      .run(owner,kind,subject,detail?JSON.stringify(detail):null,now());
   }
 
   function login(req,res, owner, nativeSource,allowLocked=false) {
@@ -326,6 +339,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     const label = nativeSource ? (nativePlatform==='ios'?'X-Center ID on iPhone or iPad'
       :nativePlatform==='android'?'X-Center ID on Android':'X-Center ID app') : deviceLabel(req);
     q('INSERT INTO account_devices VALUES (?,?,?)').run(randomUUID(),hash,label);
+    try{recordActivity(owner,'sign-in',label);}
+    catch{console.warn('Sign-in activity could not be recorded.');}
     if(!nativeSource){
       for(const entry of previous)if(entry.owner===owner)removeSession.run(entry.hash);
       setBrowserAccounts(res,value,previous.filter(entry=>entry.owner!==owner));
@@ -432,6 +447,12 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     if(req.method==='GET'&&pathname==='/account/profile/visibility'){
       requireCondition(active,401,'Sign in first.');
       return {fields:visibility(active.owner)};
+    }
+    if(req.method==='GET'&&pathname==='/account/activity'){
+      requireCondition(active,401,'Sign in first.');
+      const events=q('SELECT id,kind,subject,detail,created FROM account_activity WHERE owner=? AND created>=? ORDER BY id DESC LIMIT 100')
+        .all(active.owner,now()-90*86400_000).map(item=>({...item,detail:item.detail?JSON.parse(item.detail):null}));
+      return {events};
     }
     if (req.method === 'GET' && pathname === '/account/connected-apps') {
       requireCondition(active,401,'Sign in first.');
@@ -952,6 +973,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       if(enabled)requireCondition(q('SELECT premium_mail FROM account_entitlements WHERE owner=?').get(owner)?.premium_mail===1,403,'Premium private addresses are unavailable.');
       return q('UPDATE mailbox_aliases SET active=? WHERE owner=? AND local=?').run(Number(enabled),owner,local).changes===1;
     },
+    recordActivity,
     linkedAppLabel:(owner,client)=>appBrand(client)?.name??q('SELECT label FROM connected_apps WHERE owner=? AND client=?').get(owner,client)?.label,
     isAdministrator:req=>isAdmin(session(req)),
     deleteMailboxAlias(owner,local){

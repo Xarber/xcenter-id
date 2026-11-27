@@ -281,6 +281,16 @@ test('browser can switch only among its own saved sessions and self-deletion pre
     headers:{cookie,origin,'content-type':'application/json','x-authnjs-request':'account-consent'}});
   const cookies='__Host-authnjs='+first+'; __Host-authnjs-switcher='+second;
   try{
+    for(let i=0;i<105;i++)service.recordActivity('one','permissions','Fixture app',{added:['friends']});
+    service.recordActivity('two','sign-in','Other device');
+    db.prepare('UPDATE account_activity SET created=0 WHERE owner=? AND id=(SELECT min(id) FROM account_activity WHERE owner=?)').run('one','one');
+    assert.equal((await call('activity','')).status,401);
+    const {events}=await (await call('activity',cookies)).json();
+    assert.equal(events.length,99);
+    assert.ok(events.every(event=>event.subject==='Fixture app'&&event.detail.added[0]==='friends'));
+    assert.ok(events[0].id>events.at(-1).id);
+    const otherActivity=await (await call('activity','__Host-authnjs='+second)).json();
+    assert.deepEqual(otherActivity.events.map(event=>event.subject),['Other device']);
     const list=await (await call('switcher',cookies)).json();
     assert.deepEqual(list.accounts.map(({username,current})=>[username,current]),[['firstuser',true],['seconduser',false]]);
     assert.equal((await call('switcher','__Host-authnjs='+first,{slot:1})).status,404);
@@ -291,6 +301,7 @@ test('browser can switch only among its own saved sessions and self-deletion pre
     assert.equal((await call('delete',cookies,{confirmation:'seconduser'})).status,422);
     assert.equal((await call('delete',cookies,{confirmation:'firstuser'})).status,200);
     assert.deepEqual(purged,['one']);
+    assert.equal(db.prepare('SELECT count(*) AS count FROM account_activity WHERE owner=?').get('one').count,0);
     assert.equal((await (await call('me',cookies)).json()).account,null);
     assert.equal((await (await call('me','__Host-authnjs='+second)).json()).account.profile.username,'seconduser');
     assert.deepEqual((await (await call('switcher',cookies)).json()).accounts.map(({username})=>username),['seconduser']);
