@@ -351,14 +351,14 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     return value;
   }
 
-  function prepare(res, challenge) {
+  function prepare(res, challenge, autofill=false) {
     const ticket = token();
     challenges.set(ticket, { ...challenge, expires: now() + 120_000 });
-    setCookie(res, '__Host-authnjs-flow', ticket, 120);
+    setCookie(res, autofill?'__Host-authnjs-autofill':'__Host-authnjs-flow', ticket, 120);
   }
 
-  function consume(req, action, active) {
-    const id = cookie(req, '__Host-authnjs-flow');
+  function consume(req, action, active, autofill=false) {
+    const id = cookie(req, autofill?'__Host-authnjs-autofill':'__Host-authnjs-flow');
     const challenge = challenges.get(id);
     challenges.delete(id);
     requireCondition(challenge && challenge.action === action && challenge.expires > now() &&
@@ -833,7 +833,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
         const username = typeof input.username === 'string' ? input.username.trim().toLowerCase() : '';
         requireCondition(!username || isUsername(username),422,'Enter a valid X-Center username.');
         prepare(res, { action, username, expected:options.challenge, sessionHash:active?.hash,
-          ...(nativeTarget?{target:nativeTarget.hash,request:input.request}:{}) });
+          ...(nativeTarget?{target:nativeTarget.hash,request:input.request}:{}) },action==='login'&&input.autofill===true);
         return options;
       }
       const name = passkeyLabel(input.name);
@@ -858,7 +858,7 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
       return options;
     }
     requireCondition(pathname.endsWith('/finish'), 404, 'Account route unavailable.');
-    const challenge = consume(req, action, active);
+    const challenge = consume(req, action, active,action==='login'&&input.autofill===true);
     requireCondition(input.response && typeof input.response.id === 'string', 400, 'Invalid passkey response.');
     if (action === 'login'||action==='reauth') {
       const saved = key.get(input.response.id);
@@ -953,6 +953,8 @@ export function createAccounts({ database, origin, sendVerification, profileKey,
     handle,browserAccountOptions,activateBrowserAccount,
     retryDeletions:()=>{for(const {owner} of q('SELECT owner FROM account_deletion_jobs LIMIT 20').all())finishDeletion(owner);},
     current: (req) => session(req),
+    nativeCurrent: req => nativeRequest(req) ? session(req) : null,
+    limitDeviceCodeLookup,
     supportCurrent: req=>session(req,true),
     allowsSupportMutation: req=>req.headers.origin===origin||(nativeRequest(req)&&!!session(req,true)),
     adminDetails(username) {

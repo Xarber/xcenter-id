@@ -6,6 +6,8 @@ import { once } from 'node:events';
 import { decodeJwt } from 'jose';
 import { createIdentityProvider } from './oidc.mjs';
 import { createAppApprovals } from './app-approval.mjs';
+import { createNativeApproval } from './native-approval.mjs';
+import { createAccountApprovalRoute } from './account-approval.mjs';
 import { openRegistry } from './registry.mjs';
 import { openApplicationData } from './application-data.mjs';
 
@@ -20,7 +22,11 @@ for(const environment of ['production','sandbox'])test(environment+' issuer veri
   const alternative={...identity,username:'alternate',givenName:'Second'};
   let selected=current;
   const accounts={
-    current:()=>selected, finishApprovedSignIn(_req,res,session){
+    current:()=>selected,
+    nativeCurrent:req=>req.headers['x-authnjs-native']==='account-manager'&&!req.headers.origin&&!req.headers.cookie?
+      req.headers.authorization==='Bearer native-one'?current:req.headers.authorization==='Bearer native-two'?second:null:null,
+    limitDeviceCodeLookup:()=>{},
+    finishApprovedSignIn(_req,res,session){
       assert.deepEqual(session,{owner:current.owner,source:current.hash});
       res.setHeader('set-cookie','dashboard-account=saved; Path=/; Secure; HttpOnly');
       return true;
@@ -64,8 +70,14 @@ for(const environment of ['production','sandbox'])test(environment+' issuer veri
   const [sourceRegistration,destinationRegistration]=[velunivo,readingApp].map(({clientId})=>registry.managed(current.owner).find(app=>app.client===clientId));
   registry.verifyApp(sourceRegistration.id,true);
   registry.verifyApp(destinationRegistration.id,true);
+  const accountApproval=createAccountApprovalRoute({origin:issuer,accounts,approvals});
+  const nativeApproval=createNativeApproval({accounts,provider,approvals,accountApproval});
   const server=createServer((req,res)=>{
     const url=new URL(req.url,issuer);
+    if(url.pathname==='/account/device/review')return void nativeApproval(req,res).catch(error=>{
+      if(!res.headersSent)res.writeHead(500);
+      res.end(error.message);
+    });
     if(url.pathname.startsWith('/account/app-storage/'))return void applicationData.handle(req,res,url);
     if(url.pathname.startsWith('/interaction/')||url.pathname.startsWith('/app-approval/')){
       void provider.interaction(req,res,url.pathname).catch(error=>{
@@ -101,6 +113,49 @@ for(const environment of ['production','sandbox'])test(environment+' issuer veri
   }
   const begin=(credentials,scope='openid friends')=>http('/device/auth',{credentials,form:{client_id:credentials.clientId,nonce,scope}});
   try {
+    async function nativeReview(data,token='native-one'){
+      return fetch('http://127.0.0.1:'+server.address().port+'/account/device/review',{
+        method:'POST',headers:{'Content-Type':'application/json','X-AuthNJS-Native':'account-manager',
+          ...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify(data),
+      });
+    }
+    {
+      const deviceClient=await register('Native Review TV');
+      const ticket=await (await begin(deviceClient,'openid friends')).json();
+      assert.equal((await nativeReview({code:ticket.user_code},null)).status,401);
+      const read=await nativeReview({code:ticket.user_code});
+      assert.equal(read.status,200,await read.clone().text());
+      const model=await read.json();
+      assert.equal(model.name,'Native Review TV');
+      assert.equal(model.kind,'device');
+      assert.ok(model.permissions.some(permission=>permission.key==='friends'&&!permission.enabled));
+      assert.equal((await nativeReview({review:model.review,action:'approve'},'native-two')).status,409);
+      const grantForm={grant_type:'urn:ietf:params:oauth:grant-type:device_code',device_code:ticket.device_code};
+      const pending=await http('/token',{credentials:deviceClient,form:grantForm});
+      assert.equal((await pending.json()).error,'authorization_pending');
+      const approve=await nativeReview({review:model.review,action:'approve',permission:['friends']});
+      assert.equal(approve.status,200,await approve.clone().text());
+      assert.deepEqual(await approve.json(),{approved:true});
+      assert.equal((await nativeReview({review:model.review,action:'approve'})).status,409);
+      const issued=await http('/token',{credentials:deviceClient,form:grantForm});
+      assert.equal(issued.status,200,await issued.clone().text());
+      const tokens=await issued.json();
+      assert.match(tokens.scope,/friends/);
+      assert.equal(decodeJwt(tokens.id_token).nonce,nonce);
+      const declineTicket=await (await begin(deviceClient,'openid')).json();
+      const decline=await (await nativeReview({code:declineTicket.user_code})).json();
+      assert.deepEqual(await (await nativeReview({review:decline.review,action:'deny'})).json(),{approved:false});
+      const denied=await http('/token',{credentials:deviceClient,form:{...grantForm,device_code:declineTicket.device_code}});
+      assert.equal((await denied.json()).error,'access_denied');
+
+      const entry=approvals.start({uid:'first-party-fixture',exp:Date.now()/1000+45});
+      entry.account=true;
+      const nativeAccount=await (await nativeReview({code:entry.code})).json();
+      assert.equal(nativeAccount.kind,'account');
+      assert.equal(entry.result,null);
+      assert.deepEqual(await (await nativeReview({review:nativeAccount.review,action:'approve'})).json(),{approved:true});
+      assert.deepEqual(entry.result,{owner:current.owner,source:current.hash});
+    }
     async function storageSettings(id,data){
       return fetch('http://127.0.0.1:'+server.address().port+'/account/app-storage/'+id,{
         method:'POST',headers:{origin:issuer,'Content-Type':'application/json'},body:JSON.stringify({action:'sharing',...data}),
@@ -396,9 +451,11 @@ for(const environment of ['production','sandbox'])test(environment+' issuer veri
       const secondPath=new URL(secondStart.headers.get('location'),issuer).pathname;
       const nextQr=await (await http(secondPath+'?qr=start',{browser:true,form:{}})).json();
       const nextReview='/app-approval/'+approvals.forCode(nextQr.code).key;
-      selected=current;
-      const nextProof=(await (await http(nextReview,{scan:true})).text()).match(/name="review_proof" value="([^"]+)"/)?.[1];
-      const kept=await http(nextReview,{scan:true,form:{...confirm,review_proof:nextProof,save_account:'yes'}});
+      const nativeApp=await (await nativeReview({target:nextReview})).json();
+      assert.equal(nativeApp.kind,'app');
+      assert.equal(nativeApp.name,'Remote browser approval');
+      assert.equal(nativeApp.saveAccount,true);
+      const kept=await nativeReview({review:nativeApp.review,action:'approve',permission:['offline_access'],save_account:'yes'});
       assert.equal(kept.status,200,await kept.clone().text());
       assert.equal(kept.headers.get('set-cookie'),null);
       selected=null;

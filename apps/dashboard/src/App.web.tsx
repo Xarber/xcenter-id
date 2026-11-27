@@ -21,12 +21,12 @@ import { SupportPage } from './Support.web';
 import FriendsPage from './FriendsPage.web';
 import { accountMessage } from './account-locale';
 import { accountGreeting, accountShortcuts, accountStatus } from './account-overview';
-import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
+import { browserSupportsWebAuthnAutofill, startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import {
   Menu, ArrowDownRight, ArrowLeft, ArrowRight, ChevronRight, CircleHelp, Code2, Fingerprint, FolderOpen,
   Grid2X2, HardDrive, IdCard, KeyRound, Laptop, LockKeyhole, LogOut, Mail, MapPin, QrCode, Settings, ShieldCheck, UserRound, X,
 } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react';
 import DeveloperPortal from './DeveloperPortal';
 import { AdminPage, ConnectedApps, DevicesPage, FilesPage, MailPage } from './AccountSections.web';
 import PermissionsPage from './PermissionsPage.web';
@@ -105,10 +105,10 @@ function Intro({close}:{close:()=>void}){
 
 type SignInAction='signup'|'passkey'|'username-passkey'|'username'|'code';
 
-function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,create,continuation,adding,previousAccounts,onError}:{
+function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,create,onAutofill,continuation,adding,previousAccounts,onError}:{
   signup:boolean;pending:SignInAction|null;notice:string;authenticate:(username?:string)=>void;
   beginUsername:(username:string)=>Promise<{method:string;ticket?:string}|undefined>;
-  submitCode:(ticket:string,code:string)=>void;create:(username:string)=>void;continuation:string|null;adding:boolean;previousAccounts:BrowserAccount[];onError:(message:string)=>void;
+  submitCode:(ticket:string,code:string)=>void;create:(username:string)=>void;onAutofill:()=>void;continuation:string|null;adding:boolean;previousAccounts:BrowserAccount[];onError:(message:string)=>void;
 }){
   const [username,setUsername]=useState('');
   const [ticket,setTicket]=useState('');
@@ -132,6 +132,30 @@ function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,cre
   if(adding)query.set('addAccount','1');
   const suffix=query.size?'?'+query:'';
   const choose=previousAccounts.length>0&&!adding&&!signup&&(!continuation||!!appPath);
+  const autofill=useRef<AbortController|null>(null);
+  const completedAutofill=useEffectEvent(onAutofill);
+  const autofillAvailable=!signup&&!choose&&!qr&&!ticket&&!busy;
+  useEffect(()=>{
+    if(!autofillAvailable||!window.PublicKeyCredential?.parseRequestOptionsFromJSON)return;
+    const request=new AbortController();
+    autofill.current=request;
+    let pickedCredential=false;
+    async function discover(){
+      if(!await browserSupportsWebAuthnAutofill()||request.signal.aborted)return;
+      const options=await api('login/options',{addAccount:adding,autofill:true},'POST',request.signal);
+      if(request.signal.aborted)return;
+      const publicKey=PublicKeyCredential.parseRequestOptionsFromJSON({...options,allowCredentials:[]});
+      const credential=await navigator.credentials.get({publicKey,mediation:'conditional',signal:request.signal});
+      if(!credential||request.signal.aborted)return;
+      pickedCredential=true;
+      await api('login/finish',{response:(credential as PublicKeyCredential).toJSON(),addAccount:adding,autofill:true});
+      completedAutofill();
+    }
+    void discover().catch(error=>{
+      if(pickedCredential&&!request.signal.aborted)onError(error instanceof Error?error.message:'Could not use this passkey.');
+    });
+    return ()=>{request.abort();if(autofill.current===request)autofill.current=null;};
+  },[adding,autofillAvailable,onError]);
   return <div className="xc-auth-night">
     <div className="xc-auth">
       <header><Logo href="/"/><a href="/docs" className="xc-text-link">Developer documentation <ArrowDownRight size={15}/></a></header>
@@ -177,6 +201,7 @@ function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,cre
             <button type="button" className="xc-button xc-secondary" disabled={busy} onClick={()=>{setTicket('');setCode('');}}>Use a different username</button>
           </form>:<form onSubmit={event=>{
             event.preventDefault();
+            autofill.current?.abort();
             if(offerPasskey){authenticate(username);return;}
             void beginUsername(username).then(result=>{
               if(result?.ticket)setTicket(result.ticket);
@@ -189,7 +214,7 @@ function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,cre
             <button className="xc-button xc-primary xc-full" disabled={busy || !username.trim()}>{pending==='username'?'Checking username…':pending==='username-passkey'?'Waiting for your passkey…':offerPasskey?'Use passkey':'Continue'} <ArrowRight size={17}/></button>
           </form>}
           <div className="xc-divider"><span>or</span></div>
-          <button type="button" className="xc-button xc-secondary xc-full" disabled={busy} onClick={()=>authenticate()}>
+          <button type="button" className="xc-button xc-secondary xc-full" disabled={busy} onClick={()=>{autofill.current?.abort();authenticate();}}>
             <Fingerprint size={19}/>{pending==='passkey'?'Waiting for your passkey…':'Sign in with a passkey'}
           </button>
         </>}
@@ -197,7 +222,7 @@ function SignIn({signup,pending,notice,authenticate,beginUsername,submitCode,cre
         <div className="xc-auth-footer">{signup?'Already have an account?':'New to X-Center?'}{' '}
           <a href={(signup?'/signin':'/signup')+suffix}>{signup?'Sign in':'Create an account'}</a></div>
         </>}
-        {!signup&&!ticket&&canUseQr&&<button className="xc-button xc-secondary xc-full xc-auth-qr-action" type="button" disabled={busy} onClick={()=>setQr(true)}>
+        {!signup&&!ticket&&canUseQr&&<button className="xc-button xc-secondary xc-full xc-auth-qr-action" type="button" disabled={busy} onClick={()=>{autofill.current?.abort();setQr(true);}}>
           <QrCode size={18}/> Sign in on another device
         </button>}
         </>}
@@ -412,7 +437,7 @@ export default function WebApp(){
     <button className="xc-button xc-secondary" onClick={()=>window.location.reload()}>Check again</button>
     <button className="xc-button xc-secondary" onClick={()=>void api('logout',{}).then(()=>window.location.assign('/signin')).catch(error=>setNotice(error.message))}>Sign out</button>
     {notice&&<p role="alert">{notice}</p>}</main>;
-  if(!account||adding)return <><SignIn signup={path==='signup'} continuation={continuation} pending={signInAction} notice={notice} authenticate={username=>login('login',username)} beginUsername={beginUsername} submitCode={submitCode} create={username=>login('signup',username)} adding={adding} previousAccounts={browserAccounts} onError={setNotice}/>{startupPanels}</>;
+  if(!account||adding)return <><SignIn signup={path==='signup'} continuation={continuation} pending={signInAction} notice={notice} authenticate={username=>login('login',username)} beginUsername={beginUsername} submitCode={submitCode} create={username=>login('signup',username)} onAutofill={()=>window.location.replace(authDestination)} adding={adding} previousAccounts={browserAccounts} onError={setNotice}/>{startupPanels}</>;
 
   if(path==='native-session'&&account.profile){
     const params=new URLSearchParams(window.location.search);

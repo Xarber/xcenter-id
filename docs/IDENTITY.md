@@ -49,7 +49,7 @@ Interactive browser authorization asks users to confirm access for previously li
 
 Hosted authorization uses the active X-Center ID website session and opens directly to consent. The account row shows the avatar, display name and username. It opens a dedicated chooser on demand, including when a private app denies access to the active account. The chooser can select another saved browser session or add an account if fewer than three are saved. Switching returns to the same app authorization and recalculates permissions for the selected account. Explicit OAuth reauthentication requirements still apply.
 
-Device approval is a fallback for input-constrained devices, typically TVs. Active confidential registrations start a five-minute [OAuth device authorization](https://www.rfc-editor.org/rfc/rfc8628.html) request. The confirming device opens `/device?code=XXXXXX` or enters the same code at `/device`, matches the displayed app and code, and approves linking or sign-in on the issuer. The native account manager's Devices page scans and validates issuer QR links before opening the confirmation in the system browser. The browser can reuse its signed-in X-Center ID session. If necessary it asks the user to sign in first.
+Device approval is a fallback for input-constrained devices, typically TVs. Active confidential registrations start a five-minute [OAuth device authorization](https://www.rfc-editor.org/rfc/rfc8628.html) request. The confirming device opens `/device?code=XXXXXX` or enters the same code at `/device`, matches the displayed app and code, and approves linking or sign-in on the issuer. The native account manager's Devices page scans issuer QR links and opens a native confirmation using its current account.
 
 The device user code is independent of the secret device code returned to the authenticated backend. Verification submissions are throttled. Token polling requires the same registered backend credentials, and a device code can be redeemed only once. The backend validates the ID token with its saved transaction nonce. App-specific pseudonyms stay stable across browser and device routes. Confidential clients receive a directly computed app-bound subject from the account claims because the provider's built-in pairwise Device Grant metadata requires different client-authentication methods. Public native clients continue to use verified HTTPS callbacks with the secure sign-in browser.
 
@@ -94,4 +94,14 @@ From **Apps**, request **Sign out of connected apps** and confirm with a passkey
 
 The same sign-in page offers QR for dashboard sign-in and **Add another account**. In those flows approval saves the account on the originating device, subject to the three-account limit. In an app flow, optional dashboard sign-in is applied at callback pickup and also respects that limit.
 
-The native account manager scans either issuer approval link or looks up the same six-digit code. It opens the styled review through a short-lived, single-use browser handoff bound to the exact approval URL. After approving or cancelling it returns to the native manager. The requesting client completes sign-in separately through its original authorization callback or the dashboard’s state-bound native session exchange.
+The native account manager scans either issuer approval link or looks up the same six-digit code. The requesting client completes sign-in through its original authorization callback or the dashboard’s state-bound native session exchange.
+
+## Approve from the signed-in native app
+
+The Devices screen uses the same QR scanner and code field to show a native review for X-Center ID sign-in, app authorization and TV device login. The signed-in account is shown with the destination and the current permissions. Approving an app can optionally save the account on the requesting device. Approving a TV completes its existing device grant. App and TV permissions are checked by the same issuer logic as web consent.
+
+The first-party account manager sends its native session token to the review endpoint. The endpoint issues a short-lived, single-use review handle tied to that session and request. Numeric and TV lookups have per-account limits. A preview does not approve anything. The server rechecks availability and consent at submission and keeps TV redemption client-bound. Older installed versions can still use the existing browser handoff.
+
+## Passkey autofill
+
+Compatible browsers suggest saved X-Center ID passkeys in the username field via WebAuthn conditional mediation. Choosing a passkey uses the same verification and continuation as explicit sign-in. The browser controls the suggestions and user verification. Browsers without the feature can use the passkey button. Switching sign-in methods cancels conditional mediation. Autofill and explicit passkey challenges use separate short-lived cookies.

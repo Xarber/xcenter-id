@@ -1,3 +1,4 @@
+import {createNativeApproval} from './native-approval.mjs';
 import {createAppApprovals} from './app-approval.mjs';
 import {createAccountApprovalRoute} from './account-approval.mjs';
 import {openProtectedVault} from './protected-vault.mjs';
@@ -78,6 +79,7 @@ const accounts = createAccounts({
 });
 const origin = process.env.AUTHNJS_ACCOUNT_ORIGIN;
 const accountApproval=createAccountApprovalRoute({approvals,accounts,origin});
+let nativeApproval;
 const state = process.env.AUTHNJS_DATA_DIR;
 const storageVolumes=parseStorageVolumes(process.env.AUTHNJS_STORAGE_VOLUMES);
 const friends = configuration ? openFriends(join(state,'accounts.sqlite'),accounts.available) : null;
@@ -143,6 +145,7 @@ const configurationRoute=appConfiguration({accounts,registry,applicationData});
 provider = configuration ? createIdentityProvider({
   issuer: origin, database: join(state, 'oidc.sqlite'), accounts, configuration, approvals, mail:mailConfig?.publicDelivery?mail:null, registry,applicationData,notify:notifyAppChange,
 }) : null;
+nativeApproval=provider&&createNativeApproval({accounts,provider,approvals,accountApproval});
 const store = configuration ? openStore(join(state, 'sample-data.sqlite'), Buffer.from(configuration.sampleKey, 'hex')) : null;
 const friendRecordRoutes = friends && store && createFriendRecordRoutes({ accounts, records:openFriendRecords({
   database:join(state,'sample-data.sqlite'),store,friends,
@@ -605,6 +608,13 @@ const accountServer=createServer({ requestTimeout: 15_000, headersTimeout: 10_00
     }
     req.url = '/v1'+path.slice('/account'.length);
     void developer(req, res);
+    return;
+  }
+  if(nativeApproval&&path==='/account/device/review'){
+    void nativeApproval(req,res).catch(()=>{
+      if(!res.headersSent)res.writeHead(503,{'Content-Type':'application/json','Cache-Control':'no-store'});
+      res.end(JSON.stringify({error:'Device approval is temporarily unavailable.'}));
+    });
     return;
   }
   if(provider&&path.startsWith('/account-approval/')){

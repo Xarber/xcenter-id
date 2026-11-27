@@ -52,8 +52,29 @@ export function openOidcStore(path, key) {
     async upsert(id, value, ttl) {
       const time = now();
       if (time - lastPurge > 3600) { purge.run(time); lastPurge = time; }
+      if(this.model==='DeviceCode'){
+        const old=decode(get.get(this.model,id,time));
+        if(old?.nativeApproval||old?.nativeCompleted)throw new Error('Device authorization already handled');
+      }
       put.run(this.model, id, value.grantId ?? null, value.uid ?? null, value.userCode ?? null,
         ttl === undefined ? Number.MAX_SAFE_INTEGER : time + ttl, encode(this.model,id,value));
+    }
+    nativeDevice(id,operation,details={}) {
+      const time=now();
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        const row=get.get('DeviceCode',id,time);
+        const value=decode(row);
+        const allowed=value&&!value.accountId&&!value.error&&!value.consumed&&
+          (operation==='claim'?!value.inFlight:value.nativeApproval===true);
+        if(allowed){
+          const result={...value,inFlight:operation!=='release',nativeApproval:operation==='claim',
+            nativeCompleted:operation==='finish',...details};
+          put.run('DeviceCode',id,result.grantId??null,row.uid,row.user_code,row.expires,encode('DeviceCode',id,result));
+        }
+        db.exec('COMMIT');
+        return !!allowed;
+      }catch(error){db.exec('ROLLBACK');throw error;}
     }
     async find(id) { return decode(get.get(this.model,id,now())); }
     async findByUid(uid) { return decode(byUid.get(this.model,uid,now())); }

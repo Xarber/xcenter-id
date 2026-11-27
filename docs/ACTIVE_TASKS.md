@@ -772,3 +772,10 @@ Production is on `b12b22b`, sandbox API on `a4e2e6d`, and SDK main on `57c4930`.
 **Evidence.** 64 API checks, 21 dashboard checks, TypeScript, 16 UADS declarations and the Expo web export passed. Two isolated Chrome contexts verified app branding, default sign-in, in-place QR, single code entry, both save choices, original-state callback, and the second-account QR action at 390 px and 1280 px. The native completion redirect passed an API test. Installed phone scanning, keyboard and browser-sheet dismissal remain pending.
 
 **Production.** AUTHN-182 and AUTHN-183 are verified for the web scenarios above. The deployed `8b9d250` includes the QR image namespace correction. Public Chrome verified rendering and six-box entry. The [native preview](https://github.com/Xarber/xcenter-id/actions/runs/45978670614) is in progress. See [cutover and rollback](operations/XCENTER_ID_PRODUCTION.md#27-november-inline-qr-cutover).
+
+### Native approval review
+
+- **AUTHN-184 — Implemented.** Account, app and TV sign-in approvals now render in native Devices and use the current native account and issuer consent checks. API tests verified explicit submission, session binding, replay rejection, original callback pickup, TV token issuance and decline. Installed UI and camera remain unverified.
+- **AUTHN-185 — Implemented.** Supported browsers now register a conditional passkey request for the username field. An isolated Chrome harness verified conditional mediation, cancellation and both finish routes with a virtual authenticator and a simulated selection. The actual OS popover was not exercised.
+
+**Source evidence.** 64 API checks, 21 dashboard checks, TypeScript, Expo web export and 16 UADS declarations passed.

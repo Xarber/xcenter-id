@@ -25,6 +25,7 @@ export default function SignInQr({continuation,back}:{continuation:string|null;b
         const state=response.ok?(await response.json()).state:response.status===400?'expired':null;
         if(request.signal.aborted)return;
         if(state==='ready'){finish.current?.requestSubmit();return;}
+        if(state==='denied'){setMessage('Sign-in was declined on the other device.');return;}
         if(state==='expired'){setMessage('This request expired. Generate a new code to try again.');return;}
       }catch{if(request.signal.aborted)return;}
       timer=setTimeout(()=>void poll(expires),1800);

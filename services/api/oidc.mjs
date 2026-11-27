@@ -387,40 +387,71 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     result.interval=5;
   });
 
-  async function interaction(req, res, path) {
+  async function nativeDeviceId(code){
+    const pending=await provider.DeviceCode.findByUserCode(code);
+    return pending?.isValid&&!pending.accountId&&!pending.error&&!pending.inFlight?pending.jti:null;
+  }
+  const deviceStorage=new StorageAdapter('DeviceCode');
+  async function interaction(req, res, path,native=null) {
+    const method=native?(native.input?'POST':'GET'):req.method;
+    const render=(res,content,status=200,...options)=>native
+      ? native.respond({error:status===409?'The request expired or changed. Start again.':status===403?'This account cannot approve this request.':'Could not approve this sign-in. Check the request and try again.'},status===200?400:status)
+      : html(res,content,status,...options);
+    const failure=(status,error)=>native.respond({error},status);
+    const nativeDeviceCode=native?.device&&await provider.DeviceCode.find(native.device,{ignoreSessionBinding:true});
+    if(native?.device&&(!nativeDeviceCode?.isValid||nativeDeviceCode.inFlight||nativeDeviceCode.accountId||nativeDeviceCode.error)){
+      return failure(409,'This device code expired or was already used.');
+    }
     const scan=appApprovalPath.exec(path);
     const candidate=scan&&approvals.forScan(scan[1]);
     const remote=candidate&&!candidate.account?candidate:null;
-    const unavailable=()=>html(res,'<h1>Sign-in request expired</h1><p>Return to the app and start again.</p>',400);
+    const unavailable=()=>render(res,'<h1>Sign-in request expired</h1><p>Return to the app and start again.</p>',400);
     if(scan&&(!remote||remote.result))return unavailable();
     let details;
-    try { details = remote?await provider.Interaction.find(remote.uid):await provider.interactionDetails(req,res); }
-    catch { return html(res, '<h1>Sign-in request expired</h1><p>Return to the app and start again.</p>', 400); }
-    if(!details||!remote&&path!=='/interaction/'+details.uid)return unavailable();
-    const device=!!details.deviceCode;
-    const activeAccount=()=>((remote||device)&&accounts.deviceBrowserSession?.(req,remote?path:undefined))||accounts.current(req);
+    try { details = nativeDeviceCode??(remote?await provider.Interaction.find(remote.uid):await provider.interactionDetails(req,res)); }
+    catch { return render(res, '<h1>Sign-in request expired</h1><p>Return to the app and start again.</p>', 400); }
+    if(!details||!remote&&!nativeDeviceCode&&path!=='/interaction/'+details.uid)return unavailable();
+    const device=!!(details.deviceCode||nativeDeviceCode);
+    const activeAccount=()=>native?(native.current()?native.active:null):
+      ((remote||device)&&accounts.deviceBrowserSession?.(req,remote?path:undefined))||accounts.current(req);
     const nativeDevice=(remote||device)&&accounts.deviceBrowserSession?.(req,remote?path:undefined);
     const active=activeAccount();
     const person = active && accounts.identity(active.owner);
     const params=details.params;
-    const prompt=remote?{name:'consent',details:{missingOIDCScope:String(params.scope??'').split(' ')}}:details.prompt;
+    const delegated=!!(remote||nativeDeviceCode);
+    const prompt=delegated?{name:'consent',details:{missingOIDCScope:String(params.scope??'').split(' ')}}:details.prompt;
+    let deviceClaimed=false;
+    const claimDevice=()=>{
+      deviceClaimed=deviceStorage.nativeDevice(nativeDeviceCode.jti,'claim');
+      return deviceClaimed;
+    };
     const finish=async(result,options)=>{
+      if(nativeDeviceCode){
+        if(!activeAccount()||!deviceClaimed&&!claimDevice())return failure(409,'This device code expired or was already used.');
+        const grant=result.consent&&await provider.Grant.find(result.consent.grantId);
+        const scope=grant?.getOIDCScopeFiltered(new Set(String(params.scope??'').split(' ')));
+        const completed=deviceStorage.nativeDevice(nativeDeviceCode.jti,'finish',result.error
+          ?{error:result.error,errorDescription:result.error_description}
+          :{accountId:active.owner,authTime:Math.floor(active.created/1000),grantId:result.consent.grantId,scope});
+        return completed?native.respond({approved:!result.error}):failure(409,'This device code expired.');
+      }
       if(!remote)return provider.interactionFinished(req,res,result,options);
       remote.result=result.error?result:{login:{accountId:active.owner,ts:Math.floor(active.created/1000),remember:false},...result};
+      if(native)return native.respond({approved:!result.error});
       if(nativeDevice)return returnToNativeReview(res);
-      return html(res,(result.error?'<h1>Request declined</h1>':'<h1>App sign-in approved</h1><p>Return to the device where you started.</p>')+
+      return render(res,(result.error?'<h1>Request declined</h1>':'<h1>App sign-in approved</h1><p>Return to the device where you started.</p>')+
         '<a class="action" href="/devices">Done</a>',200,'',true);
     };
     const found = await provider.Client.find(params.client_id);
     const client = found && { client_id:found.clientId, client_name:found.clientName, host:new URL(found.redirectUris[0]).hostname };
     const callbackOrigin=found?.redirectUris.includes(params.redirect_uri)?new URL(params.redirect_uri).origin:'';
-    if (!client||!knownClient(client.client_id)||remote&&(device||!callbackOrigin)) return html(res, '<h1>This app is unavailable</h1>', 404);
+    if (!client||!knownClient(client.client_id)||remote&&(device||!callbackOrigin)) return render(res, '<h1>This app is unavailable</h1>', 404);
     const brand=registry?.brand(client.client_id);
     const scopes=new Set(String(params.scope??'').split(' '));
     const missing=new Set(prompt.details.missingOIDCScope??[]);
     const requiredEmail=!!brand?.requiresEmail;
     const requiredAge=!!brand?.requiresAgeRange;
-    const choose=new URL(req.url,issuer).searchParams.get('choose')==='account';
+    const choose=!native&&new URL(req.url,issuer).searchParams.get('choose')==='account';
     const chooser=path+'?choose=account';
     const signIn=(adding=false)=>'/signin?continue='+encodeURIComponent(path)+(adding?'&addAccount=1':'');
     const title=brand?.name??client.client_name??client.client_id;
@@ -431,28 +462,28 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const accountPicker=person&&nativeDevice?`<span class="account-choice">${accountRow(person,null)}</span>`:person?`<a class="account-choice" href="${chooser}" aria-label="Switch account">${accountRow(person,'/account/avatar')}</a>`:'';
     if(choose&&!nativeDevice){
       if(req.method==='POST'){
-        if(req.headers.origin!==issuer)return html(res,'<h1>Could not verify the request</h1>',403);
+        if(req.headers.origin!==issuer)return render(res,'<h1>Could not verify the request</h1>',403);
         let input;
-        try{input=await form(req);}catch{return html(res,'<h1>Invalid request</h1>',400);}
+        try{input=await form(req);}catch{return render(res,'<h1>Invalid request</h1>',400);}
         const slot=input.get('slot');
         if(!/^[012]$/.test(slot??'')||!accounts.activateBrowserAccount?.(req,res,Number(slot))){
-          return html(res,'<h1>Account unavailable</h1><p>Choose a signed-in account or add another.</p>',409);
+          return render(res,'<h1>Account unavailable</h1><p>Choose a signed-in account or add another.</p>',409);
         }
         return redirect(path);
       }
-      if(req.method!=='GET')return html(res,'<h1>Method unavailable</h1>',405);
+      if(req.method!=='GET')return render(res,'<h1>Method unavailable</h1>',405);
       const saved=accounts.browserAccountOptions?.(req)??{accounts:[],canAdd:true};
       const rows=saved.accounts.map(item=>`<button class="account-choice" name="slot" value="${item.slot}"${item.current?' aria-current="true"':''}>
         ${accountRow(item,'/account/switcher/avatar/'+item.slot)}</button>`).join('');
-      return html(res,`<h1>Choose your account</h1><p>Select an account to continue to ${escape(title)}.</p>
+      return render(res,`<h1>Choose your account</h1><p>Select an account to continue to ${escape(title)}.</p>
         <form action="${chooser}" method="post" class="account-choices">${rows}</form>
         <div class="account-actions">${saved.canAdd?`<a class="action" href="${escape(signIn(true))}">Add another account</a>`:''}
         <a class="device-back" href="${path}">Back</a></div>`,200,callbackOrigin,true);
     }
-    const query=new URL(req.url,issuer).searchParams;
+    const query=native?new URLSearchParams():new URL(req.url,issuer).searchParams;
     const reviewProof=remote&&active&&createHmac('sha256',storageKey)
       .update(JSON.stringify(['qr-review',remote.key,active.owner,active.hash])).digest('base64url');
-    const existingApproval=!remote&&approvals.forInteraction(details.uid);
+    const existingApproval=!delegated&&approvals.forInteraction(details.uid);
     if(!remote&&query.get('qr')==='info'&&req.method==='GET'){
       return approvalJson(res,{name:title,icon:brand?.iconUrl??null,canApproveRemotely:!device&&!!callbackOrigin});
     }
@@ -478,19 +509,19 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       const pickup=await form(req).catch(()=>null);
       if(!pickup||approvals.forInteraction(details.uid)!==existingApproval)return unavailable();
       if(existingApproval.saveAccount&&pickup.get('save_account')!=='no'&&!accounts.finishApprovedSignIn(req,res,existingApproval.saveAccount)){
-        return html(res,'<h1>Could not add this account</h1><p>The app can still sign in without saving this account on this device.</p><form method="post"><button name="save_account" value="no">Continue to the app only</button></form>',409,callbackOrigin,true);
+        return render(res,'<h1>Could not add this account</h1><p>The app can still sign in without saving this account on this device.</p><form method="post"><button name="save_account" value="no">Continue to the app only</button></form>',409,callbackOrigin,true);
       }
       approvals.remove(existingApproval);
       return finish(result,{mergeWithLastSubmission:false});
     }
-    if(!person)return redirect(signIn());
-    if(remote&&String(params.prompt??'').split(' ').includes('login')&&active.created/1000<(details.iat??0))return redirect(signIn(true));
-    if(remote&&params.max_age!==undefined&&(Number(params.max_age)===0?active.created/1000<(details.iat??0):Date.now()/1000-active.created/1000>=Number(params.max_age)))return redirect(signIn(true));
+    if(!person)return native?failure(401,'Sign in to the X-Center ID app first.'):redirect(signIn());
+    if(delegated&&String(params.prompt??'').split(' ').includes('login')&&active.created/1000<(details.iat??0))return native?failure(403,'This app requires a fresh sign-in. Sign in again before approving.'):redirect(signIn(true));
+    if(delegated&&params.max_age!==undefined&&(Number(params.max_age)===0?active.created/1000<(details.iat??0):Date.now()/1000-active.created/1000>=Number(params.max_age)))return native?failure(403,'This app requires a fresh sign-in. Sign in again before approving.'):redirect(signIn(true));
     if(existingApproval){
-      if(existingApproval.processing)return html(res,'<h1>Approval in progress</h1><p>Wait for the other device and reload.</p>',409);
+      if(existingApproval.processing)return render(res,'<h1>Approval in progress</h1><p>Wait for the other device and reload.</p>',409);
       approvals.remove(existingApproval);
     }
-    if(!remote&&req.method==='GET'&&(prompt.name==='login'||details.session?.accountId!==active.owner)){
+    if(!delegated&&req.method==='GET'&&(prompt.name==='login'||details.session?.accountId!==active.owner)){
       const authTime=Math.floor(active.created/1000);
       const wantsFresh=String(params.prompt??'').split(' ').includes('login')&&authTime<(details.iat??0);
       const expired=params.max_age!==undefined&&(Number(params.max_age)===0?authTime<(details.iat??0):Date.now()/1000-authTime>=Number(params.max_age));
@@ -498,28 +529,29 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
       await finish({login:{accountId:active.owner,ts:authTime}},{mergeWithLastSubmission:false});
       return;
     }
-    if(!remote&&req.method==='POST'&&details.session?.accountId!==active.owner){
-      return html(res,`<h1>The signed-in account changed</h1><p><a href="${path}">Review this authorization again</a></p>`,409,callbackOrigin);
+    if(!delegated&&req.method==='POST'&&details.session?.accountId!==active.owner){
+      return render(res,`<h1>The signed-in account changed</h1><p><a href="${path}">Review this authorization again</a></p>`,409,callbackOrigin);
     }
     if(!canUse(active.owner,client.client_id)){
-      if(remote)return html(res,`<h1>You don’t have permission to use this app</h1><p>${escape(title)} is private. Switch to an account with access.</p>${accountPicker}`,403,'',true);
+      if(native)return failure(403,'You don’t have permission to use this private app.');
+      if(remote)return render(res,`<h1>You don’t have permission to use this app</h1><p>${escape(title)} is private. Switch to an account with access.</p>${accountPicker}`,403,'',true);
       const access=registry.access(active.owner,client.client_id);
       if(req.method==='POST'){
-        if(req.headers.origin!==issuer)return html(res,'<h1>Could not verify the request</h1>',403);
+        if(req.headers.origin!==issuer)return render(res,'<h1>Could not verify the request</h1>',403);
         let input;
-        try{input=await form(req);}catch{return html(res,'<h1>Invalid request</h1>',400);}
+        try{input=await form(req);}catch{return render(res,'<h1>Invalid request</h1>',400);}
         if(input.get('action')==='request'&&access.canRequest&&activeAccount()?.owner===active.owner){
-          if(!registry.requestAccess(active.owner,client.client_id))return html(res,'<h1>Request unavailable</h1>',409);
-          return html(res,`<h1>Access requested</h1><p>Return to the app after its developer approves your request.</p>${accountPicker}<p><a href="/dashboard">Open dashboard</a></p>`,200,callbackOrigin,true);
+          if(!registry.requestAccess(active.owner,client.client_id))return render(res,'<h1>Request unavailable</h1>',409);
+          return render(res,`<h1>Access requested</h1><p>Return to the app after its developer approves your request.</p>${accountPicker}<p><a href="/dashboard">Open dashboard</a></p>`,200,callbackOrigin,true);
         }
         if(input.get('action')==='deny'){
           await finish({error:'access_denied',error_description:"You don't have permission to use this app."},{mergeWithLastSubmission:false});
           return;
         }
-        return html(res,'<h1>Invalid request</h1>',400);
+        return render(res,'<h1>Invalid request</h1>',400);
       }
-      if(req.method!=='GET')return html(res,'<h1>Method unavailable</h1>',405);
-      return html(res,`<h1>You don’t have permission to use this app</h1><p>${escape(title)} is private.</p>${accountPicker}
+      if(req.method!=='GET')return render(res,'<h1>Method unavailable</h1>',405);
+      return render(res,`<h1>You don’t have permission to use this app</h1><p>${escape(title)} is private.</p>${accountPicker}
         <form method="post">${access.pending?'<p>Your access request is pending.</p>':access.canRequest?'<button name="action" value="request">Request access</button>':''}
         <button name="action" value="deny">Return to app</button></form>`,200,callbackOrigin,true);
     }
@@ -538,52 +570,64 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     const showTrusted=registry?.trustedAdministration?.(client.client_id)
       ? trustedScopes.filter(scope=>scopes.has(scope)||existingScopes.has(scope)) : [];
     if(!canRequestTrusted(client.client_id,scopes)){
+      if(native)return failure(403,trustError);
       if(req.method==='GET'||req.headers.origin===issuer){
         await finish({error:'invalid_scope',error_description:trustError},{mergeWithLastSubmission:false});
         return;
       }
-      return html(res,'<h1>Could not verify the request</h1>',403);
+      return render(res,'<h1>Could not verify the request</h1>',403);
     }
-    if(remote&&((requiredEmail&&!scopes.has('email'))||(requiredAge&&!scopes.has('age_range')))){
-      return html(res,'<h1>The app is missing a required permission</h1>',400);
+    if(delegated&&((requiredEmail&&!scopes.has('email'))||(requiredAge&&!scopes.has('age_range')))){
+      return render(res,'<h1>The app is missing a required permission</h1>',400);
     }
     const requestedFileScopes=fileScopes.filter(scope=>scopes.has(scope));
     const previouslyAllowed=scope=>existingScopes.has(scope);
     const showOffline=scopes.has('offline_access')&&(missing.has('offline_access')||explicitConsent);
-    if (req.method === 'POST') {
-      if (req.headers.origin !== issuer) return html(res,'<h1>Could not verify the request</h1>',403);
+    if (method === 'POST') {
+      if (!native&&req.headers.origin !== issuer) return render(res,'<h1>Could not verify the request</h1>',403);
       let input;
-      try { input = await form(req); } catch { return html(res,'<h1>Invalid request</h1>',400); }
-      if(remote&&(input.get('review_proof')!==reviewProof||!approvals.pending(remote)))return html(res,'<h1>Approval could not be confirmed</h1><p>Start again from the original device.</p>',409,callbackOrigin,true);
-      if(remote&&!['approve','deny'].includes(input.get('action')))return html(res,'<h1>Choose how to proceed</h1>',422);
+      try {
+        if(!native)input=await form(req);
+        else {
+          input=new URLSearchParams({action:native.input.action});
+          for(const key of ['email','save_account','confirm-unsecure'])if(typeof native.input[key]==='string')input.set(key,native.input[key]);
+          for(const key of ['permission','data-permission','confirm-permission']){
+            if(!Array.isArray(native.input[key]))continue;
+            for(const value of native.input[key])if(typeof value==='string')input.append(key,value);
+          }
+        }
+      } catch { return render(res,'<h1>Invalid request</h1>',400); }
+      if(remote&&(!native&&input.get('review_proof')!==reviewProof||!approvals.pending(remote)))return render(res,'<h1>Approval could not be confirmed</h1><p>Start again from the original device.</p>',409,callbackOrigin,true);
+      if(remote&&!['approve','deny'].includes(input.get('action')))return render(res,'<h1>Choose how to proceed</h1>',422);
       if (input.get('action') !== 'approve') {
         await finish({ error:'access_denied', error_description:'The user declined.' },{mergeWithLastSubmission:false});
         return;
       }
-      if (prompt.name !== 'consent' || !remote&&details.session?.accountId !== active.owner || activeAccount()?.owner!==active.owner || !canUse(active.owner,client.client_id)) {
-        return html(res,'<h1>The signed-in account changed</h1><p>Start again from the app.</p>',409);
+      if (prompt.name !== 'consent' || !delegated&&details.session?.accountId !== active.owner || activeAccount()?.owner!==active.owner || !canUse(active.owner,client.client_id)) {
+        return render(res,'<h1>The signed-in account changed</h1><p>Start again from the app.</p>',409);
       }
-      if(emailUnavailable)return html(res,'<h1>Email permission unavailable</h1><p>Unlink this app from your account, then link it again to choose a verified address.</p><a href="/apps">Manage linked apps</a>',409);
+      if(emailUnavailable)return render(res,'<h1>Email permission unavailable</h1><p>Unlink this app from your account, then link it again to choose a verified address.</p><a href="/apps">Manage linked apps</a>',409);
       const selected=chooseEmail?input.get('email'):null;
-      if(requiredEmail&&chooseEmail&&(!selected||selected==='current'&&!sharedEmail))return html(res,'<h1>Choose an email address</h1><p>This app requires this info to work. Go back to choose an address, or cancel the request.</p>',400);
+      if(requiredEmail&&chooseEmail&&(!selected||selected==='current'&&!sharedEmail))return render(res,'<h1>Choose an email address</h1><p>This app requires this info to work. Go back to choose an address, or cancel the request.</p>',400);
       const selectedPermissions=new Set(input.getAll('permission'));
-      if(!canRequestTrusted(client.client_id,scopes))return html(res,'<h1>Administrative app access changed</h1>',403);
+      if(!canRequestTrusted(client.client_id,scopes))return render(res,'<h1>Administrative app access changed</h1>',403);
       const confirmed=new Set(input.getAll('confirm-permission'));
       if(sensitiveScopes.some(scope=>scopes.has(scope)&&selectedPermissions.has(scope)&&!existingScopes.has(scope)&&!confirmed.has(scope))){
-        return html(res,'<h1>Confirm sensitive permissions</h1><p>Go back to confirm the permission or leave it turned off.</p>',400);
+        return render(res,'<h1>Confirm sensitive permissions</h1><p>Go back to confirm the permission or leave it turned off.</p>',400);
       }
+      if(nativeDeviceCode&&!claimDevice())return failure(409,'This device code expired or was already used.');
       if(remote)remote.processing=true;
       try{
         const eligible = accounts.premiumEligible(active.owner);
         const premium = (selected === 'premium'||selected==='masked') && eligible && mail?.premiumAvailable ? mail?.premiumAlias(active.owner,client.client_id) : null;
-        if(selected === 'premium' && !premium) return html(res,'<h1>Premium Hide My Email is unavailable</h1>',409);
+        if(selected === 'premium' && !premium) return render(res,'<h1>Premium Hide My Email is unavailable</h1>',409);
         const alias = selected === 'masked' && !premium && !(eligible&&mail?.premiumAvailable) ? mail?.alias(active.owner,client.client_id) : null;
-        if (selected === 'masked' && !alias && !premium) return html(res,'<h1>Hide My Email is unavailable</h1>',409);
-        if(selected==='primary'&&!mail)return html(res,'<h1>Select a verified address</h1>',400);
+        if (selected === 'masked' && !alias && !premium) return render(res,'<h1>Hide My Email is unavailable</h1>',409);
+        if(selected==='primary'&&!mail)return render(res,'<h1>Select a verified address</h1>',400);
         const primary=selected==='primary';
         const email = selected==='current'?sharedEmail:premium || alias || (primary?person.username+'@mail.xcenter.it':selected);
-        if (selected!=='current' && email && !alias && !premium && !primary && !person.emails.some(({address}) => address === email)) return html(res,'<h1>Select a verified address</h1>',400);
-        if(appData&&brand?.local&&input.get('confirm-unsecure')!=='yes')return html(res,'<h1>Confirm unsecure app access</h1><p>Confirm the warning in the authorization form.</p>',400);
+        if (selected!=='current' && email && !alias && !premium && !primary && !person.emails.some(({address}) => address === email)) return render(res,'<h1>Select a verified address</h1>',400);
+        if(appData&&brand?.local&&input.get('confirm-unsecure')!=='yes')return render(res,'<h1>Confirm unsecure app access</h1><p>Confirm the warning in the authorization form.</p>',400);
         const dataChanged=appData&&applicationData?.authorize(active.owner,client.client_id,input.getAll('data-permission'));
         const trustedAllowed=requestTrusted.filter(scope=>selectedPermissions.has(scope));
         const fileAllowed=requestedFileScopes.filter(scope=>selectedPermissions.has(scope));
@@ -612,9 +656,12 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
         if(remote&&input.get('save_account')==='yes')remote.saveAccount={owner:active.owner,source:active.hash};
         await finish({ consent:{ grantId } });
         return;
-      }finally{if(remote)remote.processing=false;}
+      }finally{
+        if(remote)remote.processing=false;
+        if(deviceClaimed)deviceStorage.nativeDevice(nativeDeviceCode.jti,'release');
+      }
     }
-    if (req.method !== 'GET') return html(res,'<h1>Method unavailable</h1>',405);
+    if (method !== 'GET') return render(res,'<h1>Method unavailable</h1>',405);
     const personBadges=[person.verified&&'<span class="badge">✓ Verified profile</span>',person.admin&&'<span class="badge">◆ Administrator</span>'].filter(Boolean).join('');
     const badgeRow=content=>content?'<div class="badge-row">'+content+'</div>':'';
     const visual=client.client_id.startsWith('notes-')||client.client_id.startsWith('places-')?'notes':client.client_id.startsWith('trips-')?'trips':null;
@@ -630,6 +677,34 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
     for (const item of appData ? applicationData?.requestsForOwner(active.owner,client.client_id) ?? [] : []) {
       if (!sources.has(item.source)) sources.set(item.source, []);
       sources.get(item.source).push(item);
+    }
+    if(native){
+      const permissions=[{label:'Account ID, name, username and profile photo',fixed:true,enabled:true}];
+      const scopeRow=(key,label,description='',fixed=false,enabled=previouslyAllowed(key))=>
+        ({key,label,description,fixed,enabled,sensitive:!fixed&&sensitiveScopes.includes(key)&&!previouslyAllowed(key)});
+      if(showAge||previouslyAllowed('age_range'))permissions.push(scopeRow('age_range','Age range',requiredAge?requiredNote:'',requiredAge||!showAge,requiredAge||previouslyAllowed('age_range')));
+      if(showFriends||previouslyAllowed('friends'))permissions.push(scopeRow('friends','Friends list','Share accepted friends and identify those who already use this app.',!showFriends));
+      if(showOffline||previouslyAllowed('offline_access'))permissions.push(scopeRow('offline_access','Stay signed in','Let this app renew your session while you use it.',!showOffline,previouslyAllowed('offline_access')||!incremental));
+      for(const scope of [...fileScopes,...showTrusted]){
+        if(scopes.has(scope)||previouslyAllowed(scope))permissions.push(scopeRow(scope,...(filePermissions[scope]??trustedPermissions[scope]),!scopes.has(scope)));
+      }
+      if(ownsStorage)permissions.push({label:'Private app storage',description:'This app can save and access your records in its own storage.',fixed:true,enabled:true});
+      const emailChoices=chooseEmail?[
+        ...(!requiredEmail?[{value:'',label:'Do not share an email address'}]:[]),
+        ...(mail?[{value:'primary',label:person.username+'@mail.xcenter.it'}]:[]),
+        ...(mail?.maskedAvailable||mail?.premiumAvailable&&accounts.premiumEligible(active.owner)?[{value:'masked',label:'Hide My Email'}]:[]),
+        ...person.emails.map(({address})=>({value:address,label:address})),
+      ]:null;
+      return native.respond({kind:device?'device':'app',name:title,description:brand?.description,icon:brand?.iconUrl,
+        developer:developerName,host:client.host,username:person.username,verified:!!brand?.verified,linked:incremental,
+        permissions,emailChoices,sharedEmail,emailRequired:requiredEmail,blocked:emailUnavailable||requiredEmail&&chooseEmail&&!emailChoices?.length,
+        saveAccount:!!remote,unsecure:!!brand?.local,unsecureConfirmation:!!(appData&&brand?.local),
+        sources:[...sources].map(([source,items])=>({
+          name:registry.publicDetails(source)?.name??source,icon:registry.brand(source)?.iconUrl,linked:items[0].linked,
+          permissions:items.map(item=>({key:source+'/'+item.collection,label:item.label,description:item.description,
+            enabled:activeDataPermissions.some(permission=>permission.source===source&&permission.collection===item.collection)})),
+        })),
+      });
     }
     const sourceSections = [...sources].map(([source, items]) => {
       const profile = registry.brand(source);
@@ -683,7 +758,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
           dialog.querySelector('[data-cancel]').onclick = () => dialog.close();
         }
       </script>`:'';
-    return html(res,`<div class="connection" aria-hidden="true">
+    return render(res,`<div class="connection" aria-hidden="true">
       <span class="avatar">${person.hasPicture?'<img alt="" src="/account/avatar">':glyph('user')}</span>${glyph('link')}
       <span class="avatar">${brand?.icon?`<img alt="" src="${escape(brand.iconUrl??'data:image/png;base64,'+brand.icon)}">`:visual?glyph(visual):escape(title.slice(0,2).toUpperCase())}</span></div>
       <h1>${incremental?'Authorize logging back into '+escape(title)+'?':'Link '+escape(title)+' to X-Center ID'}</h1>
@@ -760,7 +835,7 @@ export function createIdentityProvider({ issuer, database, accounts, configurati
   }
 
   return {
-    oidc: provider.callback(), interaction, connectedPermissions, deviceCodePattern,
+    oidc: provider.callback(), interaction, nativeDeviceId, connectedPermissions, deviceCodePattern,
     testEvents:client=>sandboxEvents.get(client)??[],
     async changeClientSecret(client,action) {
       const previous=await clientsStorage.find(client);

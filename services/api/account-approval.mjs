@@ -35,19 +35,21 @@ export function createAccountApprovalRoute({approvals,accounts,origin}){
       const input=new URLSearchParams(body);
       if(input.get('proof')!==proof||(accounts.deviceBrowserSession(req,path)||session(req))?.hash!==active.hash||
         !approvals.pending(entry))return page(res,409,'<h1>Approval could not be confirmed</h1>');
-      if(input.get('action')==='cancel')return native?returnToNativeReview(res):
-        res.writeHead(303,{Location:'/devices','Cache-Control':'no-store'}).end();
+      if(input.get('action')==='cancel'){
+        entry.result={denied:true};
+        return native?returnToNativeReview(res):res.writeHead(303,{Location:'/devices','Cache-Control':'no-store'}).end();
+      }
       if(input.get('action')!=='approve')return page(res,422,'<h1>Choose how to proceed</h1>');
       entry.result={owner:active.owner,source:active.hash};
       if(native)return returnToNativeReview(res);
       return page(res,200,'<h1>Sign-in approved</h1><p>Return to the device where you started.</p><a class="action" href="/devices">Done</a>');
     }
     if(path==='/account-approval/status'&&req.method==='GET'){
-      const state=own?.result?'ready':own?'waiting':'expired';
+      const state=own?.result?.denied?'denied':own?.result?'ready':own?'waiting':'expired';
       return res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify({state}));
     }
     if(path==='/account-approval/finish'&&req.method==='POST'){
-      if(req.headers.origin!==origin||!own?.result)return ended();
+      if(req.headers.origin!==origin||!own?.result||own.result.denied)return ended();
       approvals.remove(own);
       if(!accounts.finishApprovedSignIn(req,res,own.result))return page(res,409,'<h1>Could not add this account</h1><a href="/signin?addAccount=1">Try again</a>');
       return res.writeHead(303,{Location:own.destination,'Cache-Control':'no-store'}).end();
