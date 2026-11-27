@@ -745,3 +745,13 @@ Provider `04e5439` and SDK `57c4930` are pushed to their respective `testing` br
 UADS §0 paused new work when the five-hour window reached 9% remaining. It resets on 27 November at 12:29 CET. Weekly remaining was 59%. Provider sandbox and compatibility source `149f61e` and ADP design checkpoint `b5f8071` were pushed to `testing`. The full local suite passed 60 API tests and 20 dashboard tests, plus type checking and manifest validation. The [source quality run](https://github.com/Xarber/xcenter-id/actions/runs/45962038174) was submitted. No production change was made. The public revision still reports `e147522`.
 
 Resume at AUTHN-178 with the client-generated device and recovery-envelope round trip described in [the vault implementation boundary](ADVANCED_DATA_PROTECTION.md#first-implementation-boundary). Keep production migration disabled until trusted-device enrollment, recovery, temporary browser access and protected app access are verified. Finish a WebAuthn-based sandbox sign-in and PKCE exchange on its separate origin, then apply the deployment gate for AUTHN-179.
+
+### Sandbox deployment and protected-vault pilot
+
+| ID | State | Evidence and remaining work |
+| --- | --- | --- |
+| AUTHN-176 | Verified | The sandbox issuer is deployed. Chrome virtual WebAuthn and PKCE succeeded with a synthetic account and loopback callback. Production rejected its session and token. The registered developer could view test-request outcomes. |
+| AUTHN-178 | Implemented | The sandbox-only API and Web Crypto pilot cover encryption, client-side recovery, signed device enrollment and scoped browser handoff. The production compatibility declaration is live and defaults to off. Still implement native key custody and trusted-device lifecycle, approval notifications, temporary web key cleanup, and the app SDK and migration. No production data was moved. |
+| AUTHN-179 | Implemented | The verified prior batch and sandbox are deployed. Production ADP remains pending the AUTHN-178 rollout prerequisites. The earlier checkpoint's aggregate deployment dependency has been split to let independently verified changes ship. |
+
+Production is on `b12b22b`, sandbox API on `a4e2e6d`, and SDK main on `57c4930`. The [provider gate](https://github.com/Xarber/xcenter-id/actions/runs/45964160611) passed. See the [rollout and rollback record](operations/XCENTER_ID_PRODUCTION.md#27-november-sandbox-and-snapshot-rollout).

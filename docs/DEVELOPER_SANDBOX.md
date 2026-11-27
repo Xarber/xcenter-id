@@ -17,3 +17,7 @@ Generate the keys off the application path with `node services/api/sandbox-confi
 At deployment, mount only the sandbox secrets and data, route its hostname to its own loopback port, and use the appliance's existing wildcard certificate. Keep the sandbox outside the production backup set. Startup refuses mail, production fixtures, admin allowlists and storage-volume settings. Do not attach the live production databases, even as read-only. For a local bootstrap, expose TLS through a dedicated reverse proxy before attempting passkey or OAuth interactions.
 
 Use a standard OpenID Connect client explicitly configured with the sandbox issuer. The production SDK's default issuer remains unchanged. Test issuer discovery, account and client separation, and an actual PKCE round trip before enabling a portal link. Deployment rollback removes the sandbox vhost and stops its container while preserving its isolated state.
+
+## Live deployment
+
+The isolated issuer is available at https://id-sandbox.xcenter.it/developer. It uses the existing wildcard TLS certificate, its own upstream, signing keys and persistent data. Chrome with a virtual authenticator enrolled a synthetic sandbox passkey, saved the fixture profile, verified a loopback client and completed the PKCE exchange. Production denied the synthetic sandbox cookie and token. The fixture confirmed that its registration owner's test request list showed a successful token request.

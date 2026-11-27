@@ -3,7 +3,7 @@ import {randomBytes} from 'node:crypto';
 import {test} from 'node:test';
 import {
   acceptDeviceHandoff,createDeviceSigningKey,createDeviceStorageKey,createHandoffKey,
-  createVault,decryptObject,encryptObject,signApproval,signDeviceClaim,signObjectWrite,wrapDeviceHandoff,
+  createVault,recoverVault,deriveVaultScope,decryptObject,encryptObject,signApproval,signDeviceClaim,signObjectWrite,wrapDeviceHandoff,
 } from '../../packages/protected-storage/crypto.mjs';
 import {openProtectedVault} from './protected-vault.mjs';
 
@@ -22,7 +22,7 @@ test('pilot stores opaque ciphertext and gates app data and web approval on curr
   assert.equal(service.create(owner,id,vault.recoveryEnvelope,wrong.publicKey),false);
   assert.equal(service.info('other'),null);
   const scope=[issuer,id,'fixture-app'];
-  const appVault=await createVault(scope,storage);
+  const appVault=await deriveVaultScope(storage,vault.deviceEnvelope,recoveryScope,scope[2]);
   const revisionScope=[...scope,'fixture-object','1'];
   const plain=new TextEncoder().encode('synthetic private record');
   const envelope=await encryptObject(appVault.key,plain,revisionScope);
@@ -55,6 +55,12 @@ test('pilot stores opaque ciphertext and gates app data and web approval on curr
   assert.equal(service.claim(owner,request.id,session),null);
   const accepted=await acceptDeviceHandoff({deviceKey:browser,recipient:receiver,packet:granted.packet,scope,requestId:request.id});
   assert.deepEqual(await decryptObject(accepted.key,copy.envelope,revisionScope),plain);
+  const recovered=await recoverVault(vault.recoveryKey,service.info(owner).recovery,recoveryScope,browser);
+  const recoveredApp=await deriveVaultScope(browser,recovered.deviceEnvelope,recoveryScope,scope[2]);
+  assert.deepEqual(await decryptObject(recoveredApp.key,copy.envelope,revisionScope),plain);
+  const unrelated=await deriveVaultScope(browser,recovered.deviceEnvelope,recoveryScope,'other-app');
+  await assert.rejects(decryptObject(unrelated.key,copy.envelope,revisionScope));
+
   const newDevice=await createDeviceSigningKey();
   assert.equal(service.requestWeb(owner,'device-root',session,receiver.publicKey),null);
   const enrollment=service.requestDevice(owner,session,receiver.publicKey,newDevice.publicKey);

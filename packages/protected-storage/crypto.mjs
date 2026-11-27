@@ -143,3 +143,19 @@ export async function signDeviceClaim(privateKey, scope, requestId, target) {
   return encode(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},privateKey,
     context('claim device',...scope,requestId,target)));
 }
+
+export async function deriveVaultScope(deviceKey, rootEnvelope, rootScope, namespace) {
+  checkScope([...rootScope,namespace]);
+  if(rootScope.length!==3||rootScope[2]!=='device-root'||namespace==='device-root'){
+    throw new TypeError('Choose a protected collection for this vault.');
+  }
+  const scope=[rootScope[0],rootScope[1],namespace];
+  const root=await open(deviceKey,rootEnvelope,context('device',...rootScope));
+  try {
+    const hkdf=await crypto.subtle.importKey('raw',root,'HKDF',false,['deriveBits']);
+    const bytes=new Uint8Array(await crypto.subtle.deriveBits({name:'HKDF',hash:'SHA-256',
+      salt:new Uint8Array(32),info:context('collection key',...scope)},hkdf,256));
+    try { return {key:await aes(bytes),deviceEnvelope:await seal(deviceKey,bytes,context('device',...scope))}; }
+    finally { bytes.fill(0); }
+  } finally { root.fill(0); }
+}
