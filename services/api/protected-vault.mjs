@@ -35,7 +35,7 @@ const signedApproval=({scope,requestId,target,mode,expiry,packet})=>[
   'xcenter-protected-v1','signed approval',...scope,requestId,target,mode,String(expiry),packet.sender,packet.envelope.iv,packet.envelope.data,
 ];
 
-export function openProtectedVault({database,issuer,canProtectAppData,now=Date.now}){
+export function openProtectedVault({database,issuer,canProtectAppData,remaining=()=>10485760,now=Date.now}){
   const db=new DatabaseSync(database);
   db.exec(`PRAGMA foreign_keys=ON; PRAGMA busy_timeout=3000;
     CREATE TABLE IF NOT EXISTS protected_vaults(owner TEXT PRIMARY KEY,vault TEXT NOT NULL UNIQUE,recovery TEXT NOT NULL) STRICT;
@@ -50,6 +50,7 @@ export function openProtectedVault({database,issuer,canProtectAppData,now=Date.n
       PRIMARY KEY(owner,namespace,id)) STRICT;
   `);
   const query=sql=>db.prepare(sql);
+  const usage=query('SELECT coalesce(sum(length(envelope)+512),0) AS bytes FROM protected_objects WHERE owner=?');
   const vault=owner=>query('SELECT * FROM protected_vaults WHERE owner=?').get(owner);
   const signer=(owner,value)=>query('SELECT signer FROM protected_devices WHERE owner=? AND signer=?').get(owner,value)&&publicKey(value);
   function transaction(fn){
@@ -96,7 +97,7 @@ export function openProtectedVault({database,issuer,canProtectAppData,now=Date.n
     approve(owner,device,approval,signature){
       const key=signer(owner,device);
       const id=approval?.requestId;
-      if(!key||typeof id!=='string'||!publicKey(approval.packet?.sender)||!validEnvelope(approval.packet?.envelope,48)||
+      if(!key||typeof id!=='string'||!publicKey(approval?.packet?.sender)||!validEnvelope(approval.packet?.envelope,48)||
         bytes(approval.packet.envelope.data,48)?.length!==48)return false;
       return transaction(()=>{
         const row=query('SELECT * FROM protected_requests WHERE id=? AND owner=? AND expires>? AND approval IS NULL').get(id,owner,now());
@@ -135,10 +136,12 @@ export function openProtectedVault({database,issuer,canProtectAppData,now=Date.n
         !matchesSignature(key,signature,['xcenter-protected-v1','object write',issuer,current.vault,namespace,id,
           String(revision),envelope.iv,envelope.data]))return false;
       return transaction(()=>{
-        const previous=query('SELECT revision FROM protected_objects WHERE owner=? AND namespace=? AND id=?').get(owner,namespace,id);
-        if(revision!==(previous?.revision??0)+1)return false;
+        const previous=query('SELECT revision,length(envelope)+512 AS bytes FROM protected_objects WHERE owner=? AND namespace=? AND id=?').get(owner,namespace,id);
+        const sealed=JSON.stringify(envelope);
+        const increase=sealed.length+512-(previous?.bytes??0);
+        if(revision!==(previous?.revision??0)+1||increase>0&&increase>remaining(owner))return false;
         query(`INSERT INTO protected_objects VALUES(?,?,?,?,?) ON CONFLICT(owner,namespace,id)
-          DO UPDATE SET envelope=excluded.envelope,revision=excluded.revision`).run(owner,namespace,id,revision,JSON.stringify(envelope));
+          DO UPDATE SET envelope=excluded.envelope,revision=excluded.revision`).run(owner,namespace,id,revision,sealed);
         return true;
       });
     },
@@ -147,6 +150,7 @@ export function openProtectedVault({database,issuer,canProtectAppData,now=Date.n
       const row=query('SELECT revision,envelope FROM protected_objects WHERE owner=? AND namespace=? AND id=?').get(owner,namespace,id);
       return row?{revision:row.revision,envelope:JSON.parse(row.envelope)}:null;
     },
+    usage:owner=>usage.get(owner).bytes,
     removeOwner:owner=>query('DELETE FROM protected_vaults WHERE owner=?').run(owner),
     close:()=>db.close(),
   };

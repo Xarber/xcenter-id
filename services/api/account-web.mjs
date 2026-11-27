@@ -1,3 +1,5 @@
+import {openProtectedVault} from './protected-vault.mjs';
+import {protectedVaultRoute} from './protected-vault-route.mjs';
 import {validateSandbox} from './sandbox-config.mjs';
 import {createPeerJsGateway} from './peerjs-gateway.mjs';
 import {createAdminSearch} from './admin-search.mjs';
@@ -43,6 +45,7 @@ if(mailConfig&&process.env.AUTHNJS_LOCAL_SMTP_HOST){
   mailConfig.localDelivery={host:process.env.AUTHNJS_LOCAL_SMTP_HOST};
 }
 const mailLimits=openMailLimits(join(process.env.AUTHNJS_DATA_DIR,'accounts.sqlite'),mailConfig?.externalLimits);
+let protectedVault;
 const accounts = createAccounts({
   outboundMail:createOutboundMail(mailConfig,{limits:mailLimits,
     senderName:owner=>{const person=accounts.identity(owner);return person&&[person.givenName,person.surname].join(' ');},
@@ -50,9 +53,10 @@ const accounts = createAccounts({
     deliverLocal:(recipient,raw,from)=>mail?.receive([recipient],raw,accounts.badgeForAddress(from)),
   }),
   appBrand:client=>registry.brand(client),
-  extraStorage:owner=>(accountFiles?.fileBytes(owner)??0)+(applicationData?.accountUsage(owner)??0)+(store?.usage(owner)??0)+(mail?.usage(owner)??0),
+  extraStorage:owner=>(accountFiles?.fileBytes(owner)??0)+(applicationData?.accountUsage(owner)??0)+(store?.usage(owner)??0)+(mail?.usage(owner)??0)+(protectedVault?.usage(owner)??0),
   mailboxNameTaken:name=>mail?.hasLegacyPremiumName(name)??false,
   purgeAccount:owner=>{
+    protectedVault?.removeOwner(owner);
     accountFiles?.removeAccount(owner);
     applicationData?.removeAccount(owner);
     friends?.removeAccount(owner);
@@ -75,7 +79,7 @@ const friends = configuration ? openFriends(join(state,'accounts.sqlite'),accoun
 const friendRoutes = friends && createFriendRoutes({accounts,friends});
 const otherStorage=(owner,includeHosted=true)=>{
   const data=accounts.usage(owner);
-  return {...data,apps:data.apps+(store?.usage(owner)??0)+(includeHosted?applicationData?.accountUsage(owner)??0:0),mail:mail?.usage(owner)??0};
+  return {...data,apps:data.apps+(store?.usage(owner)??0)+(includeHosted?applicationData?.accountUsage(owner)??0:0),mail:mail?.usage(owner)??0,...(protectedVault?{protected:protectedVault.usage(owner)}:{})};
 };
 const accountFiles = configuration ? createAccountFiles({
   usage:otherStorage,friends,appContainers:owner=>applicationData?.containers(owner)??[],
@@ -120,6 +124,15 @@ const applicationData=configuration?openApplicationData({path:join(state,'app-da
   otherUsage:owner=>accountFiles.fileBytes(owner)+Object.values(otherStorage(owner,false)).reduce((sum,value)=>sum+value,0),
   notify:notifyAppChange,
 }):null;
+if(sandbox&&process.env.AUTHNJS_PROTECTED_VAULT_PILOT==='1'){
+  protectedVault=openProtectedVault({
+    database:join(state,'protected-vault.sqlite'),issuer:origin,
+    canProtectAppData:(owner,client)=>applicationData.canProtectAppData(owner,client),
+    remaining:owner=>accounts.storageCapacity(owner)-accountFiles.fileBytes(owner)
+      -Object.values(otherStorage(owner)).reduce((sum,value)=>sum+value,0),
+  });
+}
+const vaultRoute=protectedVault&&protectedVaultRoute({vault:protectedVault,accounts});
 if(applicationData)registry.attachStorage(join(state,'app-data.sqlite'));
 const configurationRoute=appConfiguration({accounts,registry,applicationData});
 provider = configuration ? createIdentityProvider({
@@ -240,6 +253,11 @@ setInterval(()=>accounts.retryDeletions(),5*60_000).unref();
 const accountServer=createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (req, res) => {
   const target = new URL(req.url, 'http://localhost');
   const path = target.pathname;
+  if(path==='/account/protected-vault'||path.startsWith('/account/protected-vault/')){
+    if(!vaultRoute)return res.writeHead(404,{'Cache-Control':'no-store'}).end();
+    void vaultRoute(req,res,target).catch(()=>{if(!res.headersSent)res.writeHead(503,{'Cache-Control':'no-store'});res.end();});
+    return;
+  }
   if(sandbox)res.setHeader('X-Robots-Tag','noindex, nofollow');
   if(path==='/account/environment'&&req.method==='GET'){
     return res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify({

@@ -81,3 +81,34 @@ test('pilot stores opaque ciphertext and gates app data and web approval on curr
   service.removeOwner(owner);
   assert.equal(service.info(owner),null);
 });
+
+test('pilot HTTP routes require an authenticated account, mutation intent and recent confirmation',async t=>{
+  const {createServer}=await import('node:http');
+  const {once}=await import('node:events');
+  const {protectedVaultRoute}=await import('./protected-vault-route.mjs');
+  const issuer='https://identity.example.test';
+  const service=openProtectedVault({database:':memory:',issuer,canProtectAppData:()=>false});
+  const route=protectedVaultRoute({vault:service,accounts:{
+    current:req=>req.headers.authorization==='fixture'?{owner:'test-owner',hash:'test-session'}:null,
+    allowsMutation:req=>req.headers.origin===issuer,recentlyConfirmed:req=>req.headers['x-fixture-step-up']==='1',
+  }});
+  const server=createServer((req,res)=>void route(req,res,new URL(req.url,issuer))).listen(0,'127.0.0.1');
+  await once(server,'listening');
+  t.after(async()=>{await new Promise(resolve=>server.close(resolve));service.close();});
+  const base='http://127.0.0.1:'+server.address().port+'/account/protected-vault';
+  const cookie={authorization:'fixture'};
+  const mutation={...cookie,origin:issuer,'content-type':'application/json','x-authnjs-request':'account-consent'};
+  const id=randomBytes(32).toString('base64url');
+  const device=await createDeviceSigningKey();
+  const sealed=await createVault([issuer,id,'device-root']);
+  const init=JSON.stringify({id,recovery:sealed.recoveryEnvelope,device:device.publicKey});
+  const start=headers=>fetch(base+'/initialize',{method:'POST',headers,body:init});
+  assert.equal((await fetch(base)).status,401);
+  assert.equal((await start({...mutation,origin:'https://another.example.test'})).status,403);
+  assert.equal((await start(mutation)).status,403);
+  assert.equal((await start({...mutation,'x-fixture-step-up':'1'})).status,201);
+  assert.equal((await start({...mutation,'x-fixture-step-up':'1'})).status,409);
+  const response=await fetch(base,{headers:cookie});
+  assert.deepEqual(await response.json(),{vault:{id,recovery:sealed.recoveryEnvelope}});
+  assert.equal(response.headers.get('cache-control'),'no-store');
+});
